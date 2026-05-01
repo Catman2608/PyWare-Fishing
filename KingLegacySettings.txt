@@ -1,0 +1,16 @@
+{
+    "hotkeys": {
+        "start_stop": "f1",
+        "change_area": "f2",
+        "exit": "f3"
+    },
+    "fish_box": {
+        "x": 615,
+        "y": 744,
+        "width": 690,
+        "height": 29
+    },
+    "webhook_url": "https://discord.com/api/webhooks/1492728016747626666/8KcekuqC4KN_0uRKJOobqfdiQubipONo3eQt8xvfKB9tUjTnhwc-PMt15kWG9F_rhrRm",
+    "webhook_enabled": false,
+    "webhook_interval": 30
+}
