@@ -1,0 +1,10 @@
+Fixed the predictive-controller state init so `_pred_last_click_time` always exists before the anti-spam check runs.
+
+The main change is a new `_reset_predictive_control_state()` helper in [PyWareFishingV3.py](/abs/path/c:/Users/NC/Documents/Apps/Macros/PyWare Fishing V3/PyWareFishingV3.py:2835), and I now call it:
+- during `App` startup at [PyWareFishingV3.py](/abs/path/c:/Users/NC/Documents/Apps/Macros/PyWare Fishing V3/PyWareFishingV3.py:880)
+- when predictive mode is entered/reset at [PyWareFishingV3.py](/abs/path/c:/Users/NC/Documents/Apps/Macros/PyWare Fishing V3/PyWareFishingV3.py:4277)
+- from `_predictive_control()` as a defensive fallback if the attribute is missing at [PyWareFishingV3.py](/abs/path/c:/Users/NC/Documents/Apps/Macros/PyWare Fishing V3/PyWareFishingV3.py:3038)
+
+That should eliminate the `'_tkinter.tkapp' object has no attribute '_pred_last_click_time'` crash and also prevent similar partial-state issues after mode switches.
+
+I also tried a syntax compile pass, but the local Python environment failed before compilation with a missing `_distutils_hack` package, so I couldn’t use that as verification.
