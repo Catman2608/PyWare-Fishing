@@ -11,11 +11,6 @@ from pynput import keyboard, mouse
 from pynput.keyboard import Controller as KeyboardController
 from pynput.mouse import Controller as MouseController
 from pynput.mouse import Button
-try:
-    import Quartz
-    import ctypes
-except (OSError, ImportError):
-    messagebox.showerror("Ctypes/Quartz Error", "Unsupported platform. Mouse click will use fallback method")
 # Key Listeners
 import threading
 from pynput.keyboard import Listener as KeyListener, Key
@@ -35,7 +30,10 @@ import webbrowser
 # Utilities
 import requests
 import io
+import ctypes
 import math
+import ctypes
+import Quartz
 # Ctypes/Quartz For Special Click Types
 if sys.platform == "win32":
     windll = ctypes.windll.user32
@@ -1168,7 +1166,7 @@ class App(CTk):
         CTkButton(basic_settings, text="Add", width=40, corner_radius=8, command=self.add_rod).grid(row=1, column=2, padx=12, pady=12, sticky="w")
         CTkButton(basic_settings, text="Delete", width=40, corner_radius=8, command=self.delete_rod).grid(row=1, column=3, padx=12, pady=12, sticky="w")
 
-        CTkButton(basic_settings, text="Reset Settings", width=120, corner_radius=8, command=self.reset_settings).grid(row=3, column=0, padx=12, pady=12, sticky="w")
+        CTkButton(basic_settings, text="Reset Settings", width=140, corner_radius=8, command=self.reset_settings).grid(row=3, column=0, padx=12, pady=12, sticky="w")
         CTkButton(basic_settings, text="Reset Colors", width=140, corner_radius=8, command=self.reset_colors).grid(row=3, column=1, padx=12, pady=12, sticky="w")
         # Hotkey and Hotbar Settings
         hotkey_hotbar_settings = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
@@ -1204,11 +1202,10 @@ class App(CTk):
         screenshot_key_entry = CTkEntry(hotkey_hotbar_settings, width=120, textvariable=screenshot_key_var)
         screenshot_key_entry.grid(row=4, column=1, padx=12, pady=10, sticky="w")
         # Hotkey for items
-        CTkLabel(hotkey_hotbar_settings, text="Fishing Rod:").grid(row=1, column=2, padx=12, pady=6, sticky="w" )
-        CTkLabel(hotkey_hotbar_settings, text="Equipment Bag:").grid(row=2, column=2, padx=12, pady=6, sticky="w" )
-        CTkLabel(hotkey_hotbar_settings, text="Sundial Totem:").grid(row=3, column=2, padx=12, pady=6, sticky="w" )
-        CTkLabel(hotkey_hotbar_settings, text="Target Totem:").grid(row=4, column=2, padx=12, pady=6, sticky="w" )
-        CTkLabel(hotkey_hotbar_settings, text="Mystic Mirror:").grid(row=5, column=2, padx=12, pady=6, sticky="w" )
+        CTkLabel(hotkey_hotbar_settings, text="Fishing Rod Slot:").grid(row=1, column=2, padx=12, pady=6, sticky="w" )
+        CTkLabel(hotkey_hotbar_settings, text="Equipment Bag Slot").grid(row=2, column=2, padx=12, pady=6, sticky="w" )
+        CTkLabel(hotkey_hotbar_settings, text="Sundial Totem Slot:").grid(row=3, column=2, padx=12, pady=6, sticky="w" )
+        CTkLabel(hotkey_hotbar_settings, text="Target Totem Slot:").grid(row=4, column=2, padx=12, pady=6, sticky="w" )
         # Hotkey entries
         rod_slot_var = StringVar(value="1")
         self.vars["rod_slot"] = rod_slot_var
@@ -1226,16 +1223,12 @@ class App(CTk):
         self.vars["target_slot"] = target_slot_var
         target_slot_entry = CTkEntry(hotkey_hotbar_settings, width=120, textvariable=target_slot_var)
         target_slot_entry.grid(row=4, column=3, padx=12, pady=8, sticky="w")
-        mirror_slot_var = StringVar(value="8")
-        self.vars["mirror_slot"] = mirror_slot_var
-        mirror_slot_entry = CTkEntry(hotkey_hotbar_settings, width=120, textvariable=mirror_slot_var)
-        mirror_slot_entry.grid(row=5, column=3, padx=12, pady=8, sticky="w")
 
         color_settings = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         color_settings.grid(row=2, column=0, padx=20, pady=20, sticky="nw")
         CTkLabel(color_settings, text="Color Settings", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
 
-        CTkButton(color_settings, text="Pick Colors", corner_radius=10, width=120, command=self.eyedropper.start).grid(row=0, column=1, padx=12, pady=12, sticky="w")
+        CTkButton(color_settings, text="Pick Colors", corner_radius=10, command=self.eyedropper.start).grid(row=0, column=1, padx=12, pady=12, sticky="w")
 
         CTkLabel(color_settings, text="Left Bar:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
         left_color_var = StringVar(value="#F1F1F1")
@@ -1408,17 +1401,14 @@ class App(CTk):
         casting_cb.grid(row=2, column=1, padx=12, pady=10, sticky="w")
         self.comboboxes["casting_mode"] = casting_cb
 
-        CTkLabel(misc, text="Shake Mode:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
-        if not sys.platform == "Linux":
-            shake_mode_var = StringVar(value="Click")
-            self.vars["shake_mode"] = shake_mode_var
-            shake_cb = CTkComboBox(misc, values=["Click", "Navigation"], 
-                                variable=shake_mode_var, command=lambda v: self.set_status(f"Shake Mode: {v}")
-                                )
-            shake_cb.grid(row=3, column=1, padx=12, pady=10, sticky="w")
-            self.comboboxes["shake_mode"] = shake_cb
-        else:
-            CTkLabel(misc, text="Navigation").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(misc, text="Shake Mode:").grid(row=3, column=0, padx=12, pady=10, sticky="w" )
+        shake_mode_var = StringVar(value="Click")
+        self.vars["shake_mode"] = shake_mode_var
+        shake_cb = CTkComboBox(misc, values=["Click", "Navigation"], 
+                               variable=shake_mode_var, command=lambda v: self.set_status(f"Shake Mode: {v}")
+                               )
+        shake_cb.grid(row=3, column=1, padx=12, pady=10, sticky="w")
+        self.comboboxes["shake_mode"] = shake_cb
 
         # Normal Casting Group
         self.normal_casting = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
@@ -1573,15 +1563,6 @@ class App(CTk):
         self.vars["rejected_pixels"] = rejected_pixels_var
         CTkEntry(detection_settings, width=120, textvariable=rejected_pixels_var).grid(row=3, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(detection_settings, text="Arrow Detection Method:").grid(row=3, column=2, padx=12, pady=10, sticky="w" )
-        arrow_method_var = StringVar(value="Normal")
-        self.vars["arrow_method"] = arrow_method_var
-        arrow_cb = CTkComboBox(detection_settings, values=["Normal", "Simple"],
-                               variable=arrow_method_var, command=lambda v: self.set_status(f"arrow Method: {v}")
-                               )
-        arrow_cb.grid(row=3, column=3, padx=12, pady=10, sticky="w")
-        self.comboboxes["arrow_method"] = arrow_cb
-
         pid_settings = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         pid_settings.grid(row=6, column=0, padx=20, pady=20, sticky="nw")
         CTkLabel(pid_settings, text="PD Settings", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
@@ -1635,7 +1616,7 @@ class App(CTk):
         discord_webhook.grid(row=0, column=0, padx=20, pady=20, sticky="nw")
         CTkLabel(discord_webhook, text="Discord Webhooks", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
         
-        CTkLabel(discord_webhook, text="Webhook Mode:").grid(row=1, column=0, padx=12, pady=10, sticky="w" )
+        CTkLabel(discord_webhook, text="Discord Webhook Mode:").grid(row=1, column=0, padx=12, pady=10, sticky="w" )
         discord_webhook_mode_var = StringVar(value="Screenshot")
         self.vars["discord_webhook_mode"] = discord_webhook_mode_var
         discord_webhook_cb = CTkComboBox(discord_webhook, values=["Screenshot", "Text", "Disabled"], 
@@ -1674,7 +1655,7 @@ class App(CTk):
         CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_time_var).grid(row=3, column=3, padx=12, pady=10, sticky="w")
 
         # Test webhook button
-        CTkButton(discord_webhook, text="Test Webhook", width=120, command=self.test_discord_webhook
+        CTkButton(discord_webhook, text="Test Webhook", command=self.test_discord_webhook
                   ).grid(row=4, column=0, columnspan=2, padx=12, pady=12, sticky="w")
 
         auto_bug_reports_var = StringVar(value="off")
@@ -1716,35 +1697,27 @@ class App(CTk):
         self.vars["totem_cycles"] = totem_cycles_var
         CTkEntry(auto_totem, width=120, textvariable=discord_webhook_cycle_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
 
+    
         # Auto Reconnect
         auto_reconnect = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         auto_reconnect.grid(row=2, column=0, padx=20, pady=20, sticky="nw")
         CTkLabel(auto_reconnect, text="Auto Reconnect", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
+
         auto_reconnect_var = StringVar(value="off")
         self.vars["auto_reconnect"] = auto_reconnect_var
-        sw = CTkSwitch(auto_reconnect, text="Toggle", variable=auto_reconnect_var, onvalue="on", offvalue="off")
-        sw.grid(row=0, column=1, padx=12, pady=8, sticky="w")
-        self.switches["auto_reconnect"] = sw
+        auto_reconnect_cb = CTkCheckBox(auto_reconnect, text="Auto Reconnect (Roblox)", variable=auto_reconnect_var, onvalue="on", offvalue="off")
+        auto_reconnect_cb.grid(row=1, column=0, padx=12, pady=8, sticky="w")
+        self.checkboxes["auto_reconnect"] = auto_reconnect_cb
         # Reconnect Pixels
-        CTkLabel(auto_reconnect, text="Reconnect Pixels:").grid(row=1, column=0, padx=12, pady=10, sticky="w")
-        reconnect_pixels_var = StringVar(value="30")
+        CTkLabel(auto_reconnect, text="Reconnect Pixels:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        reconnect_pixels_var = StringVar(value="67")
         self.vars["reconnect_pixels"] = reconnect_pixels_var
-        CTkEntry(auto_reconnect, width=120, textvariable=reconnect_pixels_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
+        CTkEntry(auto_reconnect, width=150, textvariable=reconnect_pixels_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
         # reconnect_wait_time
-        CTkLabel(auto_reconnect, text="Reconnect Wait Time:").grid(row=1, column=2, padx=12, pady=10, sticky="w")
-        reconnect_wait_time_var = StringVar(value="20")
+        CTkLabel(auto_reconnect, text="Reconnect Pixels:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        reconnect_wait_time_var = StringVar(value="67")
         self.vars["reconnect_wait_time"] = reconnect_wait_time_var
-        CTkEntry(auto_reconnect, width=120, textvariable=reconnect_wait_time_var).grid(row=1, column=3, padx=12, pady=10, sticky="w")
-        # Mirror Ratio
-        CTkLabel(auto_reconnect, text="Mystic Mirror X Ratio:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
-        mirror_ratio_var = StringVar(value="0.55")
-        self.vars["mirror_ratio"] = mirror_ratio_var
-        CTkEntry(auto_reconnect, width=120, textvariable=mirror_ratio_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
-
-        CTkLabel(auto_reconnect, text="Mystic Mirror Y Ratio:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
-        mirror_ratio2_var = StringVar(value="0.59")
-        self.vars["mirror_ratio2"] = mirror_ratio2_var
-        CTkEntry(auto_reconnect, width=120, textvariable=mirror_ratio2_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
+        CTkEntry(auto_reconnect, width=150, textvariable=reconnect_wait_time_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
     # Show And Hide Parts Of The Gui
     def update_casting_visibility(self, mode):
         if mode == "Perfect":
@@ -3086,43 +3059,6 @@ class App(CTk):
         center_x, center_y = centroids[largest_label]
 
         return int(center_x), int(center_y)
-    
-    def _find_bar_edges_strict(
-        self,
-        frame,
-        left_hex,
-        right_hex,
-        tolerance=15,
-        tolerance2=15,
-        scan_height_ratio=0.55
-    ):
-        "Find all matching pixels that has a higher tolerance"
-        if frame is None:
-            return None, None
-
-        h, w, _ = frame.shape
-        y = int(h * scan_height_ratio)
-
-        left_bgr = np.array(self._hex_to_bgr(left_hex), dtype=np.int16)
-        right_bgr = np.array(self._hex_to_bgr(right_hex), dtype=np.int16)
-
-        line = frame[y].astype(np.int16)
-
-        tol_l = int(np.clip(tolerance, 0, 255))
-        tol_r = int(np.clip(tolerance2, 0, 255))
-
-        # V1-style threshold comparison
-        left_mask = np.all(line >= (left_bgr - tol_l), axis=1)
-        right_mask = np.all(line >= (right_bgr - tol_r), axis=1)
-
-        left_indices = np.where(left_mask)[0]
-        right_indices = np.where(right_mask)[0]
-
-        left_edge = int(left_indices[0]) if left_indices.size else None
-        right_edge = int(right_indices[-1]) if right_indices.size else None
-
-        return left_edge, right_edge
-
     def _find_bar_edges(
         self,
         frame,
@@ -3350,25 +3286,17 @@ class App(CTk):
         fish_tol = int(self.vars["fish_tolerance"].get() or 1)
 
         required_fish_pixels = int(self.vars["required_fish_pixels"].get() or 10)
-        arrow_method = (self.vars["arrow_method"].get())
         # Macos Tolerance Buffer To Make Configs Cross-Compatible
         if sys.platform == "darwin":
             left_tol += 2
             right_tol += 2
             fish_tol += 2
         fish_center = self._find_color_cluster(img, fish_hex, fish_tol, required_fish_pixels)
-        if arrow_method == "Normal":
-            left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, right_bar_hex, left_tol, right_tol)
-            if left_bar_center is None:
-                left_bar_center, right_bar_center = self._find_bar_edges(img, right_bar_hex, right_bar_hex, right_tol, right_tol)
-            elif right_bar_center is None:
-                left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, left_bar_hex, left_tol, left_tol)
-        else:
-            left_bar_center, right_bar_center = self._find_bar_edges_strict(img, left_bar_hex, right_bar_hex, left_tol, right_tol)
-            if left_bar_center is None:
-                left_bar_center, right_bar_center = self._find_bar_edges_strict(img, right_bar_hex, right_bar_hex, right_tol, right_tol)
-            elif right_bar_center is None:
-                left_bar_center, right_bar_center = self._find_bar_edges_strict(img, left_bar_hex, left_bar_hex, left_tol, left_tol)
+        left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, right_bar_hex, left_tol, right_tol)
+        if left_bar_center is None:
+            left_bar_center, right_bar_center = self._find_bar_edges(img, right_bar_hex, right_bar_hex, right_tol, right_tol)
+        elif right_bar_center is None:
+            left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, left_bar_hex, left_tol, left_tol)
         return fish_center, left_bar_center, right_bar_center
     # Controllers (Pid And Maelstrom)
     def _get_pid_gains(self):
@@ -3412,7 +3340,7 @@ class App(CTk):
             bar_velocity = (bar_center_x - self.last_bar_x) / dt
             error_magnitude_decreasing = abs(error) < abs(self.prev_error) if self.prev_error is not None else False
             bar_moving_toward_target = (bar_velocity > 0 and error > 0) or (bar_velocity < 0 and error < 0)
-            damping_multiplier = 5.0 if (error_magnitude_decreasing and bar_moving_toward_target) else 0.2
+            damping_multiplier = 2.0 if (error_magnitude_decreasing and bar_moving_toward_target) else 0.5
             d_term = -kd * damping_multiplier * bar_velocity
         else:
             # Fallback To Standard Derivative
@@ -3446,7 +3374,6 @@ class App(CTk):
         self.prev_measurement = None   # Derivative Source
         self.filtered_derivative = 0.0
         self.pid_source = None
-        self.last_bar_size = None
 
         # Predictive Controller
         self._pred_prev_fish_x = None
@@ -3455,14 +3382,6 @@ class App(CTk):
         self._pred_filtered_fish_vel = 0.0
         self._pred_filtered_bar_vel  = 0.0
         self._pred_last_click_time = 0.0
-    def _reset_pid_memory(self):
-        """Reset only the live PD history used for the next bar-alignment step."""
-
-        self.prev_error = 0.0
-        self.last_time = None
-        self.last_bar_x = None
-        self.prev_measurement = None
-        self.filtered_derivative = 0.0
     def _reset_pid_state(self):
         """
         Reset PD/PID control state variables for a new minigame cycle.
@@ -3839,11 +3758,7 @@ class App(CTk):
 
             # Shake
             self.set_status("Shaking")
-            try:
-                shake_mode = self.vars["shake_mode"].get()
-            except:
-                shake_mode = "Navigation"
-            if shake_mode == "Click":
+            if self.vars["shake_mode"].get() == "Click":
                 self._execute_shake_click()
             else:
                 self._execute_shake_navigation()
@@ -4041,13 +3956,7 @@ class App(CTk):
     def _auto_reconnect(self):
         reconnect_pixels = int(self.vars["reconnect_pixels"].get())
         reconnect_wait_time = int(self.vars["reconnect_wait_time"].get())
-        mirror_ratio = float(self.vars["mirror_ratio"].get())
-        mirror_ratio2 = float(self.vars["mirror_ratio2"].get())
-        mirror_slot = str(self.vars["reconnect_wait_time"].get())
-        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, shake_width, shake_height = self._get_areas("shake")
-        mirror_click_x = int(shake_width * mirror_ratio) + shake_left_s
-        # 0.59
-        mirror_click_y = int(shake_height * mirror_ratio2) + shake_top_s
+        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, shake_width, _ = self._get_areas("shake")
         # 1520
         reconnect_pixels = int((reconnect_pixels / 1500) * shake_width)
         img = self._grab_screen_region(shake_left_s, shake_top_s, shake_right_s, shake_bottom_s)
@@ -4059,14 +3968,6 @@ class App(CTk):
             self._click_at(reconnect_x, reconnect_y)
             time.sleep(reconnect_wait_time)
             self._click_at(reconnect_x, reconnect_y)
-            time.sleep(2.5)
-            keyboard_controller.press(mirror_slot)
-            time.sleep(0.05)
-            keyboard_controller.release(mirror_slot)
-            self._click_at(reconnect_x, reconnect_y)
-            time.sleep(0.2)
-            self._click_at(mirror_click_x, mirror_click_y)
-
     def _execute_cast_normal(self):
         """Hold left click for user cast delay"""
         # Get Variables
@@ -4614,46 +4515,13 @@ class App(CTk):
 
                             # Sync Arrow Estimation Immediately
                             self.estimated_box_length = bar_size
-                # 1. INIT
-                if not hasattr(self, "last_bar_size"):
-                    self.last_bar_size = None
-                # 2. VALIDATION
-                valid = (
-                    bar_size is not None and
-                    bar_size > 0 and
-                    self.last_bar_size is not None
-                )
-                # If we don't even have a baseline yet
-                if self.last_bar_size is None:
-                    if bar_size is not None and bar_size > 0:
-                        self.last_bar_size = bar_size
-                    # else: stay None until we get a valid reading
-                # 3. REJECTION LOGIC
-                if valid:
-                    shrink = bar_size < (self.last_bar_size * 0.7)
-                    grow   = bar_size > (self.last_bar_size * 3.0)
-
-                    if shrink or grow:
-                        # ❌ Reject bad detection
-                        bar_size = self.last_bar_size
-                    else:
-                        # ✅ Accept + smooth update
-                        alpha = 0.3
-                        self.last_bar_size = (
-                            alpha * bar_size +
-                            (1 - alpha) * self.last_bar_size
-                        )
-                elif bar_size is None or bar_size <= 10:
-                    # ❌ Detection failed → fallback
+                # Bar size detection rejection
+                half_bar_size = int(bar_size / 2)
+                if self.last_bar_size < half_bar_size: # This condition is impossible, can only be reached by detection issues
                     bar_size = self.last_bar_size
-                # 4. POSITION RECONSTRUCTION (SAFE)
-                if bar_size is not None:
-                    if mouse_down:  # holding → anchor right
-                        if right_x is not None:
-                            left_x = right_x - bar_size
-                    else:           # not holding → anchor left
-                        if left_x is not None:
-                            right_x = left_x + bar_size
+                else: # This condition is always True, unless it's a detection issue
+                    self.last_bar_size = bar_size
+                    # Add update bar estimation
                 if not fish_x == None:
                     self.last_fish_x = fish_x
                 # Step 4: Restart Method And Cache
@@ -4732,12 +4600,11 @@ class App(CTk):
                     self.after(0, lambda _mr=max_right, _fl=fish_left: self.fish_overlay.draw(bar_center=_mr, box_size=15, color="lightblue", canvas_offset=_fl))
                     self.after(0, lambda: self.fish_overlay.draw(bar_center=fish_x, box_size=10, color="red", canvas_offset=fish_left))
                 # Step 7: Controller
-                mode_changed = controller_mode != previous_controller_mode
                 if controller_mode == 0 and bar_center is not None:
-                    if source_changed or mode_changed:
-                        # Re-entering PD after a chase/reacquire frame can reuse stale
-                        # error and velocity history, which causes a one-frame overshoot.
-                        self._reset_pid_memory()
+                    if source_changed:
+                        # On the first frame after source reacquisition, use direction-only control.
+                        # This avoids a stale derivative spike while keeping the bar moving correctly.
+                        self._reset_control_state()
                     error = fish_x - bar_center
                     control = self._pid_control(error, bar_center)
                     # Map Pid Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
@@ -4801,7 +4668,6 @@ class App(CTk):
                         hold_mouse()
                     else:
                         release_mouse()
-                previous_controller_mode = controller_mode
                 now = time.perf_counter()
                 time.sleep(0.01)
             except Exception as e:
