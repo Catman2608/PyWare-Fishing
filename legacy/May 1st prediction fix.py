@@ -33,7 +33,6 @@ import io
 import ctypes
 import math
 import ctypes
-import Quartz
 # Ctypes/Quartz For Special Click Types
 if sys.platform == "win32":
     windll = ctypes.windll.user32
@@ -41,19 +40,66 @@ if sys.platform == "win32":
     MOUSEEVENTF_LEFTDOWN = 0x0002
     MOUSEEVENTF_LEFTUP = 0x0004
 elif sys.platform == "darwin":
-    def _move_mouse(x, y):
-        point = Quartz.CGPointMake(float(x), float(y))
-        Quartz.CGWarpMouseCursorPosition(point)
-        Quartz.CGAssociateMouseAndMouseCursorPosition(True)
+# Load Coregraphics Directly Via Ctypes [Cite: 11]
+    cg_path = ctypes.util.find_library("CoreGraphics")
+    core_graphics = ctypes.CDLL(cg_path)
+
+    # Define Necessary Carbon/Coregraphics Constants
+    K_CG_EVENT_LEFT_MOUSE_DOWN = 5
+    K_CG_EVENT_LEFT_MOUSE_UP = 6
+    K_CG_MOUSE_BUTTON_LEFT = 0
+    K_CG_HID_EVENT_TAP = 0
+
+    # Ctypes Structure For Cgpoint
+    class CGPoint(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
 
     def _mouse_event(event_type, x, y):
-        event = Quartz.CGEventCreateMouseEvent(
+        """
+        Zero-dependency mouse events using CoreGraphics via ctypes.
+        """
+        core_graphics.CGEventCreateMouseEvent.restype = ctypes.c_void_p
+        core_graphics.CGEventCreateMouseEvent.argtypes = [
+            ctypes.c_void_p,   # Cgeventsourceref (Null)
+            ctypes.c_uint32,   # Cgeventtype
+            ctypes.c_double,   # Cgpoint.X  (Passed As Two Separate Doubles)
+            ctypes.c_double,   # Cgpoint.Y
+            ctypes.c_uint32,   # Cgmousebutton
+        ]
+        event = core_graphics.CGEventCreateMouseEvent(
             None,
             event_type,
-            Quartz.CGPointMake(float(x), float(y)),
-            Quartz.kCGMouseButtonLeft
+            float(x),
+            float(y),
+            K_CG_MOUSE_BUTTON_LEFT,
         )
-        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
+        if not event:
+            return
+
+        # Cgeventpost(Tap, Event)
+        core_graphics.CGEventPost.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+        core_graphics.CGEventPost.restype = None
+        core_graphics.CGEventPost(K_CG_HID_EVENT_TAP, event)
+
+        # Clean Up Memory (Cfrelease)
+        core_graphics.CFRelease.argtypes = [ctypes.c_void_p]
+        core_graphics.CFRelease.restype = None
+        core_graphics.CFRelease(event)
+
+    def click(x, y):
+        _mouse_event(K_CG_EVENT_LEFT_MOUSE_DOWN, x, y)
+        _mouse_event(K_CG_EVENT_LEFT_MOUSE_UP, x, y)
+
+    def _move_mouse(x, y):
+        # Cgwarpmousecursorposition Takes Cgpoint By Value (Two Doubles).
+        # Declare Argtypes So Ctypes Passes Them Correctly.
+        core_graphics.CGWarpMouseCursorPosition.argtypes = [
+            ctypes.c_double,  # Cgpoint.X
+            ctypes.c_double,  # Cgpoint.Y
+        ]
+        core_graphics.CGWarpMouseCursorPosition.restype = ctypes.c_int32
+        core_graphics.CGWarpMouseCursorPosition(float(x), float(y))
 # Get All Required Paths
 def get_base_path():
     """Unified base directory for app data."""
@@ -2428,19 +2474,15 @@ class App(CTk):
                 if i < click_count - 1:
                     time.sleep(0.03)
         elif click_mode == 1:
-            x = int(x)
-            y = int(y)
-
-            # Move cursor
+            x, y = float(x), float(y)
+            # Move Cursor
             _move_mouse(x, y)
-
-            # Tiny movement (Roblox trick)
+            # Tiny Movement (Roblox Trick)
             _move_mouse(x, y + 1)
 
             for i in range(click_count):
-                _mouse_event(Quartz.kCGEventLeftMouseDown, x, y)
-                _mouse_event(Quartz.kCGEventLeftMouseUp, x, y)
-
+                _mouse_event(K_CG_EVENT_LEFT_MOUSE_DOWN, x, y)
+                _mouse_event(K_CG_EVENT_LEFT_MOUSE_UP, x, y)
                 if i < click_count - 1:
                     time.sleep(0.03)
         elif click_mode == 2:
@@ -2649,18 +2691,33 @@ class App(CTk):
         """
         if self._scale_cache is not None:
             return self._scale_cache
+            
         if sys.platform == "darwin":
             try:
-                tk_dpi = self.winfo_fpixels('1i')   # e.g. 144.0 on Retina
-                scale  = tk_dpi / 72.0              # 144/72 = 2.0 on Retina
-                scale  = max(1.0, min(4.0, scale))
-                self._scale_cache = scale
+                tk_dpi = self.winfo_fpixels('1i')
+                scale = tk_dpi / 72.0
+                self._scale_cache = max(1.0, min(4.0, scale))
             except Exception:
                 try:
-                    main_display  = Quartz.CGMainDisplayID()
-                    pixel_width   = Quartz.CGDisplayPixelsWide(main_display)
-                    bounds        = Quartz.CGDisplayBounds(main_display)
+                    # Ctypes-Only Fallback For Scale Factor
+                    # Cgdisplaybounds Returns A Cgrect (Origin + Size), Which Is
+                    # 4 Doubles On Macos (X, Y, Width, Height).
+                    class _CGPoint(ctypes.Structure):
+                        _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+                    class _CGSize(ctypes.Structure):
+                        _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
+
+                    class _CGRect(ctypes.Structure):
+                        _fields_ = [("origin", _CGPoint), ("size", _CGSize)]
+
+                    main_display = core_graphics.CGMainDisplayID()
+                    pixel_width = core_graphics.CGDisplayPixelsWide(main_display)
+
+                    core_graphics.CGDisplayBounds.restype = _CGRect
+                    bounds = core_graphics.CGDisplayBounds(main_display)
                     logical_width = bounds.size.width
+
                     self._scale_cache = pixel_width / logical_width if logical_width else 1.0
                 except Exception:
                     self._scale_cache = 1.0
@@ -4394,7 +4451,6 @@ class App(CTk):
         _cached_left_x = None
         _cached_right_x = None
         previous_detection_source = None
-        self.last_bar_size = None
         # Maelstrom-Style Charge Control Variables
         maelstrom_state = "minigame"  # State Machine: "Minigame" Or "Moving_To_Right"
         colors_were_missing = False  # Track If Colors Were Lost
@@ -4479,15 +4535,6 @@ class App(CTk):
                     bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, mouse_down, capture_width)
                     bars_found = True # Check 2
                     detection_source = 1
-                source_changed = (
-                    previous_detection_source is not None and
-                    detection_source != previous_detection_source
-                )
-                if source_changed:
-                    # Clear PD history when we switch between real bars and arrow-estimated bars.
-                    # This prevents stale bar velocity/error state from causing a one-frame spike.
-                    self._reset_control_state()
-                previous_detection_source = detection_source
                 if bars_found and not (left_x == None or right_x == None): # Bar Or Arrows Found
                     bar_size = abs(right_x - left_x)
                     bar_center = (left_x + bar_size // 2) + fish_left # Add Fish Left Here
@@ -4515,13 +4562,6 @@ class App(CTk):
 
                             # Sync Arrow Estimation Immediately
                             self.estimated_box_length = bar_size
-                # Bar size detection rejection
-                half_bar_size = int(bar_size / 2)
-                if self.last_bar_size < half_bar_size: # This condition is impossible, can only be reached by detection issues
-                    bar_size = self.last_bar_size
-                else: # This condition is always True, unless it's a detection issue
-                    self.last_bar_size = bar_size
-                    # Add update bar estimation
                 if not fish_x == None:
                     self.last_fish_x = fish_x
                 # Step 4: Restart Method And Cache
@@ -4601,10 +4641,6 @@ class App(CTk):
                     self.after(0, lambda: self.fish_overlay.draw(bar_center=fish_x, box_size=10, color="red", canvas_offset=fish_left))
                 # Step 7: Controller
                 if controller_mode == 0 and bar_center is not None:
-                    if source_changed:
-                        # On the first frame after source reacquisition, use direction-only control.
-                        # This avoids a stale derivative spike while keeping the bar moving correctly.
-                        self._reset_control_state()
                     error = fish_x - bar_center
                     control = self._pid_control(error, bar_center)
                     # Map Pid Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation

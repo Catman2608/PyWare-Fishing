@@ -1,0 +1,28 @@
+{
+    "last_config": "Default",
+    "last_rod": "Basic Rod",
+    "bar_areas": {
+        "shake": {
+            "x": 299,
+            "y": 145,
+            "width": 826,
+            "height": 555
+        },
+        "fish": {
+            "x": 410,
+            "y": 756,
+            "width": 619,
+            "height": 35
+        },
+        "friend": {
+            "x": 6,
+            "y": 772,
+            "width": 51,
+            "height": 74
+        }
+    },
+    "start_key": "F5",
+    "change_bar_areas_key": "F6",
+    "screenshot_key": "F8",
+    "stop_key": "F7"
+}
