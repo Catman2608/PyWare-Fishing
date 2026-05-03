@@ -7,8 +7,8 @@
     "last_rod": "Basic Rod",
     "bar_areas": {
         "shake": {
-            "x": 199,
-            "y": 99,
+            "x": 198,
+            "y": 100,
             "width": 1520,
             "height": 800
         },
@@ -25,10 +25,10 @@
             "height": 89
         },
         "totem": {
-            "x": 1829,
-            "y": 899,
-            "width": 40,
-            "height": 50
+            "x": 1823,
+            "y": 892,
+            "width": 53,
+            "height": 56
         }
     },
     "start_key": "F5",
