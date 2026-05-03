@@ -36,7 +36,6 @@ import webbrowser
 import requests
 import io
 import math
-import gdown
 from collections import deque
 # Ctypes/Quartz For Special Click Types
 if sys.platform == "win32":
@@ -143,7 +142,7 @@ def ensure_last_config_exists():
     
     # Create Default Config Structure
     default_config = {
-        "version": None,
+        "version": APP_VERSION,
         "last_profile": "default",
         "last_macro_name": None,
         "settings": {},
@@ -203,112 +202,6 @@ def save_app_state(state):
         print(f"Error saving config: {e}")
         # Optionally Show Error To User
         messagebox.showerror("Save Error", f"Could not save configuration: {e}")
-# ── Pack Download Helper ─────────────────────────────────────────────────────
-# Drive folder that contains configs.zip and images.zip
-PACK_FOLDER_URL = "https://drive.google.com/drive/folders/1pDSSKYRmMHQcv2SSrMxfzcGz4mgY-esS"
-
-def download_and_extract_packs(status_callback=None):
-    """
-    Downloads configs.zip and images.zip from the Drive folder,
-    extracts configs.zip → CONFIG_DIR, images.zip → IMAGES_PATH.
-
-    Handles nested zip structures like:
-      configs.zip → configs/configs/<files>   (strips the outer wrapper)
-      images.zip  → images/images/<files>     (strips the outer wrapper)
-
-    status_callback(msg: str) is called with progress text so the UI can
-    display it.  Pass None to suppress UI updates.
-    """
-    import zipfile
-    import tempfile
-
-    def _status(msg):
-        print(msg)
-        if status_callback:
-            status_callback(msg)
-
-    def _extract_flat(zip_path, dest_dir):
-        """
-        Extract zip into dest_dir, stripping any common leading path prefix
-        so files always land directly in dest_dir regardless of how many
-        wrapper folders the zip contains.
-
-        e.g.  configs/configs/rod1.json  →  <dest_dir>/rod1.json
-              images/images/sun.png      →  <dest_dir>/sun.png
-              rod1.json                  →  <dest_dir>/rod1.json  (no prefix)
-        """
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            members = [m for m in zf.infolist() if not m.filename.endswith("/")]
-
-            if not members:
-                return  # empty zip
-
-            # Find the longest common leading path shared by all members
-            # e.g. ["configs/configs/a.json", "configs/configs/b.json"]
-            #   → common prefix parts = ["configs", "configs"]
-            def parts(name):
-                return name.replace("\\", "/").split("/")[:-1]  # drop filename
-
-            common = parts(members[0].filename)
-            for m in members[1:]:
-                p = parts(m.filename)
-                # Keep only the shared leading portion
-                common = [c for c, q in zip(common, p) if c == q]
-                if not common:
-                    break
-
-            prefix = "/".join(common) + "/" if common else ""
-
-            for member in members:
-                rel = member.filename.replace("\\", "/")
-                if prefix and rel.startswith(prefix):
-                    rel = rel[len(prefix):]  # strip the wrapper folder(s)
-                if not rel:
-                    continue
-                out_path = os.path.join(dest_dir, rel.replace("/", os.sep))
-                os.makedirs(os.path.dirname(out_path), exist_ok=True)
-                with zf.open(member) as src, open(out_path, "wb") as dst:
-                    dst.write(src.read())
-
-    try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        os.makedirs(IMAGES_PATH, exist_ok=True)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _status("Downloading packs from Google Drive…")
-            # gdown downloads every file in the folder into tmp_dir
-            gdown.download_folder(
-                url=PACK_FOLDER_URL,
-                output=tmp_dir,
-                quiet=True,
-                use_cookies=False
-            )
-
-            # ── configs.zip ──────────────────────────────────────────────
-            configs_zip = os.path.join(tmp_dir, "configs.zip")
-            if os.path.exists(configs_zip):
-                _status("Extracting configs.zip…")
-                _extract_flat(configs_zip, CONFIG_DIR)
-                _status(f"Config pack installed → {CONFIG_DIR}")
-            else:
-                _status("Warning: configs.zip not found in download.")
-
-            # ── images.zip ───────────────────────────────────────────────
-            images_zip = os.path.join(tmp_dir, "images.zip")
-            if os.path.exists(images_zip):
-                _status("Extracting images.zip…")
-                _extract_flat(images_zip, IMAGES_PATH)
-                _status(f"Image pack installed → {IMAGES_PATH}")
-            else:
-                _status("Warning: images.zip not found in download.")
-
-        _status("Done! Both packs installed successfully.")
-        return True
-
-    except Exception as e:
-        _status(f"Download/extract failed: {e}")
-        return False
-
 # Area Selector Class
 class AreaSelector:
     HANDLE_SIZE = 8
@@ -687,7 +580,7 @@ class StatusOverlay:
         # Title
         title = tk.Label(
             self.window,
-            text="PyWare Fishing V3.2",
+            text="PyWare Fishing V3.1",
             fg="# 00C8Ff",
             bg="black",
             font=("Segoe UI", 12, "bold")
@@ -827,10 +720,8 @@ class FishOverlay:
         self.canvas.after(0, _draw)
 # Terms Of Service Dialogue
 class TermsOfServiceDialog(CTkToplevel):
-    def __init__(self, parent=None, show_setup=True):
+    def __init__(self, parent=None):
         super().__init__(parent)
-
-        self._show_setup = show_setup   # whether to present the setup / download page
         
         # Screen Size (Cache Once – Thread Safe)
         self.SCREEN_WIDTH = self.winfo_screenwidth()
@@ -840,7 +731,7 @@ class TermsOfServiceDialog(CTkToplevel):
         # Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("750x600")
-        self.title("PyWare Fishing V3.2 - Terms of Service")
+        self.title("PyWare Fishing V3.1 - Terms of Use")
         self.minsize(650, 500)
         
         # Center Window
@@ -889,24 +780,21 @@ class TermsOfServiceDialog(CTkToplevel):
 
         # Build Pages
         self.build_tos_page(self.page_tos)
-        if self._show_setup:
-            self.build_setup_page(self.page_setup)
+        self.build_setup_page(self.page_setup)
 
         # Navigation Bar
         nav_bar = CTkFrame(self, border_color = "#364167", fg_color = "#181836")
         nav_bar.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
 
-        nav_bar.grid_columnconfigure(1, weight=1)  # spacer between back and action btn
+        nav_bar.grid_columnconfigure(0, weight=1)
 
-        self.back_btn   = CTkButton(nav_bar, text="Back",   command=self.go_back)
-        # Single right-side action button: label changes per page
-        # Page 0 (_show_setup=True)  → "Next"   (advances to setup page)
-        # Page 0 (_show_setup=False) → "Finish" (closes dialog)
-        # Page 1                     → "Finish" (closes dialog after Yes/No chosen)
-        self.next_btn   = CTkButton(nav_bar, text="Next",   command=self.go_next)
+        self.back_btn = CTkButton(nav_bar, text="Back", command=self.go_back)
+        self.next_btn = CTkButton(nav_bar, text="Next", command=self.go_next)
+        self.finish_btn = CTkButton(nav_bar, text="Finish", command=self.finish)
 
         self.back_btn.grid(row=0, column=0, padx=5, sticky="w")
-        self.next_btn.grid(row=0, column=2, padx=5, sticky="e")
+        self.next_btn.grid(row=0, column=1, padx=5)
+        self.finish_btn.grid(row=0, column=2, padx=5, sticky="e")
 
         # Initial State
         self.current_page = 0
@@ -920,7 +808,7 @@ class TermsOfServiceDialog(CTkToplevel):
         textbox.grid(row=0, column=0, padx=12, pady=10, sticky="nsew")
 
         textbox.insert("1.0", """
-PyWare Fishing V3.2 - Terms of Use
+PyWare Fishing V3.1 - Terms of Use
 
 By using this software, you agree to the following:
 
@@ -998,137 +886,30 @@ If you do not agree, please remove the software from your device.
         checkbox.grid(row=1, column=0, padx=12, pady=(0, 10), sticky="w")
     # Second Tab
     def build_setup_page(self, parent):
-        parent.grid_rowconfigure(0, weight=1)
-        parent.grid_columnconfigure(0, weight=1)
+        textbox = CTkTextbox(parent, wrap="word", border_color = "#364167", fg_color = "#222244")
+        textbox.pack(fill="both", expand=True, padx=12, pady=10)
 
-        # ── Info text ────────────────────────────────────────────────────
-        textbox = CTkTextbox(parent, wrap="word", border_color="#364167",
-                             fg_color="#222244", height=220)
-        textbox.grid(row=0, column=0, padx=12, pady=(10, 6), sticky="nsew")
-
-        textbox.insert("1.0", """Setup Guide
-
-Would you like to automatically download and install the Config Pack and Image Pack?
-
-• YES  – The app will download configs.zip and images.zip from Google Drive
-         and place them in the correct folders for you automatically.
-
-• NO   – Skip the download. You can install packs manually later:
-         Step 1: Download configs.zip and images.zip from the Drive link below.
-         Step 2: Click "Open Base Folder" to locate your install directory.
-         Step 3: Extract configs.zip into the  configs/  folder.
-         Step 4: Extract images.zip  into the  images/  folder.
-         Step 5: Set up your Bar Areas in the main app.
-
-Drive link: https://drive.google.com/drive/folders/1pDSSKYRmMHQcv2SSrMxfzcGz4mgY-esS
+        textbox.insert("1.0", """
+Step 1: Download and extract the config pack and images pack from https://drive.google.com/drive/folders/1e9tZwDtAaiYKTVFeArjWTIuztLgLg88a?usp=drive_link
+Step 2: Click Open Base Folder to open the base folder
+Step 3: Paste the configs pack in the configs folder
+Step 4: Paste the images pack in the images folder
+Step 5: Change Bar Areas
         """)
         textbox.configure(state="disabled")
-
-        # ── Download prompt ──────────────────────────────────────────────
-        prompt_frame = CTkFrame(parent, fg_color="transparent")
-        prompt_frame.grid(row=1, column=0, padx=12, pady=(0, 6), sticky="ew")
-
-        CTkLabel(
-            prompt_frame,
-            text="Download Config & Image Pack now?",
-            font=CTkFont(size=13, weight="bold")
-        ).pack(side="left", padx=(0, 12))
-
-        self._yes_btn = CTkButton(
-            prompt_frame, text="Yes",
-            fg_color="#2ecc71", hover_color="#27ae60",
-            command=self._on_download_yes
-        )
-        self._yes_btn.pack(side="left", padx=4)
-
-        self._no_btn = CTkButton(
-            prompt_frame, text="No / Skip",
-            fg_color="#555577", hover_color="#444466",
-            command=self._on_download_no
-        )
-        self._no_btn.pack(side="left", padx=4)
-
-        # ── Status / progress label ──────────────────────────────────────
-        self._dl_status_var = tk.StringVar(value="")
-        self._dl_status_label = CTkLabel(
-            parent,
-            textvariable=self._dl_status_var,
-            wraplength=640,
-            justify="left",
-            font=CTkFont(size=11),
-            text_color="#aaaacc"
-        )
-        self._dl_status_label.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="w")
-
-    def _set_dl_status(self, msg):
-        """Set status label directly (must be called from main thread)."""
-        self._dl_status_var.set(msg)
-        self.update_idletasks()
-
-    def _poll_dl_queue(self):
-        """Poll the thread-safe queue and apply any pending status messages."""
-        try:
-            import queue as _queue
-            while True:
-                item = self._dl_queue.get_nowait()
-                if item is None:
-                    # Sentinel — download finished, apply final state
-                    if self._dl_success:
-                        self._set_dl_status("✅ Packs installed! Click Finish to launch the app.")
-                    else:
-                        self._set_dl_status("❌ Download failed. You can install packs manually later.")
-                    self.next_btn.configure(state="normal")
-                    self._no_btn.configure(state="normal")
-                    return  # stop polling
-                else:
-                    self._set_dl_status(item)
-        except _queue.Empty:
-            pass
-        # Keep polling every 100 ms while download is running
-        self._poll_id = self.after(100, self._poll_dl_queue)
-
-    def _on_download_yes(self):
-        """Kick off the download in a background thread so the UI stays live."""
-        import queue as _queue
-        self._yes_btn.configure(state="disabled")
-        self._no_btn.configure(state="disabled")
-        self.next_btn.configure(state="disabled")
-        self._set_dl_status("Starting download…")
-
-        self._dl_queue = _queue.Queue()
-        self._dl_success = False
-
-        def _worker():
-            self._dl_success = download_and_extract_packs(
-                status_callback=self._dl_queue.put   # just put strings in the queue
-            )
-            self._dl_queue.put(None)  # sentinel to signal completion
-
-        threading.Thread(target=_worker, daemon=True).start()
-        self._poll_id = self.after(100, self._poll_dl_queue)
-
-    def _on_download_no(self):
-        """Skip the download and allow the user to finish setup."""
-        self._set_dl_status("Skipped download. Install packs manually before running macros.")
-        self.next_btn.configure(state="normal")
     def show_page(self, index):
         self.current_page = index
 
         if index == 0:
             self.page_tos.tkraise()
             self.back_btn.configure(state="normal")
-            agreed = self.agree_var.get()
-            # Label depends on whether there is a setup page to advance to
-            next_label = "Next" if self._show_setup else "Finish"
-            self.next_btn.configure(
-                text=next_label,
-                state="normal" if agreed else "disabled"
-            )
+            self.next_btn.configure(state="normal" if self.agree_var.get() else "disabled")
+            self.finish_btn.configure(state="disabled")
         elif index == 1:
             self.page_setup.tkraise()
             self.back_btn.configure(state="normal")
-            # Finish stays disabled until the user clicks Yes or No/Skip
-            self.next_btn.configure(text="Finish", state="disabled")
+            self.next_btn.configure(state="disabled")
+            self.finish_btn.configure(state="normal")
 
     def go_back(self):
         if self.current_page == 1:
@@ -1138,25 +919,16 @@ Drive link: https://drive.google.com/drive/folders/1pDSSKYRmMHQcv2SSrMxfzcGz4mgY
 
     def update_next_button(self):
         if self.current_page == 0:
-            next_label = "Next" if self._show_setup else "Finish"
-            self.next_btn.configure(
-                text=next_label,
-                state="normal" if self.agree_var.get() else "disabled"
-            )
+            self.next_btn.configure(state="normal" if self.agree_var.get() else "disabled")
 
     def go_next(self):
         if self.current_page == 0 and self.agree_var.get():
-            if self._show_setup:
-                self.show_page(1)
-            else:
-                # No setup page — TOS acceptance alone is enough
-                self.accepted = True
-                self.destroy()
-        elif self.current_page == 1:
-            # Finish button on setup page
             self.accepted = True
-            self.destroy()
+            self.show_page(1)
 
+    def finish(self):
+        self.accepted = True
+        self.destroy()
     def on_close(self):
         if not self.accepted:
             self.accepted = False
@@ -1257,7 +1029,7 @@ class App(CTk):
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
-        self.title("PyWare Fishing V3.2")
+        self.title("PyWare Fishing V3.1")
 
         # Status Bar
         self.grid_columnconfigure(0, weight=1)
@@ -1272,7 +1044,7 @@ class App(CTk):
         # Logo Label
         logo_label = CTkLabel(
             top_bar, 
-            text="PYWARE FISHING V3.2",
+            text="PYWARE FISHING V3.1",
             font=CTkFont(size=16, weight="bold")
         )
         logo_label.grid(row=0, column=0, sticky="w")
@@ -2712,7 +2484,7 @@ class App(CTk):
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
         """Worker function to send text webhook."""
         discord_webhook_name = self.vars["discord_webhook_name"].get()
-        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.2rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.1rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             if show_status == True:
                 payload = {
@@ -2745,7 +2517,7 @@ class App(CTk):
             self.set_status(f"Error sending Discord text: {e}")
     def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
         discord_webhook_name = self.vars["discord_webhook_name"].get()
-        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.2rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.1rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             with mss.mss() as sct:
                 monitor = sct.monitors[1]
@@ -2907,6 +2679,11 @@ class App(CTk):
             return self._scale_cache
         if sys.platform == "darwin":
             try:
+                tk_dpi = self.winfo_fpixels('1i')   # e.g. 144.0 on Retina
+                scale  = tk_dpi / 72.0              # 144/72 = 2.0 on Retina
+                scale  = max(1.0, min(4.0, scale))
+                self._scale_cache = scale
+            except Exception:
                 try:
                     main_display  = Quartz.CGMainDisplayID()
                     pixel_width   = Quartz.CGDisplayPixelsWide(main_display)
@@ -2915,11 +2692,6 @@ class App(CTk):
                     self._scale_cache = pixel_width / logical_width if logical_width else 1.0
                 except Exception:
                     self._scale_cache = 1.0
-            except Exception:
-                tk_dpi = self.winfo_fpixels('1i')   # e.g. 144.0 on Retina
-                scale  = tk_dpi / 72.0              # 144/72 = 2.0 on Retina
-                scale  = max(1.0, min(4.0, scale))
-                self._scale_cache = scale
         else:
             self._scale_cache = 1.0
         return self._scale_cache
@@ -4385,7 +4157,7 @@ class App(CTk):
             last_frame_time = None
             speed_samples.clear()
 
-        # Start Capture Thread; This Remains The Existing V3.2 Capture Path.
+        # Start Capture Thread; This Remains The Existing V3.1 Capture Path.
         stop_event = self._start_capture(scan_delay)
         start_time = time.time()
         if self.vars["fish_overlay"].get() == "Enabled":
@@ -5069,29 +4841,14 @@ class App(CTk):
         self.set_status("Macro Status: Stopped")
 
 def ensure_terms_accepted():
-    """
-    Shows the TOS dialog when needed, then saves state.
+    state, first_launch, _ = load_app_state()
 
-    Rules:
-    • First launch  → show TOS + Setup page (download prompt).
-    • Version bump  → show TOS again (notify user TOS may have changed)
-                       + Setup page (offer re-download of packs).
-    • Normal launch → skip dialog entirely if TOS was already accepted.
-
-    Returns True if the app should proceed, False if the user declined.
-    """
-    state, first_launch, is_new_version = load_app_state()
-
-    needs_tos   = first_launch or not state.get("tos_accepted", False)
-    needs_setup = first_launch or is_new_version or not state.get("tos_accepted", False)
-
-    if needs_tos or needs_setup:
+    if first_launch or not state.get("tos_accepted", False):
         terms_host = tk.Tk()
         terms_host.withdraw()
         terms_host.update_idletasks()
 
-        # Pass show_setup so the dialog can present the download prompt on updates
-        dialog = TermsOfServiceDialog(terms_host, show_setup=needs_setup)
+        dialog = TermsOfServiceDialog(terms_host)
         terms_host.wait_window(dialog)
 
         accepted = getattr(dialog, "accepted", False)

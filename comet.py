@@ -7090,7 +7090,7 @@ class StarryNightApp(ctk.CTk):
         self._resize_after_id = None
         self._pending_width = 0
         self._pending_height = 0
-        # ------------------------------------
+        # -----
 
         # --- Bindings for Scroll Wheel (Global and delegated) ---
         self.bind("<MouseWheel>", self._on_app_scroll)
