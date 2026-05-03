@@ -1,19 +1,39 @@
 {
-    "version": "3.01",
+    "version": "3.2",
     "tos_accepted": true,
     "last_profile": "default",
     "last_macro_name": null,
     "settings": {},
     "last_rod": "Basic Rod",
     "bar_areas": {
-        "shake": null,
-        "fish": null,
-        "friend": null,
-        "totem": null
+        "shake": {
+            "x": 199,
+            "y": 99,
+            "width": 1520,
+            "height": 800
+        },
+        "fish": {
+            "x": 544,
+            "y": 863,
+            "width": 825,
+            "height": 42
+        },
+        "friend": {
+            "x": 8,
+            "y": 926,
+            "width": 68,
+            "height": 89
+        },
+        "totem": {
+            "x": 1829,
+            "y": 899,
+            "width": 40,
+            "height": 50
+        }
     },
     "start_key": "F5",
     "change_bar_areas_key": "F6",
     "screenshot_key": "F8",
     "stop_key": "F7",
-    "last_config": "Astraeus Serenade"
+    "last_config": "Default"
 }
