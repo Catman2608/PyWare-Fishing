@@ -1618,45 +1618,41 @@ class App(CTk):
         sw.grid(row=3, column=0, padx=12, pady=8, sticky="w")
         self.switches["track_notes"] = sw
 
-        # Misc
-        misc = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
-        misc.grid(row=1, column=0, padx=20, pady=20, sticky="nw")
+        CTkLabel(toggles, text="Misc", font=CTkFont(size=14, weight="bold")).grid(row=0, column=2, padx=12, pady=8, sticky="w")
 
-        CTkLabel(misc, text="Misc", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
-
-        CTkLabel(misc, text="Select Rod Duration").grid(row=1, column=0, padx=12, pady=8, sticky="w")
+        CTkLabel(toggles, text="Select Rod Duration").grid(row=1, column=2, padx=12, pady=8, sticky="w")
         bag_delay_var = StringVar(value="0.2")
         self.vars["bag_delay"] = bag_delay_var
-        bag_delay_entry = CTkEntry(misc, width=120, textvariable=bag_delay_var)
-        bag_delay_entry.grid(row=1, column=1, padx=12, pady=8, sticky="w")
+        bag_delay_entry = CTkEntry(toggles, width=120, textvariable=bag_delay_var)
+        bag_delay_entry.grid(row=1, column=3, padx=12, pady=8, sticky="w")
 
-        CTkLabel(misc, text="Casting Mode:").grid(row=2, column=0, padx=12, pady=10, sticky="w" )
+        CTkLabel(toggles, text="Casting Mode:").grid(row=2, column=2, padx=12, pady=10, sticky="w" )
         casting_mode_var = StringVar(value="Normal")
         self.vars["casting_mode"] = casting_mode_var
-        casting_cb = CTkComboBox(misc, values=["Perfect", "Normal"], 
+        casting_cb = CTkComboBox(toggles, values=["Perfect", "Normal"], 
                                variable=casting_mode_var, command=lambda v: [self.set_status(f"Casting Mode: {v}"), self.update_casting_visibility(v)]
                                )
-        casting_cb.grid(row=2, column=1, padx=12, pady=10, sticky="w")
+        casting_cb.grid(row=2, column=3, padx=12, pady=10, sticky="w")
         self.comboboxes["casting_mode"] = casting_cb
 
-        CTkLabel(misc, text="Shake Mode:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(toggles, text="Shake Mode:").grid(row=3, column=2, padx=12, pady=10, sticky="w")
         if not sys.platform == "Linux":
             shake_mode_var = StringVar(value="Click")
             self.vars["shake_mode"] = shake_mode_var
-            shake_cb = CTkComboBox(misc, values=["Click", "Navigation"], 
+            shake_cb = CTkComboBox(toggles, values=["Click", "Navigation"], 
                                 variable=shake_mode_var, command=lambda v: self.set_status(f"Shake Mode: {v}")
                                 )
-            shake_cb.grid(row=3, column=1, padx=12, pady=10, sticky="w")
+            shake_cb.grid(row=3, column=3, padx=12, pady=10, sticky="w")
             self.comboboxes["shake_mode"] = shake_cb
         else:
-            CTkLabel(misc, text="Navigation").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+            CTkLabel(toggles, text="Navigation").grid(row=2, column=2, padx=12, pady=10, sticky="w")
 
         # Normal Casting Group
         self.normal_casting = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         self.normal_casting.grid(row=2, column=0, padx=20, pady=20, sticky="nw")
         CTkLabel(self.normal_casting, text="Casting Options", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
         CTkLabel(self.normal_casting, text="Delay").grid(row=1, column=0, padx=12, pady=8, sticky="w")
-        delay_before_casting_var = StringVar(value="0.0")
+        delay_before_casting_var = StringVar(value="0.3")
         self.vars["delay_before_casting"] = delay_before_casting_var
         delay_before_casting_entry = CTkEntry(self.normal_casting, width=120, textvariable=delay_before_casting_var)
         delay_before_casting_entry.grid(row=1, column=1, padx=12, pady=8, sticky="w")
@@ -1705,11 +1701,11 @@ class App(CTk):
         # Shake Configuration
         CTkLabel(shake_configuration, text="Shake Settings", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
         CTkLabel(shake_configuration, text="Shake Failsafe (attempts):").grid(row=1, column=0, padx=12, pady=10, sticky="w" )
-        shake_failsafe_var = StringVar(value="20")
+        shake_failsafe_var = StringVar(value="80")
         self.vars["shake_failsafe"] = shake_failsafe_var
         CTkEntry(shake_configuration, width=120, textvariable=shake_failsafe_var ).grid(row=1, column=1, padx=12, pady=10, sticky="w")
         CTkLabel(shake_configuration, text="Shake Scan Delay:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
-        shake_scan_delay_var = StringVar(value="0.01")
+        shake_scan_delay_var = StringVar(value="0.07")
         self.vars["shake_scan_delay"] = shake_scan_delay_var
         CTkEntry(shake_configuration, width=120, textvariable=shake_scan_delay_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
@@ -1749,6 +1745,11 @@ class App(CTk):
         self.vars["left_ratio"] = left_ratio_var
         CTkEntry(ratio_settings, width=120, textvariable=left_ratio_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
 
+        CTkLabel(ratio_settings, text="Note Tracking Ratio:").grid(row=1, column=2, padx=12, pady=10, sticky="w")
+        note_track_ratio_var = StringVar(value="0.05")
+        self.vars["note_track_ratio"] = note_track_ratio_var
+        CTkEntry(ratio_settings, width=120, textvariable=note_track_ratio_var).grid(row=1, column=3, padx=12, pady=10, sticky="w")
+
         CTkLabel(ratio_settings, text="Scan Delay (seconds):").grid(row=2, column=0, padx=12, pady=10, sticky="w")
         minigame_scan_delay_var = StringVar(value="0.05")
         self.vars["minigame_scan_delay"] = minigame_scan_delay_var
@@ -1759,57 +1760,42 @@ class App(CTk):
         self.vars["restart_delay"] = restart_delay_var
         CTkEntry(ratio_settings, width=120, textvariable=restart_delay_var ).grid(row=2, column=3, padx=12, pady=10, sticky="w")
 
-        CTkLabel(ratio_settings, text="Note Tracking Ratio:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
-        note_track_ratio_var = StringVar(value="0.05")
-        self.vars["note_track_ratio"] = note_track_ratio_var
-        CTkEntry(ratio_settings, width=120, textvariable=note_track_ratio_var).grid(row=3, column=1, padx=12, pady=10, sticky="w")
-
-        # Detection
-        detection_settings = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
-        detection_settings.grid(row=5, column=0, padx=20, pady=20, sticky="nw")
-        CTkLabel(detection_settings, text="Detection Settings", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
-
-        CTkLabel(detection_settings, text="Stabilize Threshold:").grid(row=1, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(ratio_settings, text="Stabilize Threshold:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
         stabilize_threshold_var = StringVar(value="6")
         self.vars["stabilize_threshold"] = stabilize_threshold_var
-        CTkEntry(detection_settings, width=120, textvariable=stabilize_threshold_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
+        CTkEntry(ratio_settings, width=120, textvariable=stabilize_threshold_var).grid(row=3, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(detection_settings, text="Required Fish Pixels:").grid(row=1, column=2, padx=12, pady=10, sticky="w")
+        CTkLabel(ratio_settings, text="Required Fish Pixels:").grid(row=3, column=2, padx=12, pady=10, sticky="w")
         required_fish_pixels = StringVar(value="8")
         self.vars["required_fish_pixels"] = required_fish_pixels
-        CTkEntry(detection_settings, width=120, textvariable=required_fish_pixels).grid(row=1, column=3, padx=12, pady=10, sticky="w")
+        CTkEntry(ratio_settings, width=120, textvariable=required_fish_pixels).grid(row=3, column=3, padx=12, pady=10, sticky="w")
 
-        CTkLabel(detection_settings, text="Left Threshold:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(ratio_settings, text="Left Threshold:").grid(row=4, column=0, padx=12, pady=10, sticky="w")
         tracking_threshold_var = StringVar(value="0")
         self.vars["tracking_threshold"] = tracking_threshold_var
-        CTkEntry(detection_settings, width=120, textvariable=tracking_threshold_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
+        CTkEntry(ratio_settings, width=120, textvariable=tracking_threshold_var).grid(row=4, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(detection_settings, text="Right Threshold:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
-        tracking_threshold2_var = StringVar(value="0")
-        self.vars["tracking_threshold2"] = tracking_threshold2_var
-        CTkEntry(detection_settings, width=120, textvariable=tracking_threshold2_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
-
-        CTkLabel(detection_settings, text="Arrow Detection Method:").grid(row=3, column=2, padx=12, pady=10, sticky="w" )
+        CTkLabel(ratio_settings, text="Arrow Detection Method:").grid(row=4, column=2, padx=12, pady=10, sticky="w" )
         arrow_method_var = StringVar(value="Normal")
         self.vars["arrow_method"] = arrow_method_var
-        arrow_cb = CTkComboBox(detection_settings, values=["Normal", "Simple"],
+        arrow_cb = CTkComboBox(ratio_settings, values=["Normal", "Simple"],
                                variable=arrow_method_var, command=lambda v: self.set_status(f"arrow Method: {v}")
                                )
-        arrow_cb.grid(row=3, column=3, padx=12, pady=10, sticky="w")
+        arrow_cb.grid(row=4, column=3, padx=12, pady=10, sticky="w")
         self.comboboxes["arrow_method"] = arrow_cb
 
         pid_settings = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
-        pid_settings.grid(row=6, column=0, padx=20, pady=20, sticky="nw")
+        pid_settings.grid(row=5, column=0, padx=20, pady=20, sticky="nw")
         # PID
         CTkLabel(pid_settings, text="PD Controller Settings", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, columnspan=2, padx=12, pady=8, sticky="w")
 
         CTkLabel(pid_settings, text="KP:").grid(row=1, column=0, padx=12, pady=10, sticky="w")
-        p_gain_var = StringVar(value="0.8")
+        p_gain_var = StringVar(value="0.6")
         self.vars["proportional_gain"] = p_gain_var
         CTkEntry(pid_settings, width=120, textvariable=p_gain_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
 
         CTkLabel(pid_settings, text="KD:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
-        d_gain_var = StringVar(value="0.4")
+        d_gain_var = StringVar(value="0.6")
         self.vars["derivative_gain"] = d_gain_var
         CTkEntry(pid_settings, width=120, textvariable=d_gain_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
@@ -1856,7 +1842,7 @@ class App(CTk):
         CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_url_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
         CTkLabel(discord_webhook, text="Webhook name:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
-        discord_webhook_name_var = StringVar(value="I Can't Fish")
+        discord_webhook_name_var = StringVar(value="PyWare Fishing")
         self.vars["discord_webhook_name"] = discord_webhook_name_var
         CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_name_var).grid(row=3, column=1, padx=12, pady=10, sticky="w")
 
@@ -1904,12 +1890,12 @@ class App(CTk):
         self.comboboxes["use_sundial_mode_when"] = auto_totem_cb
 
         CTkLabel(auto_totem, text="Totem Delay (seconds):").grid(row=2, column=0, padx=12, pady=10, sticky="w")
-        totem_delay_var = StringVar(value="900")
+        totem_delay_var = StringVar(value="999")
         self.vars["totem_delay"] = totem_delay_var
         CTkEntry(auto_totem, width=120, textvariable=totem_delay_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
         CTkLabel(auto_totem, text="Cycles:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
-        totem_cycles_var = StringVar(value="900")
+        totem_cycles_var = StringVar(value="70")
         self.vars["totem_cycles"] = totem_cycles_var
         CTkEntry(auto_totem, width=120, textvariable=discord_webhook_cycle_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
 
@@ -1924,7 +1910,7 @@ class App(CTk):
         self.switches["auto_reconnect"] = sw
         # Reconnect Pixels
         CTkLabel(auto_reconnect, text="Reconnect Pixels:").grid(row=1, column=0, padx=12, pady=10, sticky="w")
-        reconnect_pixels_var = StringVar(value="30")
+        reconnect_pixels_var = StringVar(value="140")
         self.vars["reconnect_pixels"] = reconnect_pixels_var
         CTkEntry(auto_reconnect, width=120, textvariable=reconnect_pixels_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
         # reconnect_wait_time
@@ -2150,15 +2136,7 @@ class App(CTk):
                         switch.deselect()
         except Exception as e:
             print(f"Error loading switches: {e}")
-        # Load Templates For Image Search / Auto Totem
-        left_bar_path  = os.path.join(rod_folder, "left_bar.png")
-        right_bar_path = os.path.join(rod_folder, "right_bar.png")
-        fish_path      = os.path.join(rod_folder, "fish.png")
-        self.templates = {
-            "left_bar":  cv2.imread(left_bar_path, 0)  if os.path.exists(left_bar_path)  else None,
-            "right_bar": cv2.imread(right_bar_path, 0) if os.path.exists(right_bar_path) else None,
-            "fish":      cv2.imread(fish_path, 0)      if os.path.exists(fish_path)      else None,
-        }
+        # Verify required images exist for totem detection
         required_images = ["sun.png", "moon.png"]
         if verify_images_exist(required_images) == False:
             return  # Stop Instead Of Crashing
@@ -2342,9 +2320,6 @@ class App(CTk):
             config_folder = os.path.join(CONFIG_DIR, new_name)
             os.makedirs(config_folder, exist_ok=True)
             
-            with open(os.path.join(config_folder, "config.json"), "w") as f:
-                json.dump(config_data, f, indent=4)
-            
             # Update Dropdown And Select New Config
             self.config_dropdown.configure(values=self.get_config_list())
             self.config_var.set(new_name)
@@ -2355,7 +2330,7 @@ class App(CTk):
         """Delete current rod configuration with confirmation."""
         current = self.config_var.get()
 
-        if current == "default":
+        if current == "default" or current == "Default":
             messagebox.showwarning("Cannot Delete", "Cannot delete the default rod!")
             return
         
@@ -3214,99 +3189,91 @@ class App(CTk):
         thread.start()
         return stop_event
     # Pixel And Image Search
-    def _find_template(self, frame, template, confidence=0.7):
-        if template is None or frame is None:
-            return None
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    def _detect_day_or_night(self, confidence_threshold=0.6):
+        """
+        Captures the totem area and determines whether it is Day or Night
+        by comparing white-pixel masks of the live frame against pre-built
+        masks of sun.png and moon.png.
 
-        result = cv2.matchTemplate(gray_frame, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
-        if max_val >= confidence:
-            h, w = template.shape
-            return max_loc[0] + w // 2   # X Relative To Frame
-        return None
-    def _prepare_templates(self):
-        """Convert templates to grayscale once."""
-        for key in self.templates:
-            if self.templates[key] is None:
-                continue
+        Alignment step: slides the (smaller) reference mask over the frame
+        mask using matchTemplate so minor position shifts don't hurt accuracy.
 
-            if len(self.templates[key].shape) == 3:
-                self.templates[key] = cv2.cvtColor(
-                    self.templates[key],
-                    cv2.COLOR_BGR2GRAY
-                )
-    def _get_template_confidence(self, frame, template):
+        Returns:
+            ("Day" | "Night", float confidence)  if max conf >= threshold
+            (None, float confidence)              if below threshold
         """
-        Returns max confidence of template match (0.0 → 1.0)
-        """
-        try:
-            result = cv2.matchTemplate(frame, template, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, _ = cv2.minMaxLoc(result)
-            return max_val
-        except:
-            return 0.0
-    def _create_white_mask(self, frame, threshold=200):
-        """
-        Create mask for near-white pixels (# Ffffff-Like).
-        Works in BGR space.
-        """
+        totem = self.bar_areas.get("totem")
+        if not isinstance(totem, dict):
+            return None, 0.0
+
+        frame = self._grab_screen_region(
+            totem["x"],
+            totem["y"],
+            totem["x"] + totem["width"],
+            totem["y"] + totem["height"],
+        )
         if frame is None:
-            return None
+            return None, 0.0
 
-        # White = All Channels High
-        lower = np.array([threshold, threshold, threshold], dtype=np.uint8)
-        upper = np.array([255, 255, 255], dtype=np.uint8)
+        def white_mask(img):
+            """Extract near-white pixels (#FFFFFF ±55) and clean noise."""
+            lower = np.array([200, 200, 200], dtype=np.uint8)
+            upper = np.array([255, 255, 255], dtype=np.uint8)
+            mask = cv2.inRange(img, lower, upper)
+            k = np.ones((3, 3), np.uint8)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, k)
+            return mask
 
-        mask = cv2.inRange(frame, lower, upper)
+        def best_match(frame_mask, ref_mask):
+            """
+            Slide ref_mask over frame_mask with matchTemplate.
+            Returns best normalised score in [0, 1].
+            Falls back to direct IoU comparison when the ref is larger
+            than the frame (shouldn't happen in normal use).
+            """
+            fh, fw = frame_mask.shape
+            rh, rw = ref_mask.shape
 
-        # Optional: Clean Noise (Very Important For Shaders)
-        kernel = np.ones((3, 3), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, kernel)
+            # Resize ref to fit inside frame if needed
+            if rh > fh or rw > fw:
+                scale = min(fh / rh, fw / rw)
+                ref_mask = cv2.resize(
+                    ref_mask,
+                    (max(1, int(rw * scale)), max(1, int(rh * scale))),
+                    interpolation=cv2.INTER_NEAREST,
+                )
 
-        return mask
-    def _get_template_confidence_masked(self, frame, template):
-        """
-        Template matching constrained to white regions.
-        Keeps robustness under shaders / scaling.
-        """
-        try:
-            if frame is None or template is None:
+            try:
+                result = cv2.matchTemplate(
+                    frame_mask, ref_mask, cv2.TM_CCOEFF_NORMED
+                )
+                _, max_val, _, _ = cv2.minMaxLoc(result)
+                return float(max_val)
+            except Exception:
                 return 0.0
 
-            # Create Mask From Original Frame (Color)
-            mask = self._create_white_mask(frame)
+        frame_mask = white_mask(frame)
 
-            # Convert Frame To Grayscale (Like Your Pipeline)
-            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        sun_path  = os.path.join(IMAGES_PATH, "sun.png")
+        moon_path = os.path.join(IMAGES_PATH, "moon.png")
 
-            # Apply Mask → Zero Out Non-White Areas
-            masked_frame = cv2.bitwise_and(gray_frame, gray_frame, mask=mask)
+        sun_img  = cv2.imread(sun_path)
+        moon_img = cv2.imread(moon_path)
 
-            result = cv2.matchTemplate(masked_frame, template, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, _ = cv2.minMaxLoc(result)
+        if sun_img is None or moon_img is None:
+            print("Totem detection: sun.png or moon.png not found in images folder.")
+            return None, 0.0
 
-            return max_val
+        sun_conf  = best_match(frame_mask, white_mask(sun_img))
+        moon_conf = best_match(frame_mask, white_mask(moon_img))
 
-        except Exception as e:
-            print(f"Masked template error: {e}")
-            return 0.0
-    def _prepare_templates_masked(self):
-        """
-        Optional: make templates white-only for stronger matching.
-        """
-        for key in self.templates:
-            tpl = self.templates.get(key)
-            if tpl is None:
-                continue
+        best_conf = max(sun_conf, moon_conf)
+        if best_conf < confidence_threshold:
+            return None, best_conf
 
-            if len(tpl.shape) == 3:
-                # Keep Only Bright Pixels
-                gray = cv2.cvtColor(tpl, cv2.COLOR_BGR2GRAY)
-                _, mask = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-
-                self.templates[key] = mask
+        result = "Day" if sun_conf >= moon_conf else "Night"
+        return result, best_conf
     def _find_first_pixel(self, frame, hex, tolerance=8):
         tolerance = int(np.clip(tolerance, 0, 255))
         b, g, r = self._hex_to_bgr(hex)
@@ -4218,28 +4185,9 @@ class App(CTk):
 
         # Detect Day / Night
         try:
-            totem = self.bar_areas.get("totem")
-            if not isinstance(totem, dict):
-                return
-
-            frame = self._grab_screen_region(
-                totem["x"],
-                totem["y"],
-                totem["x"] + totem["width"],
-                totem["y"] + totem["height"]
-            )
-
-            sun_template  = self.templates.get("sun")
-            moon_template = self.templates.get("moon")
-
-            sun_conf  = self._get_template_confidence_masked(frame, sun_template)
-            moon_conf = self._get_template_confidence_masked(frame, moon_template)
-
-            # Require Valid Detection
-            if max(sun_conf, moon_conf) < confidence_threshold:
-                return
-
-            current_time = "Day" if sun_conf > moon_conf else "Night"
+            current_time, best_conf = self._detect_day_or_night(confidence_threshold)
+            if current_time is None:
+                return  # Below confidence threshold — skip this cycle
 
         except Exception as e:
             if IS_COMPILED == True:
@@ -4741,6 +4689,7 @@ class App(CTk):
         note_box_tol = int(self.vars["note_box_tolerance"].get() or 8)
         note_track_ratio = float(self.vars["note_track_ratio"].get() or 0.1)
         scan_delay = float(self.vars["minigame_scan_delay"].get() or 0.05)
+        tracking_threshold = int(self.vars["tracking_threshold"].get() or 0)
         previous_detection_source = None
         self.last_bar_size = None
         # Get Default Positions
@@ -4898,8 +4847,8 @@ class App(CTk):
                 elif track_notes == "off":
                     pass
                 # Compute Bar Left And Bar Right (Screen Coords)
-                bar_left_screen  = left_x  + fish_left if not left_x == None else None
-                bar_right_screen = right_x + fish_left if not right_x == None else None
+                bar_left_screen  = left_x  + fish_left - tracking_threshold if not left_x == None else None
+                bar_right_screen = right_x + fish_left + tracking_threshold if not right_x == None else None
                 # Check Max Left And Max Right
                 if fish_x == None:
                     fish_x = 0
