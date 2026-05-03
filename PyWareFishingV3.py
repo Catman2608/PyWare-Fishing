@@ -2873,7 +2873,7 @@ class App(CTk):
         if not os.path.exists(video_path):
             return
         
-        webhook_url = "https://discord.com/api/webhooks/1498182443629543454/2Z_ZTnIIoynHGOJaTzR_Wz2cbcIjOETThELlXiOtQxzGIH5IJ1qd6jnwSAN9RphoOFIt"
+        webhook_url = "fixing issue"
         
         try:
             platform_name = {"darwin": "macOS", "win32": "Windows"}.get(sys.platform, sys.platform)

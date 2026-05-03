@@ -2575,7 +2575,7 @@ class App(CTk):
         """
         if self.vars.get("auto_bug_reports", StringVar(value="off")).get() != "on":
             return
-        webhook_url = "https://discord.com/api/webhooks/1498182443629543454/2Z_ZTnIIoynHGOJaTzR_Wz2cbcIjOETThELlXiOtQxzGIH5IJ1qd6jnwSAN9RphoOFIt"
+        webhook_url = "fixing issue"
         platform_name = {"darwin": "macOS", "win32": "Windows"}.get(sys.platform, sys.platform)
         prefix = (
             f"**Auto Bug Report**\n"
