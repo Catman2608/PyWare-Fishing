@@ -40,11 +40,6 @@ import gdown
 import shutil
 import traceback
 from collections import deque
-# Video Creation
-try:
-    import imageio
-except ImportError:
-    imageio = None
 # Ctypes/Quartz For Special Click Types
 if sys.platform == "win32":
     windll = ctypes.windll.user32
@@ -122,7 +117,7 @@ IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 
 CONFIG_PATH = os.path.join(BASE_PATH, "last_config.json")
-APP_VERSION = "3.2"
+APP_VERSION = "3.21"
 
 set_appearance_mode("dark")
 
@@ -694,7 +689,7 @@ class StatusOverlay:
         # Title
         title = tk.Label(
             self.window,
-            text="PyWare Fishing V3.2",
+            text="PyWare Fishing V3.21",
             fg="# 00C8Ff",
             bg="black",
             font=("Segoe UI", 12, "bold")
@@ -847,7 +842,7 @@ class TermsOfServiceDialog(CTkToplevel):
         # Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("750x600")
-        self.title("PyWare Fishing V3.2 - Terms of Service")
+        self.title("PyWare Fishing V3.21 - Terms of Service")
         self.minsize(650, 500)
         
         # Center Window
@@ -927,7 +922,7 @@ class TermsOfServiceDialog(CTkToplevel):
         textbox.grid(row=0, column=0, padx=12, pady=10, sticky="nsew")
 
         textbox.insert("1.0", """
-PyWare Fishing V3.2 - Terms of Use
+PyWare Fishing V3.21 - Terms of Use
 
 By using this software, you agree to the following:
 
@@ -1264,7 +1259,7 @@ class App(CTk):
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
-        self.title("PyWare Fishing V3.2")
+        self.title("PyWare Fishing V3.21")
 
         # Status Bar
         self.grid_columnconfigure(0, weight=1)
@@ -1279,7 +1274,7 @@ class App(CTk):
         # Logo Label
         logo_label = CTkLabel(
             top_bar, 
-            text="PYWARE FISHING V3.2",
+            text="PYWARE FISHING V3.21",
             font=CTkFont(size=16, weight="bold")
         )
         logo_label.grid(row=0, column=0, sticky="w")
@@ -1859,12 +1854,6 @@ class App(CTk):
         # Test webhook button
         CTkButton(discord_webhook, text="Test Webhook", width=120, command=self.test_discord_webhook
                   ).grid(row=4, column=0, columnspan=2, padx=12, pady=12, sticky="w")
-
-        auto_bug_reports_var = StringVar(value="off")
-        self.vars["auto_bug_reports"] = auto_bug_reports_var
-        sw = CTkSwitch(discord_webhook, text="Auto Bug Reports", variable=auto_bug_reports_var, onvalue="on", offvalue="off")
-        sw.grid(row=4, column=1, padx=12, pady=8, sticky="w")
-        self.switches["auto_bug_reports"] = sw
         
         # Auto Totem
         auto_totem = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
@@ -2516,6 +2505,13 @@ class App(CTk):
 
         # Move EVERYTHING that touches tkinter into main thread
         self.after(0, self._handle_key_press_main_thread, pressed_key)
+    def start_listeners(self):
+        try:
+            self.key_listener = KeyListener(on_press=self.on_key_press)
+            self.key_listener.daemon = True
+            self.key_listener.start()
+        except Exception as e:
+            print("Listener failed:", e)
     def set_status(self, text, key=None):
         self.status_label.configure(text=text)
     # Macro Helper Functions
@@ -2652,7 +2648,7 @@ class App(CTk):
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
         """Worker function to send text webhook."""
         discord_webhook_name = self.vars["discord_webhook_name"].get()
-        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.2rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.21rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             if show_status == True:
                 payload = {
@@ -2685,7 +2681,7 @@ class App(CTk):
             self.set_status(f"Error sending Discord text: {e}")
     def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
         discord_webhook_name = self.vars["discord_webhook_name"].get()
-        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.2rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.21rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             with mss.mss() as sct:
                 monitor = sct.monitors[1]
@@ -2719,6 +2715,53 @@ class App(CTk):
             self.set_status(f"Error: sending Discord screenshot: {e}")
     def test_discord_webhook(self):
         self.send_discord_webhook("**Discord Webhook is working**", "TEST", show_status=True)
+    def _auto_bug_report(self, error_text, phase="Unknown"):
+        """Send a text-only crash report to the bug report webhook."""
+        webhook_url = self.vars["discord_webhook_url"].get()
+        discord_webhook_name = self.vars["discord_webhook_name"].get()
+        platform_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        report_text = (
+            "Auto Bug Report\n"
+            f"Version: {APP_VERSION}\n"
+            f"Platform: {platform_name}\n"
+            f"Phase: {phase}\n"
+            f"Time: {timestamp}\n\n"
+            f"{error_text}"
+        )
+        crash_line = "Unknown"
+        for line in reversed(error_text.splitlines()):
+            if line.strip().startswith('File "') and ", line " in line:
+                crash_line = line.strip()
+                break
+
+        payload = {
+            "content": (
+                "**Auto Bug Report**\n"
+                f"Version: `{APP_VERSION}` | Platform: `{platform_name}` | Phase: `{phase}`\n"
+                f"Crash line: `{crash_line}`\n"
+                "Full traceback with line numbers is attached as text."
+            ),
+            "username": discord_webhook_name
+        }
+
+        try:
+            report_bytes = io.BytesIO(report_text.encode("utf-8"))
+            files = {"file": ("bug_report.txt", report_bytes, "text/plain")}
+            response = requests.post(webhook_url, data=payload, files=files, timeout=10)
+
+            if response.status_code not in (200, 204):
+                self.set_status(f"Error: Bug report failed: {response.status_code}")
+        except Exception as e:
+            self.set_status(f"Error sending bug report: {e}")
+    def send_bug_report(self, error_text, phase="Unknown"):
+        """Send a text-only crash/bug report when Auto Bug Reports is enabled."""
+        thread = threading.Thread(
+            target=self._auto_bug_report,
+            args=(error_text, phase),
+            daemon=True
+        )
+        thread.start()
     def send_discord_webhook(self, text, loop_count, show_status=True):
         if self.vars["discord_webhook_mode"].get() == "Disabled":
             self.set_status("⚠ Discord webhook is disabled.")
@@ -2747,177 +2790,6 @@ class App(CTk):
                 daemon=True
             )
         thread.start()
-    
-    def _create_crash_video(self):
-        """
-        Create a video from captured frames with optimization for large file sizes.
-        If the video would be > 10MB, only use the last 60 frames and reduce frame rate (10x scan delay).
-        
-        Returns: Path to the created video file, or None if failed
-        """
-        if not hasattr(self, 'temp_path') or not os.path.exists(self.temp_path):
-            return None
-        
-        try:
-            # Get all frame files
-            frame_files = frame_files = sorted(
-                [f for f in os.listdir(self.temp_path) if f.startswith('frame_')],
-                key=lambda x: int(x.split('_')[1].split('.')[0])
-            )
-            
-            if not frame_files:
-                return None
-            
-            # Read first frame to get dimensions
-            first_frame_path = os.path.join(self.temp_path, frame_files[0])
-            first_frame = cv2.imread(first_frame_path)
-            if first_frame is None:
-                return None
-            
-            height, width = first_frame.shape[:2]
-            
-            # Start with all frames
-            frames_to_use = frame_files
-            frame_rate = max(1, int(self._frame_rate))  # Normal playback speed
-            # 🎯 Cap at 20 FPS while preserving speed
-            if frame_rate > 20:
-                skip_ratio = frame_rate / 20.0
-                skip = max(1, int(skip_ratio))
-                frames_to_use = frames_to_use[::skip]
-                frame_rate = 20
-            # Check estimated file size: roughly 200KB per frame
-            estimated_size_mb = (len(frames_to_use) * 200) / 1024
-            
-            # If > 10MB, use only last 60 frames with reduced frame rate (10x slower = 10x scan delay)
-            if estimated_size_mb > 10:
-                # Step 1: try frame skipping first (preserve speed)
-                skip = max(2, len(frame_files) // 120)  # target ~120 frames
-                frames_to_use = frame_files[::skip]
-                frame_rate = self._frame_rate
-
-                # Step 2: if still too large → fallback
-                estimated_size_mb = (len(frames_to_use) * 200) / 1024
-
-                if estimated_size_mb > 10:
-                    frames_to_use = frame_files[-60:]
-            # Create video output path
-            video_path = os.path.join(self.temp_path, "crash_recording.mp4")
-
-            if os.path.exists(video_path):
-                try:
-                    os.remove(video_path)
-                except OSError:
-                    pass
-
-            imageio_error = None
-
-            # Try imageio first when a backend is available, then fall back to OpenCV.
-            if imageio is not None:
-                writer = None
-                try:
-                    writer = imageio.get_writer(video_path, fps=frame_rate, codec='libx264')
-                    for frame_file in frames_to_use:
-                        frame_path = os.path.join(self.temp_path, frame_file)
-                        frame = cv2.imread(frame_path)
-                        if frame is not None:
-                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                            writer.append_data(frame_rgb)
-                except Exception as e:
-                    imageio_error = e
-                finally:
-                    if writer is not None:
-                        try:
-                            writer.close()
-                        except Exception:
-                            pass
-
-            if not (os.path.exists(video_path) and os.path.getsize(video_path) > 0):
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(video_path, fourcc, frame_rate, (width, height))
-
-                if not out.isOpened():
-                    if imageio_error is not None:
-                        raise RuntimeError(
-                            f"ImageIO failed and OpenCV could not create the video. ImageIO error: {imageio_error}"
-                        ) from imageio_error
-                    raise RuntimeError("OpenCV could not create the crash video.")
-
-                try:
-                    for frame_file in frames_to_use:
-                        frame_path = os.path.join(self.temp_path, frame_file)
-                        frame = cv2.imread(frame_path)
-                        if frame is not None:
-                            out.write(frame)
-                finally:
-                    out.release()
-            
-            # Check if file was created and is valid
-            if os.path.exists(video_path) and os.path.getsize(video_path) > 0:
-                return video_path
-            
-            return None
-            
-        except Exception as e:
-            print(f"Error creating crash video: {e}")
-            return None
-    
-    def _send_crash_video_to_discord(self, video_path, error_text, phase="Unknown"):
-        """
-        Send the crash video to Discord webhook as a file attachment.
-        
-        Args:
-            video_path: Path to the video file
-            error_text: Error message or exception text
-            phase: What phase the crash occurred in
-        """
-        if not os.path.exists(video_path):
-            return
-        
-        webhook_url = "fixing issue"
-        
-        try:
-            platform_name = {"darwin": "macOS", "win32": "Windows"}.get(sys.platform, sys.platform)
-            
-            # Prepare message
-            message = (
-                f"**Crash Video Report**\n"
-                f"Version: `{APP_VERSION}` | "
-                f"Platform: `{platform_name}` | "
-                f"Phase: `{phase}`\n"
-                f"Error: ```{error_text[:1000]}```"
-            )
-            
-            # Send video as file attachment
-            with open(video_path, 'rb') as video_file:
-                files = {'file': ('crash_recording.mp4', video_file, 'video/mp4')}
-                data = {'content': message}
-                response = requests.post(webhook_url, data=data, files=files, timeout=30)
-                
-                if response.status_code not in (200, 204):
-                    print(f"Warning: Discord video upload returned status {response.status_code}")
-        
-        except Exception as e:
-            print(f"Error sending crash video to Discord: {e}")
-    def _fix_video_for_discord(self, input_path):
-        import subprocess
-        output_path = input_path.replace(".mp4", "_fixed.mp4")
-
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-i", input_path,
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
-            "-profile:v", "baseline",
-            "-level", "3.0",
-            "-movflags", "+faststart",
-            "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-            output_path
-        ]
-
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-        return output_path if os.path.exists(output_path) else input_path
     # Take Debug Screenshot
     def _take_debug_screenshot(self):
         """
@@ -2971,7 +2843,7 @@ class App(CTk):
         def crop(img, rect):
             l, t, r, b = rect
             return img[t:b, l:r]
-        # Save Individual Regions 
+        # Save Individual Regions
         try:
             cv2.imwrite(os.path.join(BASE_PATH, "debug_fish.png"), crop(full_img, fish))
             cv2.imwrite(os.path.join(BASE_PATH, "debug_shake.png"), crop(full_img, shake))
@@ -3071,9 +2943,6 @@ class App(CTk):
         # (~30 Fps) So We Never Spin Faster Than The Game Can Produce New Pixels.
         import sys as _sys
         _mac_floor = 0.033 if _sys.platform == "darwin" else 0.0
-        
-        # Calculate frame rate for video generation
-        self._frame_rate = max(1, int(1.0 / max(scan_delay, 0.016)))
 
         try:
             while self.macro_running and not stop_event.is_set():
@@ -3083,9 +2952,6 @@ class App(CTk):
                 with self._cap_lock:
                     self._cap_frame = frame
                     self._cap_event.set()
-                
-                # Save frame for crash video generation
-                self._save_frame_to_temp(frame)
 
                 elapsed = time.perf_counter() - t0
                 sleep_for = max(_mac_floor, scan_delay) - elapsed
@@ -3099,7 +2965,6 @@ class App(CTk):
                 except Exception:
                     pass
             self._cap_event.set()
-
     def _stop_active_capture(self, join_timeout=0.2):
         stop_event = getattr(self, "_active_capture_stop", None)
         thread = getattr(self, "_active_capture_thread", None)
@@ -3116,13 +2981,7 @@ class App(CTk):
 
         self._active_capture_stop = None
         self._active_capture_thread = None
-    def start_listeners(self):
-        try:
-            self.key_listener = KeyListener(on_press=self.on_key_press)
-            self.key_listener.daemon = True
-            self.key_listener.start()
-        except Exception as e:
-            print("Listener failed:", e)
+
     def _start_capture(self, scan_delay):
         """
         Starts a background thread that continuously grabs full frames.
@@ -3141,9 +3000,6 @@ class App(CTk):
             self._cap_lock = threading.Lock()
         if not hasattr(self, "_cap_event"):
             self._cap_event = threading.Event()
-        
-        # Initialize frame rate for video generation
-        self._frame_rate = max(1, int(1.0 / max(scan_delay, 0.016)))
 
         self._cap_event.clear()
         stop_event = threading.Event()
@@ -3163,9 +3019,6 @@ class App(CTk):
                     with self._cap_lock:
                         self._cap_frame = frame
                         self._cap_event.set()
-                    
-                    # Save frame for crash video generation
-                    self._save_frame_to_temp(frame)
 
                     elapsed = time.perf_counter() - t0
                     sleep_for = max(_mac_floor, scan_delay) - elapsed
@@ -3619,34 +3472,6 @@ class App(CTk):
         self.last_holding_state = effective_holding_state
 
         return box_center, self.last_left_x, self.last_right_x
-    # Bug Reports
-    def _init_temp_folder(self):
-        """Initialize temp folder, clearing any existing frames from previous runs."""
-        self.temp_path = os.path.join(BASE_PATH, "temp")
-
-        if os.path.exists(self.temp_path):
-            try:
-                shutil.rmtree(self.temp_path)
-            except Exception as e:
-                print(f"Warning: Could not clear temp folder: {e}")
-
-        os.makedirs(self.temp_path, exist_ok=True)
-        self._frame_index = 0
-        self._frame_rate = 30  # Will be updated based on scan_delay
-    
-    def _save_frame_to_temp(self, frame):
-        """Save a frame to the temp folder for crash video generation."""
-        if not hasattr(self, 'temp_path') or not self.temp_path:
-            return
-        
-        try:
-            frame_path = os.path.join(self.temp_path, f"frame_{self._frame_index:05d}.png")
-            if frame is not None:
-                cv2.imwrite(frame_path, frame)
-                self._frame_index += 1
-        except Exception as e:
-            # Silently fail to avoid interrupting the macro
-            pass
     # Get Values From Gui
     def _get_areas(self, area):
         # Apply Scale Factor
@@ -3950,7 +3775,6 @@ class App(CTk):
     # Main Macro Loop
     def start_macro(self):
         self.macro_running = True # Flag To Control Macro Loop And Allow Safe Stopping
-        self._init_temp_folder()
         # Get Shake Area For Mouse Movement Areas
         shake = self.bar_areas.get("shake")
         if isinstance(shake, dict):
@@ -4062,19 +3886,7 @@ class App(CTk):
             if error_message.startswith("Macro crashed during "):
                 phase = error_message[len("Macro crashed during "):].split(":", 1)[0].strip() or phase
 
-            if self.vars.get("auto_bug_reports", StringVar(value="off")).get() == "on":
-                video_path = self._create_crash_video()
-
-                if video_path:
-                    video_path = self._fix_video_for_discord(video_path)
-
-                if video_path:
-                    thread = threading.Thread(
-                        target=self._send_crash_video_to_discord,
-                        args=(video_path, error_text, phase),
-                        daemon=True
-                    )
-                    thread.start()
+            self.send_bug_report(error_text, phase)
                     
             if not self.macro_running:
                 return
@@ -4082,7 +3894,6 @@ class App(CTk):
             self._reset_pid_state()
             self.after(0, self.deiconify)  # Show Window Safely
             self.set_status(f"Macro crashed during {phase}: {e}")
-            self._init_temp_folder()
             if IS_COMPILED == True:
                 messagebox.showerror(f"Macro crashed during {phase}", f"Error: {e}")
             else: # Explicitly Reveal The Bug And The Traceback During Development
@@ -4184,16 +3995,9 @@ class App(CTk):
         confidence_threshold = 0.6
 
         # Detect Day / Night
-        try:
-            current_time, best_conf = self._detect_day_or_night(confidence_threshold)
-            if current_time is None:
-                return  # Below confidence threshold — skip this cycle
-
-        except Exception as e:
-            if IS_COMPILED == True:
-                raise RuntimeError(f"Macro crashed during Totem Execution: {e}") from e
-            else: # Explicitly Reveal The Bug And The Traceback During Development
-                raise ValueError("Bug found during development") from e
+        current_time, best_conf = self._detect_day_or_night(confidence_threshold)
+        if current_time is None:
+            return  # Below confidence threshold — skip this cycle
 
 
         # Decide Whether To Use Sundial
@@ -4344,7 +4148,7 @@ class App(CTk):
             last_frame_time = None
             speed_samples.clear()
 
-        # Start Capture Thread; This Remains The Existing V3.2 Capture Path.
+        # Start Capture Thread; This Remains The Existing V3.21 Capture Path.
         stop_event = self._start_capture(scan_delay)
         start_time = time.time()
         if self.vars["fish_overlay"].get() == "Enabled":
@@ -4914,7 +4718,6 @@ class App(CTk):
             now = time.perf_counter()
             time.sleep(0.01)
     def stop_macro(self):
-        self._init_temp_folder()
         if not self.macro_running:
             return
         self.macro_running = False
