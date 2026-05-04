@@ -9,6 +9,6 @@ Finally, run this code to convert to App
 hdiutil create -volname "VolumeName" -srcfolder cd /Users/YourName/directory/PyWareFishing
  -ov -format UDZO name.dmg
 For me, the first line of code in the terminal looks like this:
-cd "/Users/hcl/Documents/Code/Python/PyWare Fishing V3-1"
+cd "/Users/hcl/Documents/Code/Python/PyWare Fishing V3-2/Source code"
 Third line:
-hdiutil create -volname "VolumeName" -srcfolder cd "/Users/hcl/Documents/Code/Python/PyWare Fishing V3-1/dist" -ov -format UDZO PyWareFishingSetup.dmg
+hdiutil create -volname "VolumeName" -srcfolder "/Users/hcl/Documents/Code/Python/PyWare Fishing V3-2/Source code/dist" -ov -format UDZO PyWareFishingSetup.dmg

@@ -5,7 +5,7 @@ a = Analysis(
     ['PyWareFishingV3.py'],
     pathex=[],
     binaries=[],
-    datas=[('configs', 'configs')],
+    datas=[('images', 'images')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
