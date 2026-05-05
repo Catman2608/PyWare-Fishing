@@ -1254,7 +1254,7 @@ class App(CTk):
 
         # Start Hotkey Listener
         self.key_listener = None
-        self.after(100, self.start_listeners)
+        self.after(200, self.start_listeners)
 
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
@@ -3044,17 +3044,10 @@ class App(CTk):
     # Pixel And Image Search
     def _detect_day_or_night(self, confidence_threshold=0.6):
         """
-        Captures the totem area and determines whether it is Day or Night
-        by comparing white-pixel masks of the live frame against pre-built
-        masks of sun.png and moon.png.
-
-        Alignment step: slides the (smaller) reference mask over the frame
-        mask using matchTemplate so minor position shifts don't hurt accuracy.
-
-        Returns:
-            ("Day" | "Night", float confidence)  if max conf >= threshold
-            (None, float confidence)              if below threshold
+        Robust day/night detection using white-mask template matching.
+        Fully guarded against empty arrays and invalid template states.
         """
+
         totem = self.bar_areas.get("totem")
         if not isinstance(totem, dict):
             return None, 0.0
@@ -3065,48 +3058,71 @@ class App(CTk):
             totem["x"] + totem["width"],
             totem["y"] + totem["height"],
         )
-        if frame is None:
+        if frame is None or frame.size == 0:
             return None, 0.0
 
         def white_mask(img):
-            """Extract near-white pixels (#FFFFFF ±55) and clean noise."""
             lower = np.array([200, 200, 200], dtype=np.uint8)
             upper = np.array([255, 255, 255], dtype=np.uint8)
+
             mask = cv2.inRange(img, lower, upper)
+
+            # If completely empty, return early
+            if mask is None or mask.size == 0:
+                return None
+
             k = np.ones((3, 3), np.uint8)
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
             mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, k)
+
             return mask
 
         def best_match(frame_mask, ref_mask):
-            """
-            Slide ref_mask over frame_mask with matchTemplate.
-            Returns best normalised score in [0, 1].
-            Falls back to direct IoU comparison when the ref is larger
-            than the frame (shouldn't happen in normal use).
-            """
+            if frame_mask is None or ref_mask is None:
+                return 0.0
+
+            if frame_mask.size == 0 or ref_mask.size == 0:
+                return 0.0
+
             fh, fw = frame_mask.shape
             rh, rw = ref_mask.shape
 
-            # Resize ref to fit inside frame if needed
+            # Ensure valid dimensions
+            if fh == 0 or fw == 0 or rh == 0 or rw == 0:
+                return 0.0
+
+            # Resize reference if needed
             if rh > fh or rw > fw:
                 scale = min(fh / rh, fw / rw)
-                ref_mask = cv2.resize(
-                    ref_mask,
-                    (max(1, int(rw * scale)), max(1, int(rh * scale))),
-                    interpolation=cv2.INTER_NEAREST,
-                )
+                new_w = max(1, int(rw * scale))
+                new_h = max(1, int(rh * scale))
+
+                if new_w <= 0 or new_h <= 0:
+                    return 0.0
+
+                ref_mask = cv2.resize(ref_mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+                rh, rw = ref_mask.shape
+
+            # Final safety check (CRITICAL)
+            if rh > fh or rw > fw:
+                return 0.0
 
             try:
-                result = cv2.matchTemplate(
-                    frame_mask, ref_mask, cv2.TM_CCOEFF_NORMED
-                )
+                result = cv2.matchTemplate(frame_mask, ref_mask, cv2.TM_CCOEFF_NORMED)
+
+                # 🔥 THIS prevents your exact crash
+                if result is None or result.size == 0:
+                    return 0.0
+
                 _, max_val, _, _ = cv2.minMaxLoc(result)
                 return float(max_val)
+
             except Exception:
                 return 0.0
 
         frame_mask = white_mask(frame)
+        if frame_mask is None:
+            return None, 0.0
 
         sun_path  = os.path.join(IMAGES_PATH, "sun.png")
         moon_path = os.path.join(IMAGES_PATH, "moon.png")
@@ -3115,13 +3131,17 @@ class App(CTk):
         moon_img = cv2.imread(moon_path)
 
         if sun_img is None or moon_img is None:
-            print("Totem detection: sun.png or moon.png not found in images folder.")
+            print("Totem detection: sun.png or moon.png missing.")
             return None, 0.0
 
-        sun_conf  = best_match(frame_mask, white_mask(sun_img))
-        moon_conf = best_match(frame_mask, white_mask(moon_img))
+        sun_mask  = white_mask(sun_img)
+        moon_mask = white_mask(moon_img)
+
+        sun_conf  = best_match(frame_mask, sun_mask)
+        moon_conf = best_match(frame_mask, moon_mask)
 
         best_conf = max(sun_conf, moon_conf)
+
         if best_conf < confidence_threshold:
             return None, best_conf
 
