@@ -1,5 +1,5 @@
 {
-    "enable_hotkeys": "on",
+    "enable_hotkeys": "off",
     "start_key": "F5",
     "change_bar_areas_key": "F6",
     "stop_key": "F7",
@@ -27,7 +27,7 @@
     "perfect_cast2_tolerance": "5",
     "fish_overlay": "off",
     "auto_zoom": "off",
-    "auto_refresh": "on",
+    "auto_refresh": "off",
     "efficiency_mode": "off",
     "track_notes": "off",
     "bag_delay": "0.3",
@@ -63,7 +63,6 @@
     "discord_webhook_name": "PyWare Fishing",
     "discord_webhook_cycle": "1",
     "discord_webhook_time": "60",
-    "auto_bug_reports": "off",
     "auto_totem_mode": "Time",
     "use_sundial_mode_when": "Night",
     "totem_delay": "1",
@@ -88,6 +87,5 @@
     "switch_auto_refresh": "off",
     "switch_efficiency_mode": "off",
     "switch_track_notes": "off",
-    "switch_auto_bug_reports": "off",
     "switch_auto_reconnect": "off"
 }
