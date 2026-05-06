@@ -649,7 +649,7 @@ class App(CTk):
 
         # Load last config and reapply hotkeys
         self.load_last_config()
-        self._apply_hotkeys_from_vars()   # ✅ ADD THIS
+        self._apply_hotkeys_from_vars()   # Completed: ADD THIS
 
         # Grid behavior
         self.grid_columnconfigure(0, weight=1)

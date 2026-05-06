@@ -929,7 +929,7 @@ By using this software, you agree to the following:
 
 ⚡ 1. USAGE & MODIFICATION
 
-✅ YOU ARE ALLOWED TO:
+Completed: YOU ARE ALLOWED TO:
 Use these macros for personal purposes.
 Study and reverse engineer the code for educational purposes.
 Modify the code for your own personal use.
@@ -982,7 +982,7 @@ If you share, modify, or redistribute this software:
 These terms may be updated at any time.
 Continued use of the software from the PyWare Automate website constitutes acceptance of the updated terms.
                             
-✅ 7. ACCEPTANCE
+Completed: 7. ACCEPTANCE
 
 By accepting the terms, you acknowledge that you have read, understood, and agree to these Terms of Use.
 If you do not agree, please remove the software from your device.
@@ -1076,7 +1076,7 @@ Drive link: https://drive.google.com/drive/folders/1pDSSKYRmMHQcv2SSrMxfzcGz4mgY
                 if item is None:
                     # Sentinel — download finished, apply final state
                     if self._dl_success:
-                        self._set_dl_status("✅ Packs installed! Click Finish to launch the app.")
+                        self._set_dl_status("Completed: Packs installed! Click Finish to launch the app.")
                     else:
                         self._set_dl_status("❌ Download failed. You can install packs manually later.")
                     self.next_btn.configure(state="normal")
@@ -1200,7 +1200,7 @@ class App(CTk):
         self.pid_last_error = 0.0
         self._pid_filtered_d = 0.0  # Used For Derivative Smoothing
 
-        # Arrow-Based Box Estimation Variables
+        # Arrow-Based Box Estimation Variables (COMET-style from comet.py)
         self.last_indicator_x = None
         self.last_holding_state = None
         self.pending_holding_state = None
@@ -1209,6 +1209,13 @@ class App(CTk):
         self.last_left_x = None
         self.last_right_x = None
         self.last_known_box_center_x = None
+        
+        # Arrow estimation tracking (new: from comet.py)
+        self._last_bar_left_x = None
+        self._last_bar_right_x = None
+        self._last_bar_box_size = None
+        self._last_bar_center_x = None
+        
         self._reset_control_state()
 
         # Hotkey Variables
@@ -1769,15 +1776,6 @@ class App(CTk):
         tracking_threshold_var = StringVar(value="0")
         self.vars["tracking_threshold"] = tracking_threshold_var
         CTkEntry(ratio_settings, width=120, textvariable=tracking_threshold_var).grid(row=4, column=1, padx=12, pady=10, sticky="w")
-
-        CTkLabel(ratio_settings, text="Arrow Detection Method:").grid(row=4, column=2, padx=12, pady=10, sticky="w" )
-        arrow_method_var = StringVar(value="Normal")
-        self.vars["arrow_method"] = arrow_method_var
-        arrow_cb = CTkComboBox(ratio_settings, values=["Normal", "Simple"],
-                               variable=arrow_method_var, command=lambda v: self.set_status(f"arrow Method: {v}")
-                               )
-        arrow_cb.grid(row=4, column=3, padx=12, pady=10, sticky="w")
-        self.comboboxes["arrow_method"] = arrow_cb
 
         pid_settings = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         pid_settings.grid(row=5, column=0, padx=20, pady=20, sticky="nw")
@@ -3170,7 +3168,7 @@ class App(CTk):
         
         Args:
             frame: BGR numpy array from cv2/mss
-            target_color_hex: Hex color code (e.g., "# Ffffff")
+            target_color_hex: Hex color code (e.g., "#FFFFFF")
             tolerance: Color tolerance range (0-255)
         
         Returns:
@@ -3286,42 +3284,6 @@ class App(CTk):
 
         return int(center_x), int(center_y)
     
-    def _find_bar_edges_strict(
-        self,
-        frame,
-        left_hex,
-        right_hex,
-        tolerance=15,
-        tolerance2=15,
-        scan_height_ratio=0.55
-    ):
-        "Find all matching pixels that has a higher tolerance"
-        if frame is None:
-            return None, None
-
-        h, w, _ = frame.shape
-        y = int(h * scan_height_ratio)
-
-        left_bgr = np.array(self._hex_to_bgr(left_hex), dtype=np.int16)
-        right_bgr = np.array(self._hex_to_bgr(right_hex), dtype=np.int16)
-
-        line = frame[y].astype(np.int16)
-
-        tol_l = int(np.clip(tolerance, 0, 255))
-        tol_r = int(np.clip(tolerance2, 0, 255))
-
-        # V1-style threshold comparison
-        left_mask = np.all(line >= (left_bgr - tol_l), axis=1)
-        right_mask = np.all(line >= (right_bgr - tol_r), axis=1)
-
-        left_indices = np.where(left_mask)[0]
-        right_indices = np.where(right_mask)[0]
-
-        left_edge = int(left_indices[0]) if left_indices.size else None
-        right_edge = int(right_indices[-1]) if right_indices.size else None
-
-        return left_edge, right_edge
-
     def _find_bar_edges(
         self,
         frame,
@@ -3395,103 +3357,161 @@ class App(CTk):
 
     def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
         """
-        Estimate box position based on arrow indicator using IRUS-style logic.
+        Estimate box position based on arrow indicator using COMET-style logic (from comet.py).
         
-        If holding: arrow is on RIGHT edge, extend LEFT
-        If not holding: arrow is on LEFT edge, extend RIGHT
-        When state swaps: measure distance between arrows to get box size
+        Determines which side the arrow is on by comparing to last known center position,
+        uses proximity validation for self-correction, and falls back to default size if needed.
         
         Args:
             arrow_centroid_x: X coordinate of arrow center
-            is_holding: Whether mouse button is currently held
+            is_holding: Unused (kept for backward compatibility)
             capture_width: Width of capture region
         
         Returns:
-            Estimated bar center X coordinate, or None if can't estimate
+            Tuple of (bar_center_x, left_x, right_x) or (None, None, None) if can't estimate
         """
-
-        # Define Values First
-        left_x = self.last_left_x
-        right_x = self.last_right_x
-
-        # Handle Missing Arrow
+        
+        # Initialize tracking variables if not already done
+        if not hasattr(self, '_last_bar_left_x'):
+            self._last_bar_left_x = None
+        if not hasattr(self, '_last_bar_right_x'):
+            self._last_bar_right_x = None
+        if not hasattr(self, '_last_bar_box_size'):
+            self._last_bar_box_size = None
+        if not hasattr(self, '_last_bar_center_x'):
+            self._last_bar_center_x = None
+        
+        # Handle missing arrow
         if arrow_centroid_x is None:
-            if self.last_known_box_center_x is not None:
-                return self.last_known_box_center_x, left_x, right_x
-            return None, None, None  # Hard Fail Instead Of Bad Estimation
-
-        # Set Default Box Size If We Don'T Have One
-        if not self.estimated_box_length or self.estimated_box_length <= 0:
-            if self.last_cached_box_length and self.last_cached_box_length > 0:
-                self.estimated_box_length = self.last_cached_box_length
+            # Return last known positions if available
+            if self._last_bar_center_x is not None:
+                return self._last_bar_center_x, self._last_bar_left_x, self._last_bar_right_x
+            return None, None, None
+        
+        # Get last known values
+        last_center = self._last_bar_center_x
+        box_size = self._last_bar_box_size
+        
+        # If we have previous bar data, determine which side the arrow is on
+        if last_center is not None and box_size is not None and box_size > 0:
+            last_left = self._last_bar_left_x
+            last_right = self._last_bar_right_x
+            
+            # Determine which side based on center comparison
+            arrow_on_left_side = arrow_centroid_x < last_center
+            
+            # SMART VALIDATION: Check if arrow is actually near the bar we think it is
+            # Calculate distances to both last known bars
+            dist_to_left = abs(arrow_centroid_x - last_left) if last_left is not None else float('inf')
+            dist_to_right = abs(arrow_centroid_x - last_right) if last_right is not None else float('inf')
+            
+            # Self-correction: If arrow is much closer to the opposite bar, we detected wrong side!
+            # Threshold: arrow should be within reasonable distance (box_size / 4) of expected bar
+            proximity_threshold = box_size / 4
+            
+            if arrow_on_left_side:
+                # We think arrow is on LEFT, but verify it's actually near left bar
+                if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
+                    # Arrow is actually closer to RIGHT bar - we were wrong!
+                    arrow_on_left_side = False  # Flip the decision
+            
             else:
-                return None, None, None  # Hard Fail Instead Of Bad Estimation
-
-        effective_holding_state = is_holding
-        half_box_size = None
-        if self.last_cached_box_length and self.last_cached_box_length > 0:
-            half_box_size = self.last_cached_box_length / 2.0
-        elif self.estimated_box_length and self.estimated_box_length > 0:
-            half_box_size = self.estimated_box_length / 2.0
-
-        # The Game Keeps The Arrow On The Old Edge For A Few Frames After Input Flips.
-        # Only Treat It As A Real Side Swap Once The Arrow Has Moved At Least Half A Box.
-        state_swapped = (
-            self.last_holding_state is not None and
-            is_holding != self.last_holding_state
-        )
-        if state_swapped:
-            if self.pending_holding_state != is_holding:
-                self.pending_holding_state = is_holding
-                self.pending_indicator_x = self.last_indicator_x
-
-            swap_reference_x = self.pending_indicator_x
-            moved_distance = (
-                abs(arrow_centroid_x - swap_reference_x)
-                if swap_reference_x is not None else 0
-            )
-
-            if half_box_size is not None and moved_distance > half_box_size:
-                effective_holding_state = is_holding
-                if moved_distance >= 40:  # Reasonable Minimum
-                    self.estimated_box_length = moved_distance
-                    self.last_cached_box_length = moved_distance
-                self.pending_holding_state = None
-                self.pending_indicator_x = None
+                # We think arrow is on RIGHT, but verify it's actually near right bar
+                if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
+                    # Arrow is actually closer to LEFT bar - we were wrong!
+                    arrow_on_left_side = True  # Flip the decision
+            
+            # Now apply the corrected decision
+            if arrow_on_left_side:
+                # Arrow is on the LEFT side - update left bar, keep right bar from memory
+                bar_left_x = arrow_centroid_x
+                bar_right_x = self._last_bar_right_x
+                
+                if bar_right_x is None:
+                    # If no right bar in memory, calculate from box size
+                    bar_right_x = bar_left_x + box_size
+                
+                # Validate: ensure left < right
+                if bar_left_x < bar_right_x:
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    return bar_center_x, bar_left_x, bar_right_x
             else:
-                effective_holding_state = self.last_holding_state
+                # Arrow is on the RIGHT side - update right bar, keep left bar from memory
+                bar_right_x = arrow_centroid_x
+                bar_left_x = self._last_bar_left_x
+                
+                if bar_left_x is None:
+                    # If no left bar in memory, calculate from box size
+                    bar_left_x = bar_right_x - box_size
+                
+                # Validate: ensure left < right
+                if bar_left_x < bar_right_x:
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    return bar_center_x, bar_left_x, bar_right_x
+        
+        # Fallback: Try to establish initial box size from previous positions
+        elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
+            box_size = self._last_bar_right_x - self._last_bar_left_x
+            last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
+            
+            if box_size > 0:
+                self._last_bar_box_size = box_size
+                self._last_bar_center_x = last_center
+                
+                # Determine side based on arrow position relative to last center
+                if arrow_centroid_x < last_center:
+                    bar_left_x = arrow_centroid_x
+                    bar_right_x = bar_left_x + box_size
+                else:
+                    bar_right_x = arrow_centroid_x
+                    bar_left_x = bar_right_x - box_size
+                
+                self._last_bar_left_x = bar_left_x
+                self._last_bar_right_x = bar_right_x
+                bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                self._last_bar_center_x = bar_center_x
+                return bar_center_x, bar_left_x, bar_right_x
+            else:
+                # Invalid box size (<=0) - use default based on capture width
+                default_box_size = capture_width // 2
+                bar_left_x = arrow_centroid_x
+                bar_right_x = bar_left_x + default_box_size
+                
+                self._last_bar_left_x = bar_left_x
+                self._last_bar_right_x = bar_right_x
+                self._last_bar_box_size = default_box_size
+                
+                bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                self._last_bar_center_x = bar_center_x
+                return bar_center_x, bar_left_x, bar_right_x
+        
         else:
-            self.pending_holding_state = None
-            self.pending_indicator_x = None
-
-        # Position The Box Based On Current Hold State
-        if effective_holding_state:
-            # Holding: Arrow Is On Right, Extend Left
-            self.last_right_x = float(arrow_centroid_x)
-            self.last_left_x = self.last_right_x - self.estimated_box_length
-        else:
-            # Not Holding: Arrow Is On Left, Extend Right
-            self.last_left_x = float(arrow_centroid_x)
-            self.last_right_x = self.last_left_x + self.estimated_box_length
-        
-        # Clamp To Capture Bounds (Keep Arrow Anchored)
-        if self.last_left_x < 0:
-            self.last_left_x = 0.0
-            self.last_right_x = min(self.estimated_box_length, capture_width)
-        
-        if self.last_right_x > capture_width:
-            self.last_right_x = float(capture_width)
-            self.last_left_x = max(0.0, self.last_right_x - self.estimated_box_length)
-        
-        # Calculate And Store Center
-        box_center = (self.last_left_x + self.last_right_x) / 2.0
-        self.last_known_box_center_x = box_center
-        
-        # Update Tracking Variables For Next Frame
-        self.last_indicator_x = arrow_centroid_x
-        self.last_holding_state = effective_holding_state
-
-        return box_center, self.last_left_x, self.last_right_x
+            # No previous data - assume a default box size based on capture width
+            default_box_size = capture_width // 2
+            
+            # Start with arrow as left bar, calculate right from default size
+            bar_left_x = arrow_centroid_x
+            bar_right_x = bar_left_x + default_box_size
+            
+            # Clamp to capture bounds
+            if bar_right_x > capture_width:
+                bar_right_x = float(capture_width)
+                bar_left_x = max(0.0, bar_right_x - default_box_size)
+            
+            # Save these initial estimates
+            self._last_bar_left_x = bar_left_x
+            self._last_bar_right_x = bar_right_x
+            self._last_bar_box_size = default_box_size
+            
+            bar_center_x = (bar_left_x + bar_right_x) / 2.0
+            self._last_bar_center_x = bar_center_x
+            return bar_center_x, bar_left_x, bar_right_x
     # Get Values From Gui
     def _get_areas(self, area):
         # Apply Scale Factor
@@ -3549,27 +3569,19 @@ class App(CTk):
         fish_tol = int(self.vars["fish_tolerance"].get() or 1)
 
         required_fish_pixels = int(self.vars["required_fish_pixels"].get() or 10)
-        arrow_method = (self.vars["arrow_method"].get())
         # Macos Tolerance Buffer To Make Configs Cross-Compatible
         if sys.platform == "darwin":
             left_tol += 2
             right_tol += 2
             fish_tol += 2
         fish_center = self._find_color_cluster(img, fish_hex, fish_tol, required_fish_pixels)
-        if arrow_method == "Normal":
-            left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, right_bar_hex, left_tol, right_tol)
-            if left_bar_center is None:
-                left_bar_center, right_bar_center = self._find_bar_edges(img, right_bar_hex, right_bar_hex, right_tol, right_tol)
-            elif right_bar_center is None:
-                left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, left_bar_hex, left_tol, left_tol)
-        else:
-            left_bar_center, right_bar_center = self._find_bar_edges_strict(img, left_bar_hex, right_bar_hex, left_tol, right_tol)
-            if left_bar_center is None:
-                left_bar_center, right_bar_center = self._find_bar_edges_strict(img, right_bar_hex, right_bar_hex, right_tol, right_tol)
-            elif right_bar_center is None:
-                left_bar_center, right_bar_center = self._find_bar_edges_strict(img, left_bar_hex, left_bar_hex, left_tol, left_tol)
+        left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, right_bar_hex, left_tol, right_tol)
+        if left_bar_center is None:
+            left_bar_center, right_bar_center = self._find_bar_edges(img, right_bar_hex, right_bar_hex, right_tol, right_tol)
+        elif right_bar_center is None:
+            left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, left_bar_hex, left_tol, left_tol)
         return fish_center, left_bar_center, right_bar_center
-    # Controllers (Pid And Maelstrom)
+    # Controllers (PID And Stopping Distance)
     def _get_pid_gains(self):
         """Get PID gains from config, with sensible defaults."""
         try:
@@ -4619,7 +4631,7 @@ class App(CTk):
                 self.last_left_x = left_x
                 self.last_right_x = right_x
 
-                # ✅ New: Cache Real Box Size
+                # Completed: Cache Real Box Size
                 if left_x is not None and right_x is not None:
                     bar_size = abs(right_x - left_x)
                     if bar_size > 0:
@@ -4627,9 +4639,24 @@ class App(CTk):
 
                         # Sync Arrow Estimation Immediately
                         self.estimated_box_length = bar_size
+                        
+                        # Completed: Sync comet-style tracking variables for improved arrow estimation
+                        self._last_bar_left_x = left_x
+                        self._last_bar_right_x = right_x
+                        self._last_bar_box_size = bar_size
+                        self._last_bar_center_x = (left_x + right_x) / 2.0
+            # Fish Direction-Jump Rejection
+            if fish_x is not None:
+                if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:
+                    # Outlier Frame — Discard And Reuse Cached Value
+                    fish_x = self.last_fish_x
+                else:
+                    # Accept This Frame And Update Cache
+                    self.last_fish_x = fish_x
+                self.last_fish_x = fish_x
             # Step 4: Restart Method And Cache
             if restart_method == "Friend Area":
-                friend_x = self._find_color_center(friend_img, "# 9Bff9B", 2)
+                friend_x = self._find_color_center(friend_img, "#9Bff9B", 2)
                 if friend_x is not None:
                     release_mouse()
                     time.sleep(restart_delay)

@@ -637,7 +637,7 @@ class DiscordView(ctk.CTkFrame):
             response = requests.post(webhook_url, data=payload, files=files, timeout=10)
             
             if response.status_code in [200, 204]:
-                print("✅ Screenshot webhook test successful! Message sent to Discord.")
+                print("Completed: Screenshot webhook test successful! Message sent to Discord.")
             else:
                 print(f"❌ Webhook test failed. Status code: {response.status_code}")
                 print(f"Response: {response.text}")
@@ -694,7 +694,7 @@ class DiscordView(ctk.CTkFrame):
             )
             
             if response.status_code in [200, 204]:
-                print("✅ Text webhook test successful! Message sent to Discord.")
+                print("Completed: Text webhook test successful! Message sent to Discord.")
             else:
                 print(f"❌ Webhook test failed. Status code: {response.status_code}")
                 print(f"Response: {response.text}")
@@ -962,7 +962,7 @@ class FishView(ctk.CTkFrame):
                 # Ensure "Default" rod always exists (required)
                 if "Default" not in self.app.settings["rod_types"]:
                     self.app.settings["rod_types"].insert(0, "Default")
-                    print("  ✅ Ensured 'Default' rod exists")
+                    print("  Completed: Ensured 'Default' rod exists")
 
         # Initialize all preset rods with their specific colors
         self._initialize_preset_rod_colors()
@@ -5978,7 +5978,7 @@ def auto_subscribe_to_youtube():
         pyautogui.hotkey('ctrl', 'w')
         time.sleep(0.3)
         
-        print("✅ Auto-subscribe completed!")
+        print("Completed: Auto-subscribe completed!")
         return True
         
     except Exception as e:
@@ -6115,7 +6115,7 @@ By using IRUS COMET, you agree to the following terms and conditions:
 📜 1. USAGE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-✅ YOU ARE ALLOWED TO:
+Completed: YOU ARE ALLOWED TO:
    • Use IRUS COMET for personal purposes
    • Study and reverse engineer the code for educational purposes
    • Modify the code for your own personal use
@@ -6179,9 +6179,9 @@ YouTube: https://www.youtube.com/@AsphaltCake
 Discord: https://discord.gg/vKVBbyfHTD
 
 If you share, modify, or redistribute this software:
-✅ REQUIRED: Credit "AsphaltCake" as the original creator
-✅ REQUIRED: Link to the original source
-✅ REQUIRED: Indicate any changes you made
+Completed: REQUIRED: Credit "AsphaltCake" as the original creator
+Completed: REQUIRED: Link to the original source
+Completed: REQUIRED: Indicate any changes you made
 ❌ FORBIDDEN: Claim the entire work as your own
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -7403,7 +7403,7 @@ class StarryNightApp(ctk.CTk):
             
             response = requests.post(webhook_url, data=payload, files=files, timeout=10)
             if response.status_code == 200 or response.status_code == 204:
-                print(f"✅ Discord screenshot sent (Loop #{self.discord_loop_count})")
+                print(f"Completed: Discord screenshot sent (Loop #{self.discord_loop_count})")
             else:
                 print(f"⚠️ Discord screenshot failed: {response.status_code}")
         except Exception as e:
@@ -7442,7 +7442,7 @@ class StarryNightApp(ctk.CTk):
             
             response = requests.post(webhook_url, json=payload, timeout=10)
             if response.status_code == 200 or response.status_code == 204:
-                print(f"✅ Discord text sent (Loop #{self.discord_loop_count})")
+                print(f"Completed: Discord text sent (Loop #{self.discord_loop_count})")
             else:
                 print(f"⚠️ Discord text failed: {response.status_code}")
         except Exception as e:
@@ -7774,7 +7774,7 @@ class StarryNightApp(ctk.CTk):
             else:
                 print(f"🔄 Scheduling next cycle in 100ms... (Start/Stop={self.global_hotkey_states['Start/Stop']}, is_quitting={self.is_quitting})")
                 self.after(100, self.run_bot_cycle)
-                print(f"✅ Next cycle scheduled successfully")
+                print(f"Completed: Next cycle scheduled successfully")
 
     def _execute_start_block(self):
         """
@@ -8076,7 +8076,7 @@ class StarryNightApp(ctk.CTk):
             fail_timeout = self.settings.get("perfect_cast_fail_scan_timeout", 3.0)
             time.sleep(fail_timeout)  # Simple timeout-based release
             windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-            print(f"    ✅ Released after {fail_timeout}s timeout")
+            print(f"    Completed: Released after {fail_timeout}s timeout")
             return
         
         # Get settings from GUI
@@ -8170,7 +8170,7 @@ class StarryNightApp(ctk.CTk):
                 if not hasattr(self, '_active_cameras'):
                     self._active_cameras = []
                 self._active_cameras.append(camera)
-                print(f"    ✅ DXCam camera created successfully")
+                print(f"    Completed: DXCam camera created successfully")
             
             # Tracking state variables
             is_tracking = False
@@ -8305,7 +8305,7 @@ class StarryNightApp(ctk.CTk):
 
                     # Print frame status (every 10th frame to reduce overhead)
                     if frame_count % 10 == 0:
-                        print(f"    ✅ F#{frame_count} | {scan_duration:.1f}ms | {mode_text} | Dist:{local_distance}")
+                        print(f"    Completed: F#{frame_count} | {scan_duration:.1f}ms | {mode_text} | Dist:{local_distance}")
                     
                     # Store white position and timestamp for velocity tracking
                     white_positions.append((white_x, white_y))
@@ -8351,7 +8351,7 @@ class StarryNightApp(ctk.CTk):
                                         # Show final info overlay
                                         self._show_release_info(prediction_info)
                                         windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                                        print("    ✅ PERFECT CAST COMPLETE (caught after passing)")
+                                        print("    Completed: PERFECT CAST COMPLETE (caught after passing)")
                                         break
                                 
                 # STEP 3.5: VISUALIZATION - Show green and white positions (NO prediction info during detection)
@@ -8478,7 +8478,7 @@ class StarryNightApp(ctk.CTk):
                                     self._show_release_info(prediction_info)
                                     
                                     windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                                    print("    ✅ PERFECT CAST COMPLETE")
+                                    print("    Completed: PERFECT CAST COMPLETE")
                                     self._update_status("Perfect Cast: SUCCESS", "green")
                                     break
                                 
@@ -8510,7 +8510,7 @@ class StarryNightApp(ctk.CTk):
                                 # Show final info overlay
                                 self._show_release_info(prediction_info)
                                 windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                                print("    ✅ PERFECT CAST COMPLETE (slow speed)")
+                                print("    Completed: PERFECT CAST COMPLETE (slow speed)")
                                 break
                     
                     # EMERGENCY RELEASE: Very close distance regardless of velocity (safety net)
@@ -8525,7 +8525,7 @@ class StarryNightApp(ctk.CTk):
                         # Show final info overlay
                         self._show_release_info(prediction_info)
                         windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                        print("    ✅ PERFECT CAST COMPLETE")
+                        print("    Completed: PERFECT CAST COMPLETE")
                         break
                 
                 # Small delay to prevent excessive CPU usage
@@ -8751,7 +8751,7 @@ class StarryNightApp(ctk.CTk):
                             if not hasattr(self, '_active_cameras'):
                                 self._active_cameras = []
                             self._active_cameras.append(camera)
-                            print(f"    ✅ DXCam camera created successfully")
+                            print(f"    Completed: DXCam camera created successfully")
                             break
                         else:
                             print(f"    DXCam creation failed (attempt {attempt + 1}/{max_retries})")
@@ -8851,7 +8851,7 @@ class StarryNightApp(ctk.CTk):
                             duplicate_timer = 0.0
                         else:
                             # First pixel or completely new pixel after no duplicates
-                            print(f"    ✅ New pixel detected - clicking at ({screen_x}, {screen_y})")
+                            print(f"    Completed: New pixel detected - clicking at ({screen_x}, {screen_y})")
                         
                         # Click new pixel and start tracking it
                         self._click_at_position(screen_x, screen_y, click_count)
@@ -8999,7 +8999,7 @@ class StarryNightApp(ctk.CTk):
                             if not hasattr(self, '_active_cameras'):
                                 self._active_cameras = []
                             self._active_cameras.append(camera)
-                            print(f"    ✅ DXCam camera created successfully")
+                            print(f"    Completed: DXCam camera created successfully")
                             break
                         else:
                             print(f"    DXCam creation failed (attempt {attempt + 1}/{max_retries})")
@@ -9093,7 +9093,7 @@ class StarryNightApp(ctk.CTk):
                             duplicate_timer = 0.0
                         else:
                             # First circle or completely new circle after no duplicates
-                            print(f"    ✅ New circle detected - clicking at ({screen_x}, {screen_y})")
+                            print(f"    Completed: New circle detected - clicking at ({screen_x}, {screen_y})")
                         
                         # Click new circle and start tracking it
                         self._click_at_position(screen_x, screen_y, click_count)
@@ -9231,7 +9231,7 @@ class StarryNightApp(ctk.CTk):
                             if not hasattr(self, '_active_cameras'):
                                 self._active_cameras = []
                             self._active_cameras.append(camera)
-                            print(f"    ✅ DXCam camera created successfully")
+                            print(f"    Completed: DXCam camera created successfully")
                             break
                         else:
                             print(f"    DXCam creation failed (attempt {attempt + 1}/{max_retries})")
@@ -9297,7 +9297,7 @@ class StarryNightApp(ctk.CTk):
                     pixel_x, pixel_y = white_pixel
                     screen_x = x1 + pixel_x
                     screen_y = y1 + pixel_y
-                    print(f"    ✅ White pixel detected at ({screen_x}, {screen_y}) - sending Enter key")
+                    print(f"    Completed: White pixel detected at ({screen_x}, {screen_y}) - sending Enter key")
                     self._send_key_press("enter")
 
                     # Reset no-pixel timer since we found something
@@ -10024,13 +10024,13 @@ class StarryNightApp(ctk.CTk):
                 ])
             elif "SUCCESS" in self.current_status or "Complete" in self.current_status:
                 status_lines.extend([
-                    "✅ STATUS: Operation successful",
+                    "Completed: STATUS: Operation successful",
                     "",
                     "ℹ️ Bot will continue to next stage..."
                 ])
             elif "Fish Found" in self.current_status:
                 status_lines.extend([
-                    "✅ STATUS: Fish detected!",
+                    "Completed: STATUS: Fish detected!",
                     "",
                     "ℹ️ Entering fish catching mode..."
                 ])
@@ -10233,7 +10233,7 @@ class StarryNightApp(ctk.CTk):
                 self._info_overlay.deiconify()
                 self._info_overlay.update_idletasks()
                 self._info_overlay.update()  # Force immediate render
-                print("    ✅ Info overlay displayed")
+                print("    Completed: Info overlay displayed")
             else:
                 print("    ⚠️ Could not position info overlay - no reference boxes found")
         except Exception as e:
@@ -10272,7 +10272,7 @@ class StarryNightApp(ctk.CTk):
                         self._cast_overlay.geometry(new_geometry)
                         # Ensure it's visible
                         self._cast_overlay.deiconify()
-                        print(f"    ✅ Green box moved to: {new_geometry}")
+                        print(f"    Completed: Green box moved to: {new_geometry}")
                 except Exception as e:
                     print(f"    ❌ Error moving green box: {e}")
             else:
@@ -10291,7 +10291,7 @@ class StarryNightApp(ctk.CTk):
                         self._white_overlay.geometry(new_geometry)
                         # Ensure it's visible
                         self._white_overlay.deiconify()
-                        print(f"    ✅ White box moved to: {new_geometry}")
+                        print(f"    Completed: White box moved to: {new_geometry}")
                 except Exception as e:
                     print(f"    ❌ Error moving white box: {e}")
             else:
@@ -10312,7 +10312,7 @@ class StarryNightApp(ctk.CTk):
                         self._info_overlay.geometry(new_geometry)
                         # Ensure it's visible
                         self._info_overlay.deiconify()
-                        print(f"    ✅ Info box moved to: {new_geometry}")
+                        print(f"    Completed: Info box moved to: {new_geometry}")
                 except Exception as e:
                     print(f"    ❌ Error moving info box: {e}")
             else:
@@ -12072,7 +12072,7 @@ class StarryNightApp(ctk.CTk):
             with open(self.CONFIG_FILE, 'w') as f:
                 f.write(encoded)
             
-            print(f"✅ Config saved successfully to {self.CONFIG_FILE}")
+            print(f"Completed: Config saved successfully to {self.CONFIG_FILE}")
             
         except Exception as e:
             print(f"❌ Error saving config: {e}")
@@ -12144,7 +12144,7 @@ class StarryNightApp(ctk.CTk):
                     if option_name in self.hotkey_manager.hotkeys:
                         # Update the hotkey and rebind it
                         self.hotkey_manager.update_hotkey(option_name, key)
-                print(f"  ✅ Loaded hotkey configuration: {saved_hotkeys}")
+                print(f"  Completed: Loaded hotkey configuration: {saved_hotkeys}")
             
             if "fish_box" in config_data:
                 self.fish_box = config_data["fish_box"]
@@ -12180,7 +12180,7 @@ class StarryNightApp(ctk.CTk):
                 if "playtime_tracking" in shop:
                     self.playtime_tracking.update(shop["playtime_tracking"])
             
-            print(f"✅ Config loaded successfully from {self.CONFIG_FILE}")
+            print(f"Completed: Config loaded successfully from {self.CONFIG_FILE}")
             print(f"📊 Loaded {len(self.settings)} settings, {self.rebirths} rebirths, {self.comets:.2f} comets")
             
         except Exception as e:
@@ -12197,7 +12197,7 @@ class StarryNightApp(ctk.CTk):
         try:
             windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
             windll.user32.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
-            print("  ✅ Released all mouse buttons")
+            print("  Completed: Released all mouse buttons")
         except Exception as e:
             print(f"  ⚠️ Error releasing mouse: {e}")
         
@@ -12220,10 +12220,10 @@ class StarryNightApp(ctk.CTk):
                 # Delete all existing dxcam devices to force fresh start
                 if hasattr(dxcam, '_device_info') and hasattr(dxcam._device_info, 'clear'):
                     dxcam._device_info.clear()
-                    print("  ✅ Cleared global dxcam device cache")
+                    print("  Completed: Cleared global dxcam device cache")
                 elif hasattr(dxcam, 'device_info') and isinstance(dxcam.device_info, dict):
                     dxcam.device_info.clear()
-                    print("  ✅ Cleared global dxcam device cache")
+                    print("  Completed: Cleared global dxcam device cache")
                 else:
                     print("  ℹ️ DXCam device cache not accessible (may not exist)")
             except Exception as e:
@@ -12240,7 +12240,7 @@ class StarryNightApp(ctk.CTk):
                     pass
             self._active_cameras.clear()
             if camera_count > 0:
-                print(f"  ✅ Released {camera_count} tracked camera(s)")
+                print(f"  Completed: Released {camera_count} tracked camera(s)")
         else:
             self._active_cameras = []
         
@@ -12249,11 +12249,11 @@ class StarryNightApp(ctk.CTk):
             if hasattr(self, '_debug_overlay') and self._debug_overlay:
                 self._debug_overlay.destroy()
                 self._debug_overlay = None
-                print("  ✅ Closed debug overlay")
+                print("  Completed: Closed debug overlay")
         except:
             pass
         
-        print("✅ Bot state initialized successfully")
+        print("Completed: Bot state initialized successfully")
 
     def _cleanup_bot_resources(self):
         """Clean up all bot resources when stopping."""
@@ -12263,7 +12263,7 @@ class StarryNightApp(ctk.CTk):
         try:
             windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
             windll.user32.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
-            print("  ✅ Released mouse buttons")
+            print("  Completed: Released mouse buttons")
         except Exception as e:
             print(f"  ⚠️ Error releasing mouse: {e}")
         
@@ -12278,7 +12278,7 @@ class StarryNightApp(ctk.CTk):
                     print(f"  ⚠️ Error releasing camera: {e}")
             self._active_cameras.clear()
             if camera_count > 0:
-                print(f"  ✅ Released {camera_count} camera instance(s)")
+                print(f"  Completed: Released {camera_count} camera instance(s)")
         
         # CRITICAL: Force global dxcam cleanup
         if DXCAM_AVAILABLE:
@@ -12287,10 +12287,10 @@ class StarryNightApp(ctk.CTk):
                 # Clear device cache
                 if hasattr(dxcam, '_device_info') and hasattr(dxcam._device_info, 'clear'):
                     dxcam._device_info.clear()
-                    print("  ✅ Cleared dxcam device cache")
+                    print("  Completed: Cleared dxcam device cache")
                 elif hasattr(dxcam, 'device_info') and isinstance(dxcam.device_info, dict):
                     dxcam.device_info.clear()
-                    print("  ✅ Cleared dxcam device cache")
+                    print("  Completed: Cleared dxcam device cache")
                 # Small delay to let system clean up
                 time.sleep(0.1)
             except Exception as e:
@@ -12305,11 +12305,11 @@ class StarryNightApp(ctk.CTk):
             if hasattr(self, '_debug_overlay') and self._debug_overlay:
                 self._debug_overlay.destroy()
                 self._debug_overlay = None
-                print("  ✅ Closed debug overlay")
+                print("  Completed: Closed debug overlay")
         except:
             pass
         
-        print("✅ Bot resources cleaned up successfully")
+        print("Completed: Bot resources cleaned up successfully")
 
     def _perform_quit(self):
         """Performs the actual cleanup and destruction."""
@@ -15979,7 +15979,7 @@ if __name__ == "__main__":
             root.destroy()
             exit(0)
         
-        print("✅ Terms of Use accepted")
+        print("Completed: Terms of Use accepted")
         root.destroy()
         
         # Step 2: Auto-subscribe to YouTube
@@ -16035,7 +16035,7 @@ if __name__ == "__main__":
             encoded = base64.b64encode(json_str.encode()).decode()
             with open(config_path, 'w') as f:
                 f.write(encoded)
-            print("✅ Initial config created")
+            print("Completed: Initial config created")
         except Exception as e:
             print(f"⚠️ Error creating config: {e}")
             import traceback
@@ -16048,7 +16048,7 @@ if __name__ == "__main__":
     print("🎨 Creating main application window...")
     try:
         app = StarryNightApp()
-        print("✅ App created, starting mainloop...")
+        print("Completed: App created, starting mainloop...")
         app.mainloop()
     except KeyboardInterrupt:
         app.quit_app()
