@@ -156,7 +156,7 @@
                     if frame_count % 10 == 0:
                         mode_text = "TRACK" if is_tracking else "FULL"
                         scan_duration = (current_time - scan_time_start) * 1000
-                        print(f"    ✅ F#{frame_count} | {scan_duration:.1f}ms | {mode_text} | Dist:{local_distance}")
+                        print(f"    Completed: F#{frame_count} | {scan_duration:.1f}ms | {mode_text} | Dist:{local_distance}")
                     
                     # Store position for velocity tracking
                     white_positions.append((white_x, white_y))
@@ -272,7 +272,7 @@
                                         )
                                     
                                     windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                                    print("    ✅ PERFECT CAST COMPLETE")
+                                    print("    Completed: PERFECT CAST COMPLETE")
                                     break
                                 
                                 last_time_to_impact = time_to_impact
@@ -290,7 +290,7 @@
                             if recent_distances[-1] < recent_distances[0]:
                                 print(f"    🎯 SLOW SPEED RELEASE! Distance: {local_distance}px")
                                 windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                                print("    ✅ PERFECT CAST COMPLETE (slow speed)")
+                                print("    Completed: PERFECT CAST COMPLETE (slow speed)")
                                 break
                     
                     # EMERGENCY RELEASE
@@ -298,5 +298,5 @@
                     if local_distance <= emergency_distance:
                         print(f"    🚨 EMERGENCY RELEASE! Distance: {local_distance}px")
                         windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                        print("    ✅ PERFECT CAST COMPLETE (emergency)")
+                        print("    Completed: PERFECT CAST COMPLETE (emergency)")
                         break

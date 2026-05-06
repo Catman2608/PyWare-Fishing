@@ -696,7 +696,7 @@ class App():
             # Cleanup
             if is_holding_click:
                 windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                print("✅ Final RELEASE")
+                print("Completed: Final RELEASE")
             
             # Close visualization window
             try:
@@ -716,7 +716,7 @@ class App():
             # Close cast visualization overlays at end of fish stage
             self._cleanup_cast_overlays()
 
-            print("✅ === FISH STAGE ENDED ===")
+            print("Completed: === FISH STAGE ENDED ===")
             return "restart"  # Return to main loop
             
         except Exception as e:

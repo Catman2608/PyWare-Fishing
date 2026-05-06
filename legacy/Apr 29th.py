@@ -787,7 +787,7 @@ By using this software, you agree to the following:
 
 ⚡ 1. USAGE & MODIFICATION
 
-✅ YOU ARE ALLOWED TO:
+Completed: YOU ARE ALLOWED TO:
 Use these macros for personal purposes.
 Study and reverse engineer the code for educational purposes.
 Modify the code for your own personal use.
@@ -840,7 +840,7 @@ If you share, modify, or redistribute this software:
 These terms may be updated at any time.
 Continued use of the software from the PyWare Automate website constitutes acceptance of the updated terms.
                             
-✅ 7. ACCEPTANCE
+Completed: 7. ACCEPTANCE
 
 By accepting the terms, you acknowledge that you have read, understood, and agree to these Terms of Use.
 If you do not agree, please remove the software from your device.
