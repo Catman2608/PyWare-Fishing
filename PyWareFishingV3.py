@@ -117,7 +117,7 @@ IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 
 CONFIG_PATH = os.path.join(BASE_PATH, "last_config.json")
-APP_VERSION = "3.21"
+APP_VERSION = "3.3"
 
 set_appearance_mode("dark")
 
@@ -689,7 +689,7 @@ class StatusOverlay:
         # Title
         title = tk.Label(
             self.window,
-            text="PyWare Fishing V3.21",
+            text="PyWare Fishing V3.3",
             fg="# 00C8Ff",
             bg="black",
             font=("Segoe UI", 12, "bold")
@@ -762,6 +762,8 @@ class FishOverlay:
         self.parent_app = parent_app
         self.window = None
         self.canvas = None
+        self.width = 800
+        self.height = 60
 
     def init_window(self):
         """Create and initialize the overlay window and canvas."""
@@ -769,9 +771,9 @@ class FishOverlay:
             return
 
         self.window = tk.Toplevel(self.parent_app)
-        overlay_x = int(self.parent_app.SCREEN_WIDTH * 0.5) - 400
+        overlay_x = int(self.parent_app.SCREEN_WIDTH * 0.5) - int(self.width / 2)
         overlay_y = int(self.parent_app.SCREEN_HEIGHT * 0.65)
-        self.window.geometry(f"800x50+{overlay_x}+{overlay_y}")
+        self.window.geometry(f"{self.width}x{self.height}+{overlay_x}+{overlay_y}")
         
         if sys.platform == "darwin":
             self.window.overrideredirect(False)
@@ -781,12 +783,32 @@ class FishOverlay:
         self.window.attributes("-topmost", True)
         self.canvas = tk.Canvas(
             self.window,
-            width=800,
-            height=60,
+            width=self.width,
+            height=self.height,
             bg="#1d1d1d",
             highlightthickness=0
         )
         self.canvas.pack(fill="both", expand=True)
+
+    def set_layout(self, x, y, width, height):
+        """Resize and reposition the overlay without recreating it."""
+        width = max(60, int(width))
+        height = max(36, int(height))
+        x = max(0, min(int(x), max(0, self.parent_app.SCREEN_WIDTH - width)))
+        y = max(0, min(int(y), max(0, self.parent_app.SCREEN_HEIGHT - height)))
+
+        self.width = width
+        self.height = height
+
+        def _apply():
+            self.init_window()
+            if not self.window or not self.window.winfo_exists():
+                return
+            self.window.geometry(f"{width}x{height}+{x}+{y}")
+            if self.canvas and self.canvas.winfo_exists():
+                self.canvas.configure(width=width, height=height)
+
+        self.parent_app.after(0, _apply)
 
     def show(self):
         """Show the overlay window."""
@@ -842,7 +864,7 @@ class TermsOfServiceDialog(CTkToplevel):
         # Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("750x600")
-        self.title("PyWare Fishing V3.21 - Terms of Service")
+        self.title("PyWare Fishing V3.3 - Terms of Service")
         self.minsize(650, 500)
         
         # Center Window
@@ -922,7 +944,7 @@ class TermsOfServiceDialog(CTkToplevel):
         textbox.grid(row=0, column=0, padx=12, pady=10, sticky="nsew")
 
         textbox.insert("1.0", """
-PyWare Fishing V3.21 - Terms of Use
+PyWare Fishing V3.3 - Terms of Use
 
 By using this software, you agree to the following:
 
@@ -1256,6 +1278,8 @@ class App(CTk):
             self.bind("<Configure>", lambda e: self._invalidate_scale_cache())
         # Setup Overlay And Eyedropper
         self.fish_overlay = FishOverlay(self)
+        self._fish_overlay_mode = "idle"
+        self._fish_overlay_cast_bounds = None
         self.eyedropper = Eyedropper(self)
         self.status_overlay = StatusOverlay(self)
 
@@ -1266,7 +1290,7 @@ class App(CTk):
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
-        self.title("PyWare Fishing V3.21")
+        self.title("PyWare Fishing V3.3")
 
         # Status Bar
         self.grid_columnconfigure(0, weight=1)
@@ -1281,7 +1305,7 @@ class App(CTk):
         # Logo Label
         logo_label = CTkLabel(
             top_bar, 
-            text="PYWARE FISHING V3.21",
+            text="PYWARE FISHING V3.3",
             font=CTkFont(size=16, weight="bold")
         )
         logo_label.grid(row=0, column=0, sticky="w")
@@ -1350,6 +1374,7 @@ class App(CTk):
 
         # Load Last Config, Reapply Hotkeys And Set Reset Values
         self.load_last_config()
+        self._apply_fish_overlay_state()
         self._apply_hotkeys_from_vars()
         self.default_settings_data = self._collect_settings_data()
 
@@ -1595,6 +1620,7 @@ class App(CTk):
         sw = CTkSwitch(toggles, text="Fish Overlay", variable=fish_overlay_var, onvalue="on", offvalue="off")
         sw.grid(row=1, column=0, padx=12, pady=8, sticky="w")
         self.switches["fish_overlay"] = sw
+        fish_overlay_var.trace_add("write", self._on_fish_overlay_toggle)
 
         auto_zoom_var = StringVar(value="off")
         self.vars["auto_zoom"] = auto_zoom_var
@@ -1623,7 +1649,7 @@ class App(CTk):
         CTkLabel(toggles, text="Misc", font=CTkFont(size=14, weight="bold")).grid(row=0, column=2, padx=12, pady=8, sticky="w")
 
         CTkLabel(toggles, text="Select Rod Duration").grid(row=1, column=2, padx=12, pady=8, sticky="w")
-        bag_delay_var = StringVar(value="0.2")
+        bag_delay_var = StringVar(value="0.36")
         self.vars["bag_delay"] = bag_delay_var
         bag_delay_entry = CTkEntry(toggles, width=120, textvariable=bag_delay_var)
         bag_delay_entry.grid(row=1, column=3, padx=12, pady=8, sticky="w")
@@ -1654,11 +1680,11 @@ class App(CTk):
         self.normal_casting.grid(row=2, column=0, padx=20, pady=20, sticky="nw")
         CTkLabel(self.normal_casting, text="Casting Options", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
         CTkLabel(self.normal_casting, text="Delay").grid(row=1, column=0, padx=12, pady=8, sticky="w")
-        delay_before_casting_var = StringVar(value="0.3")
+        delay_before_casting_var = StringVar(value="0.5")
         self.vars["delay_before_casting"] = delay_before_casting_var
         delay_before_casting_entry = CTkEntry(self.normal_casting, width=120, textvariable=delay_before_casting_var)
         delay_before_casting_entry.grid(row=1, column=1, padx=12, pady=8, sticky="w")
-        CTkLabel(self.normal_casting, text="Cast for ________ seconds").grid(row=2, column=0, padx=12, pady=8, sticky="w")
+        CTkLabel(self.normal_casting, text="Casting Duration").grid(row=2, column=0, padx=12, pady=8, sticky="w")
         cast_duration_var = StringVar(value="0.6")
         self.vars["cast_duration"] = cast_duration_var
         cast_duration_entry = CTkEntry(self.normal_casting, width=120, textvariable=cast_duration_var)
@@ -1674,29 +1700,41 @@ class App(CTk):
 
         CTkLabel(self.perfect_casting, text="Casting Options", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
 
-        CTkLabel(self.perfect_casting, text="Threshold (percentage):").grid(row=1, column=0, padx=12, pady=10, sticky="w")
-        perfect_threshold_var = StringVar(value="30")
+        CTkLabel(self.perfect_casting, text="Delay Before Casting").grid(row=1, column=0, padx=12, pady=8, sticky="w")
+        delay_before_casting_var = StringVar(value="0.5")
+        self.vars["delay_before_casting"] = delay_before_casting_var
+        delay_before_casting_entry = CTkEntry(self.perfect_casting, width=120, textvariable=delay_before_casting_var)
+        delay_before_casting_entry.grid(row=1, column=1, padx=12, pady=8, sticky="w")
+
+        CTkLabel(self.perfect_casting, text="Delay After Casting").grid(row=1, column=2, padx=12, pady=8, sticky="w")
+        cast_delay_var = StringVar(value="0.6")
+        self.vars["cast_delay"] = cast_delay_var
+        cast_delay_entry = CTkEntry(self.perfect_casting, width=120, textvariable=cast_delay_var)
+        cast_delay_entry.grid(row=1, column=3, padx=12, pady=8, sticky="w")
+
+        CTkLabel(self.perfect_casting, text="Threshold (percentage):").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        perfect_threshold_var = StringVar(value="95.5")
         self.vars["perfect_threshold"] = perfect_threshold_var
         perfect_threshold_entry = CTkEntry(self.perfect_casting, width=120, textvariable=perfect_threshold_var)
-        perfect_threshold_entry.grid(row=1, column=1, padx=12, pady=10, sticky="w")
+        perfect_threshold_entry.grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(self.perfect_casting, text="Scan FPS:").grid(row=1, column=2, padx=12, pady=10, sticky="w")
+        CTkLabel(self.perfect_casting, text="Scan FPS:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
         cast_scan_delay_var = StringVar(value="0.05")
         self.vars["cast_scan_delay"] = cast_scan_delay_var
         cast_scan_delay_entry = CTkEntry(self.perfect_casting, width=120, textvariable=cast_scan_delay_var)
-        cast_scan_delay_entry.grid(row=1, column=3, padx=12, pady=10, sticky="w")
+        cast_scan_delay_entry.grid(row=2, column=3, padx=12, pady=10, sticky="w")
 
-        CTkLabel(self.perfect_casting, text="Failsafe Release Timeout:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
-        perfect_max_time_var = StringVar(value="3.5")
+        CTkLabel(self.perfect_casting, text="Failsafe Release Timeout:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
+        perfect_max_time_var = StringVar(value="5.5")
         self.vars["perfect_max_time"] = perfect_max_time_var
         perfect_max_time_entry = CTkEntry(self.perfect_casting, width=120, textvariable=perfect_max_time_var)
-        perfect_max_time_entry.grid(row=2, column=1, padx=12, pady=10, sticky="w")
+        perfect_max_time_entry.grid(row=3, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(self.perfect_casting, text="Release Delay:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
+        CTkLabel(self.perfect_casting, text="Delay Before Release:").grid(row=3, column=2, padx=12, pady=10, sticky="w")
         perfect_release_delay_var = StringVar(value="0")
         self.vars["perfect_release_delay"] = perfect_release_delay_var
         perfect_release_delay_entry = CTkEntry(self.perfect_casting, width=120, textvariable=perfect_release_delay_var)
-        perfect_release_delay_entry.grid(row=2, column=3, padx=12, pady=10, sticky="w")
+        perfect_release_delay_entry.grid(row=3, column=3, padx=12, pady=10, sticky="w")
 
         shake_configuration = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         shake_configuration.grid(row=3, column=0, padx=20, pady=20, sticky="nw")
@@ -1734,7 +1772,7 @@ class App(CTk):
         self.comboboxes["restart_method"] = restart_cb
 
         CTkLabel(shake_configuration, text="Animation Delay (seconds):").grid(row=3, column=2, padx=12, pady=10, sticky="w" )
-        bait_delay_var = StringVar(value="0.0")
+        bait_delay_var = StringVar(value="0")
         self.vars["bait_delay"] = bait_delay_var
         CTkEntry(shake_configuration, width=120, textvariable=bait_delay_var).grid(row=3, column=3, padx=12, pady=10, sticky="w")
 
@@ -1748,17 +1786,17 @@ class App(CTk):
         CTkEntry(ratio_settings, width=120, textvariable=left_ratio_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
 
         CTkLabel(ratio_settings, text="Note Tracking Ratio:").grid(row=1, column=2, padx=12, pady=10, sticky="w")
-        note_track_ratio_var = StringVar(value="0.05")
+        note_track_ratio_var = StringVar(value="0.4")
         self.vars["note_track_ratio"] = note_track_ratio_var
         CTkEntry(ratio_settings, width=120, textvariable=note_track_ratio_var).grid(row=1, column=3, padx=12, pady=10, sticky="w")
 
         CTkLabel(ratio_settings, text="Scan Delay (seconds):").grid(row=2, column=0, padx=12, pady=10, sticky="w")
-        minigame_scan_delay_var = StringVar(value="0.05")
+        minigame_scan_delay_var = StringVar(value="0.01")
         self.vars["minigame_scan_delay"] = minigame_scan_delay_var
         CTkEntry(ratio_settings, width=120, textvariable=minigame_scan_delay_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
         CTkLabel(ratio_settings, text="Restart Delay:").grid(row=2, column=2, padx=12, pady=10, sticky="w" )
-        restart_delay_var = StringVar(value="1")
+        restart_delay_var = StringVar(value="1.5")
         self.vars["restart_delay"] = restart_delay_var
         CTkEntry(ratio_settings, width=120, textvariable=restart_delay_var ).grid(row=2, column=3, padx=12, pady=10, sticky="w")
 
@@ -1772,7 +1810,7 @@ class App(CTk):
         self.vars["required_fish_pixels"] = required_fish_pixels
         CTkEntry(ratio_settings, width=120, textvariable=required_fish_pixels).grid(row=3, column=3, padx=12, pady=10, sticky="w")
 
-        CTkLabel(ratio_settings, text="Left Threshold:").grid(row=4, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(ratio_settings, text="Tracking Threshold:").grid(row=4, column=0, padx=12, pady=10, sticky="w")
         tracking_threshold_var = StringVar(value="0")
         self.vars["tracking_threshold"] = tracking_threshold_var
         CTkEntry(ratio_settings, width=120, textvariable=tracking_threshold_var).grid(row=4, column=1, padx=12, pady=10, sticky="w")
@@ -1839,12 +1877,12 @@ class App(CTk):
         self.vars["discord_webhook_name"] = discord_webhook_name_var
         CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_name_var).grid(row=3, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(discord_webhook, text="Trigger on (cycles):").grid(row=2, column=2, padx=12, pady=10, sticky="w")
+        CTkLabel(discord_webhook, text="Cycles:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
         discord_webhook_cycle_var = StringVar(value="3")
         self.vars["discord_webhook_cycle"] = discord_webhook_cycle_var
         CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_cycle_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
 
-        CTkLabel(discord_webhook, text="Trigger at (seconds):").grid(row=3, column=2, padx=12, pady=10, sticky="w")
+        CTkLabel(discord_webhook, text="Trigger in (seconds):").grid(row=3, column=2, padx=12, pady=10, sticky="w")
         discord_webhook_time_var = StringVar(value="60")
         self.vars["discord_webhook_time"] = discord_webhook_time_var
         CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_time_var).grid(row=3, column=3, padx=12, pady=10, sticky="w")
@@ -1876,7 +1914,7 @@ class App(CTk):
         auto_totem_cb.grid(row=1, column=3, padx=12, pady=10, sticky="w")
         self.comboboxes["use_sundial_mode_when"] = auto_totem_cb
 
-        CTkLabel(auto_totem, text="Totem Delay (seconds):").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(auto_totem, text="Trigger in (seconds):").grid(row=2, column=0, padx=12, pady=10, sticky="w")
         totem_delay_var = StringVar(value="999")
         self.vars["totem_delay"] = totem_delay_var
         CTkEntry(auto_totem, width=120, textvariable=totem_delay_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
@@ -1896,22 +1934,22 @@ class App(CTk):
         sw.grid(row=0, column=1, padx=12, pady=8, sticky="w")
         self.switches["auto_reconnect"] = sw
         # Reconnect Pixels
-        CTkLabel(auto_reconnect, text="Reconnect Pixels:").grid(row=1, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(auto_reconnect, text="Threshold:").grid(row=1, column=0, padx=12, pady=10, sticky="w")
         reconnect_pixels_var = StringVar(value="140")
         self.vars["reconnect_pixels"] = reconnect_pixels_var
         CTkEntry(auto_reconnect, width=120, textvariable=reconnect_pixels_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
         # reconnect_wait_time
-        CTkLabel(auto_reconnect, text="Reconnect Wait Time:").grid(row=1, column=2, padx=12, pady=10, sticky="w")
+        CTkLabel(auto_reconnect, text="Wait Time:").grid(row=1, column=2, padx=12, pady=10, sticky="w")
         reconnect_wait_time_var = StringVar(value="20")
         self.vars["reconnect_wait_time"] = reconnect_wait_time_var
         CTkEntry(auto_reconnect, width=120, textvariable=reconnect_wait_time_var).grid(row=1, column=3, padx=12, pady=10, sticky="w")
         # Mirror Ratio
-        CTkLabel(auto_reconnect, text="Mystic Mirror X Ratio:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(auto_reconnect, text="Mirror X (Ratio):").grid(row=2, column=0, padx=12, pady=10, sticky="w")
         mirror_ratio_var = StringVar(value="0.55")
         self.vars["mirror_ratio"] = mirror_ratio_var
         CTkEntry(auto_reconnect, width=120, textvariable=mirror_ratio_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(auto_reconnect, text="Mystic Mirror Y Ratio:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
+        CTkLabel(auto_reconnect, text="Mirror Y (Ratio):").grid(row=2, column=2, padx=12, pady=10, sticky="w")
         mirror_ratio2_var = StringVar(value="0.59")
         self.vars["mirror_ratio2"] = mirror_ratio2_var
         CTkEntry(auto_reconnect, width=120, textvariable=mirror_ratio2_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
@@ -2646,7 +2684,7 @@ class App(CTk):
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
         """Worker function to send text webhook."""
         discord_webhook_name = self.vars["discord_webhook_name"].get()
-        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.21rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.3rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             if show_status == True:
                 payload = {
@@ -2679,7 +2717,7 @@ class App(CTk):
             self.set_status(f"Error sending Discord text: {e}")
     def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
         discord_webhook_name = self.vars["discord_webhook_name"].get()
-        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.21rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.3rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             with mss.mss() as sct:
                 monitor = sct.monitors[1]
@@ -3558,6 +3596,57 @@ class App(CTk):
             right = int(self.SCREEN_WIDTH * 0.55)
             bottom = int(self.SCREEN_HEIGHT * 0.5)
         return left, top, right, bottom
+    def _get_overlay_anchor_area(self, area_name):
+        left, top, right, bottom, _, _ = self._get_areas(area_name)
+        return left, top, right, bottom
+    def _build_horizontal_overlay_layout(self, area_bounds):
+        left, top, right, bottom = area_bounds
+        width = max(60, right - left)
+        height = max(36, bottom - top)
+        x = left
+        above_y = top - height
+        below_y = bottom
+        y = above_y if above_y >= 0 else below_y
+        return x, y, width, height
+    def _build_side_overlay_layout(self, area_bounds):
+        left, top, right, bottom = area_bounds
+        width = max(60, right - left)
+        height = max(36, bottom - top)
+        center_y = int((top + bottom) / 2)
+        left_x = left - width
+        right_x = right
+        space_left = left
+        space_right = self.SCREEN_WIDTH - right
+        x = right_x if space_right >= width or space_right >= space_left else left_x
+        y = center_y - int(height / 2)
+        return x, y, width, height
+    def _get_fish_overlay_layout(self, mode=None):
+        mode = mode or self._fish_overlay_mode
+        if mode == "casting":
+            if self._fish_overlay_cast_bounds is not None:
+                cast_left, cast_top, cast_right, cast_bottom = self._fish_overlay_cast_bounds
+            else:
+                cast_left, cast_top, cast_right, cast_bottom = self._get_overlay_anchor_area("shake")
+            return self._build_side_overlay_layout((cast_left, cast_top, cast_right, cast_bottom))
+        if mode == "fishing":
+            return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("fish"))
+        return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("friend"))
+    def _is_fish_overlay_enabled(self):
+        var = self.vars.get("fish_overlay")
+        return bool(var and var.get() == "on")
+    def _apply_fish_overlay_state(self):
+        if not self._is_fish_overlay_enabled():
+            self.fish_overlay.hide()
+            return
+
+        x, y, width, height = self._get_fish_overlay_layout()
+        self.fish_overlay.set_layout(x, y, width, height)
+        self.fish_overlay.show()
+    def _set_fish_overlay_mode(self, mode):
+        self._fish_overlay_mode = mode
+        self._apply_fish_overlay_state()
+    def _on_fish_overlay_toggle(self, *args):
+        self._apply_fish_overlay_state()
     # Do Pixel/Image Search
     def _do_pixel_search(self, img):
         fish_hex = self.vars["fish_color"].get()
@@ -4134,6 +4223,10 @@ class App(CTk):
         # Get Areas (Scale Factor Applied Inside _Get_Areas)
         shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, shake_height = self._get_areas("shake")
 
+        # Set overlay to casting mode — bounds will be refined once green/white are detected
+        self._fish_overlay_cast_bounds = None
+        self._set_fish_overlay_mode("casting")
+
         # Config 
         white_color = self.vars["perfect_color2"].get()
         green_color = self.vars["perfect_color"].get()
@@ -4144,6 +4237,9 @@ class App(CTk):
         scan_delay = float(self.vars["cast_scan_delay"].get())
         release_delay = float(self.vars["perfect_release_delay"].get())
         perfect_threshold = float(self.vars["perfect_threshold"].get())
+
+        delay_before_casting = float(self.vars["delay_before_casting"].get())
+        cast_delay = float(self.vars["cast_delay"].get())
 
         # Idiotproof-Style Release Timing:
         # Negative Values Release Earlier Via Prediction Multiplier, Positive Values
@@ -4180,12 +4276,13 @@ class App(CTk):
             last_frame_time = None
             speed_samples.clear()
 
-        # Start Capture Thread; This Remains The Existing V3.21 Capture Path.
+        # Start Capture Thread; This Remains The Existing V3.3 Capture Path.
         stop_event = self._start_capture(scan_delay)
         start_time = time.time()
         if self.vars["fish_overlay"].get() == "Enabled":
             self.fish_overlay.show()
 
+        time.sleep(delay_before_casting)
         # Perfect Cast Loop
         while self.macro_running:
             if not self._cap_event.wait(timeout=0.5):
@@ -4269,6 +4366,15 @@ class App(CTk):
             if total_distance <= 0:
                 continue
 
+            # Update cast overlay bounds from detected green (left/top) and white (right/bottom)
+            cast_left   = shake_left_s + green_left_x
+            cast_top    = shake_top_s  + green_y
+            cast_right  = shake_left_s + green_right_x
+            cast_bottom = shake_top_s  + white_y_bottom
+            if self._fish_overlay_cast_bounds != (cast_left, cast_top, cast_right, cast_bottom):
+                self._fish_overlay_cast_bounds = (cast_left, cast_top, cast_right, cast_bottom)
+                self.after(0, self._apply_fish_overlay_state)
+
             current_time = time.time()
             actual_fill_percentage = (1 - (current_distance / total_distance)) * 100
             fill_speed = 0.0
@@ -4337,6 +4443,10 @@ class App(CTk):
         # Cleanup
         stop_event.set()
         mouse_controller.release(Button.left)
+        time.sleep(cast_delay)
+        # Cast ended — return overlay to idle (friend area)
+        self._fish_overlay_cast_bounds = None
+        self._set_fish_overlay_mode("idle")
     def _execute_shake_click(self):
         """
         Search for first shake pixel then click
@@ -4498,6 +4608,8 @@ class App(CTk):
             attempts += 1
             time.sleep(scan_delay)
     def _enter_minigame(self):
+        # Set overlay to fishing mode (top of fish area)
+        self._set_fish_overlay_mode("fishing")
         # Get All 3 Areas
         _, shake_top, _, _, _, _ = self._get_areas("shake")
         fish_left, fish_top, fish_right, fish_bottom, fish_width, fish_height = self._get_areas("fish")
@@ -4764,6 +4876,8 @@ class App(CTk):
             previous_controller_mode = controller_mode
             now = time.perf_counter()
             time.sleep(0.01)
+        # Minigame ended — return overlay to idle (friend area)
+        self._set_fish_overlay_mode("idle")
     def stop_macro(self):
         if not self.macro_running:
             return
