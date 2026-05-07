@@ -1,5 +1,5 @@
 {
-    "version": "3.21",
+    "version": "3.3",
     "tos_accepted": true,
     "last_profile": "default",
     "last_macro_name": null,
@@ -13,14 +13,14 @@
             "height": 800
         },
         "fish": {
-            "x": 546,
+            "x": 541,
             "y": 861,
-            "width": 825,
+            "width": 836,
             "height": 42
         },
         "friend": {
-            "x": 8,
-            "y": 926,
+            "x": 5,
+            "y": 927,
             "width": 68,
             "height": 89
         },
@@ -35,5 +35,5 @@
     "change_bar_areas_key": "F6",
     "screenshot_key": "F8",
     "stop_key": "F7",
-    "last_config": "Default"
+    "last_config": "Castbound"
 }
