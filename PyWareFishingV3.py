@@ -828,7 +828,7 @@ class FishOverlay:
             return
         self.canvas.delete("all")
 
-    def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=10, bar_y2=40):
+    def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
         """Draw a box on the overlay."""
         if bar_center is None:
             return
@@ -840,12 +840,14 @@ class FishOverlay:
         bx1 = left_edge - canvas_offset
         bx2 = right_edge - canvas_offset
         center_x = bar_center - canvas_offset
+        py1 = int(bar_y1 * self.height)
+        py2 = int(bar_y2 * self.height)
 
         def _draw():
-            self.canvas.create_rectangle(bx1, bar_y1, bx2, bar_y2, 
+            self.canvas.create_rectangle(bx1, py1, bx2, py2,
                                         outline=color, width=2, fill="#000000")
             if show_bar_center:
-                self.canvas.create_line(center_x, bar_y1, center_x, bar_y2,
+                self.canvas.create_line(center_x, py1, center_x, py2,
                                        fill="gray", width=2)
 
         self.canvas.after(0, _draw)
@@ -3321,7 +3323,6 @@ class App(CTk):
         center_x, center_y = centroids[largest_label]
 
         return int(center_x), int(center_y)
-    
     def _find_bar_edges(
         self,
         frame,
@@ -3372,6 +3373,71 @@ class App(CTk):
         right_edge = int(right_indices[-1]) if right_indices.size else None
 
         return left_edge, right_edge
+    def _find_vertical_bar_edges(
+        self,
+        frame,
+        top_hex,
+        bottom_hex,
+        tolerance=15,
+        tolerance2=15,
+        scan_width_ratio=0.5
+    ):
+        """
+        Reverse version of _find_bar_edges().
+        
+        Scans vertically instead of horizontally:
+        - Finds TOP edge using top_hex
+        - Finds BOTTOM edge using bottom_hex
+        """
+
+        if frame is None:
+            return None, None
+
+        if frame.size == 0 or frame.ndim < 2:
+            return None, None
+
+        h, w = frame.shape[:2]
+        if h == 0 or w == 0:
+            return None, None
+
+        # Scan vertical column instead of horizontal row
+        x = int(w * scan_width_ratio)
+
+        # Convert To BGR
+        top_bgr = np.array(self._hex_to_bgr(top_hex), dtype=np.int16)
+        bottom_bgr = np.array(self._hex_to_bgr(bottom_hex), dtype=np.int16)
+
+        # Extract Vertical Scan Line
+        column = frame[:, x].astype(np.int16)
+
+        # Clamp Tolerances
+        tol_t = int(np.clip(tolerance, 0, 255))
+        tol_b = int(np.clip(tolerance2, 0, 255))
+
+        # Top Mask
+        top_lower = top_bgr - tol_t
+        top_upper = top_bgr + tol_t
+        top_mask = np.all(
+            (column >= top_lower) & (column <= top_upper),
+            axis=1
+        )
+
+        # Bottom Mask
+        bottom_lower = bottom_bgr - tol_b
+        bottom_upper = bottom_bgr + tol_b
+        bottom_mask = np.all(
+            (column >= bottom_lower) & (column <= bottom_upper),
+            axis=1
+        )
+
+        top_indices = np.where(top_mask)[0]
+        bottom_indices = np.where(bottom_mask)[0]
+
+        # Keep Same Edge Logic
+        top_edge = int(top_indices[0]) if top_indices.size else None
+        bottom_edge = int(bottom_indices[-1]) if bottom_indices.size else None
+
+        return top_edge, bottom_edge
     # Other Calculations
     def _find_arrow_indicator_x(self, frame, arrow_hex, tolerance, is_holding):
         """
@@ -3623,11 +3689,28 @@ class App(CTk):
     def _get_fish_overlay_layout(self, mode=None):
         mode = mode or self._fish_overlay_mode
         if mode == "casting":
+            shake_left, shake_top, shake_right, shake_bottom = self._get_overlay_anchor_area("shake")
+            shake_height = shake_bottom - shake_top
+            shake_center_x = (shake_left + shake_right) / 2
+
+            # Determine cast X from detected bounds, or fall back to shake center
             if self._fish_overlay_cast_bounds is not None:
                 cast_left, cast_top, cast_right, cast_bottom = self._fish_overlay_cast_bounds
+                cast_center_x = (cast_left + cast_right) / 2
             else:
-                cast_left, cast_top, cast_right, cast_bottom = self._get_overlay_anchor_area("shake")
-            return self._build_side_overlay_layout((cast_left, cast_top, cast_right, cast_bottom))
+                cast_center_x = shake_center_x
+
+            overlay_width = 60
+            overlay_height = max(36, shake_height)
+
+            # Cast on left half → overlay on right side; cast on right half → overlay on left side
+            if cast_center_x <= shake_center_x:
+                x = shake_right
+            else:
+                x = shake_left - overlay_width
+
+            y = shake_top
+            return x, y, overlay_width, overlay_height
         if mode == "fishing":
             return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("fish"))
         return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("friend"))
@@ -3658,7 +3741,7 @@ class App(CTk):
         fish_tol = int(self.vars["fish_tolerance"].get() or 1)
 
         required_fish_pixels = int(self.vars["required_fish_pixels"].get() or 10)
-        # Macos Tolerance Buffer To Make Configs Cross-Compatible
+        # macOS Tolerance Buffer To Make Configs Cross-Compatible
         if sys.platform == "darwin":
             left_tol += 2
             right_tol += 2
@@ -4420,12 +4503,19 @@ class App(CTk):
                 last_frame_time = None
                 speed_samples.clear()
 
-            if self.vars["fish_overlay"].get() == "Enabled":
-                gy_canvas = int((green_y / shake_height) * 60)
-                wy_canvas = int((predicted_white_y_top / shake_height) * 60)
-                self.after(0, lambda y=gy_canvas: self.fish_overlay.draw( bar_center=y, box_size=15, color="green", canvas_offset=0 ))
-                self.after(0, lambda y=wy_canvas: self.fish_overlay.draw( bar_center=y, box_size=30, color="white", canvas_offset=0 ))
-
+            if self.vars["fish_overlay"].get() == "on":
+                cast_height = max(1, white_y_bottom - green_y)
+                green_ratio = 0.0
+                white_ratio = ( predicted_white_y_top - green_y ) / cast_height
+                white_ratio = max(0.0, min(1.0, white_ratio))
+                draw_x = shake_left_s - 30
+                bar_height = 0.08
+                # Green marker
+                self.after(0, lambda: self.fish_overlay.draw(bar_center=draw_x, box_size=15, color="green", canvas_offset=0, 
+                                                              bar_y1=max(0.0, green_ratio - bar_height / 2), bar_y2=min(1.0, green_ratio + bar_height / 2)))
+                # White marker
+                self.after(0, lambda: self.fish_overlay.draw(bar_center=draw_x, box_size=30, color="white", canvas_offset=0, 
+                                                              bar_y1=max(0.0, white_ratio - bar_height / 2), bar_y2=min(1.0, white_ratio + bar_height / 2)))
             if release_timing <= 0:
                 release_threshold = perfect_threshold
             else:
@@ -4640,6 +4730,7 @@ class App(CTk):
         tracking_threshold = int(self.vars["tracking_threshold"].get() or 0)
         previous_detection_source = None
         self.last_bar_size = None
+        self.scan_height_ratio = None
         # Get Default Positions
         if detection_method == "Fish":
             img = self._grab_screen_region(fish_left, fish_top, fish_right, fish_bottom)
@@ -4670,16 +4761,6 @@ class App(CTk):
             args=(_minigame_stop, scan_delay),
             daemon=True
         ).start()
-        # Prepare Templates For Image Search (Disabled For Now)
-        # for key in ["fish", "left_bar", "right_bar"]:
-        #    template = self.templates.get(key)
-
-        #    if template is None:
-        #        continue
-
-        #    # Convert to grayscale once
-        #    if len(template.shape) == 3:
-        #        template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
         while self.macro_running:
             # Step 1: Grab Full Screen Then Crop (Better On Macos)
             if not self._cap_event.wait(timeout=0.5):
@@ -4829,7 +4910,8 @@ class App(CTk):
             # Step 6: Draw Boxes
             self.fish_overlay.clear() # Make Sure To Clear Overlay
             if self.vars["fish_overlay"].get() == "on":
-                self.after(0, lambda _bc=bar_center, _bs=bar_size, _fl=fish_left: self.fish_overlay.draw(bar_center=_bc, box_size=_bs, color="green", canvas_offset=_fl, show_bar_center=True))
+                self.after(0, lambda _bc=bar_center, _bs=bar_size, _fl=fish_left: self.fish_overlay.draw(bar_center=_bc, box_size=_bs, 
+                                                                                                         color="green", canvas_offset=_fl, show_bar_center=True))
                 self.after(0, lambda _ml=max_left, _fl=fish_left: self.fish_overlay.draw(bar_center=_ml, box_size=15, color="lightblue", canvas_offset=_fl))
                 self.after(0, lambda _mr=max_right, _fl=fish_left: self.fish_overlay.draw(bar_center=_mr, box_size=15, color="lightblue", canvas_offset=_fl))
                 self.after(0, lambda: self.fish_overlay.draw(bar_center=fish_x, box_size=10, color="red", canvas_offset=fish_left))
