@@ -74,7 +74,7 @@
     "use_sundial_mode_when": "Disabled",
     "totem_delay": "900",
     "totem_cycles": "70",
-    "combobox_casting_mode": "Normal",
+    "combobox_casting_mode": "2",
     "combobox_shake_mode": "Navigation",
     "combobox_detection_method": "Fish + Bar",
     "combobox_restart_method": "Friend Area",

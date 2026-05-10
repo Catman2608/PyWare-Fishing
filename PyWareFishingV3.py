@@ -709,7 +709,6 @@ class StatusOverlay:
             self.labels[row] = lbl
 
     # Lifecycle
-
     def show(self):
         """Show the overlay."""
         self.init_window()
@@ -1246,14 +1245,13 @@ class App(CTk):
         self.hotkey_start = Key.f5
         self.hotkey_stop = Key.f7
         self.hotkey_change_areas = Key.f6 # Added For The Bar Area Selector
-        self.hotkey_screenshot = Key.f8
         self.hotkey_labels = {}  # Store Label Widgets For Dynamic Updates
 
         # Macro State
         self.macro_running = False
         self.macro_thread = None
 
-        # Discord Webhook And Totem Trigger Counters
+        # Logging And Totem Trigger Counters
         self.webhook_cycle_counter = 0   # Incremented Each Fishing Cycle
         self.webhook_start_time = None   # Set When Macro Starts (For Time Mode)
         self.totem_cycle_counter = 0
@@ -1445,7 +1443,6 @@ class App(CTk):
         CTkLabel(hotkey_hotbar_settings, text="Start Key").grid(row=1, column=0, padx=12, pady=6, sticky="w" )
         CTkLabel(hotkey_hotbar_settings, text="Change Bar Areas Key").grid(row=2, column=0, padx=12, pady=6, sticky="w" )
         CTkLabel(hotkey_hotbar_settings, text="Stop Key").grid(row=3, column=0, padx=12, pady=6, sticky="w" )
-        CTkLabel(hotkey_hotbar_settings, text="Screenshot Key").grid(row=4, column=0, padx=12, pady=6, sticky="w" )
         # Disable hotkeys
         enable_hotkeys_var = StringVar(value="off")
         self.vars["enable_hotkeys"] = enable_hotkeys_var
@@ -1465,10 +1462,6 @@ class App(CTk):
         self.vars["stop_key"] = stop_key_var
         stop_key_entry = CTkEntry(hotkey_hotbar_settings, width=120, textvariable=stop_key_var )
         stop_key_entry.grid(row=3, column=1, padx=12, pady=10, sticky="w")
-        screenshot_key_var = StringVar(value="F8")
-        self.vars["screenshot_key"] = screenshot_key_var
-        screenshot_key_entry = CTkEntry(hotkey_hotbar_settings, width=120, textvariable=screenshot_key_var)
-        screenshot_key_entry.grid(row=4, column=1, padx=12, pady=10, sticky="w")
         # Hotkey for items
         CTkLabel(hotkey_hotbar_settings, text="Fishing Rod:").grid(row=1, column=2, padx=12, pady=6, sticky="w" )
         CTkLabel(hotkey_hotbar_settings, text="Equipment Bag:").grid(row=2, column=2, padx=12, pady=6, sticky="w" )
@@ -1502,6 +1495,7 @@ class App(CTk):
         CTkLabel(color_settings, text="Color Settings", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
 
         CTkButton(color_settings, text="Pick Colors", corner_radius=10, width=120, command=self.eyedropper.start).grid(row=0, column=1, padx=12, pady=12, sticky="w")
+        CTkButton(color_settings, text="Take Screenshot", corner_radius=10, width=120, command=self._take_debug_screenshot).grid(row=0, column=3, padx=12, pady=12, sticky="w")
 
         CTkLabel(color_settings, text="Left Bar:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
         left_color_var = StringVar(value="#F1F1F1")
@@ -1649,6 +1643,19 @@ class App(CTk):
         sw.grid(row=3, column=0, padx=12, pady=8, sticky="w")
         self.switches["track_notes"] = sw
 
+        always_on_top_var = StringVar(value="off")
+        self.vars["always_on_top"] = always_on_top_var
+        sw = CTkSwitch(toggles, text="Always On Top", variable=always_on_top_var, onvalue="on", offvalue="off")
+        sw.grid(row=3, column=1, padx=12, pady=8, sticky="w")
+        self.switches["always_on_top"] = sw
+        always_on_top_var.trace_add("write", self._on_always_on_top_toggle)
+
+        lock_cursor_var = StringVar(value="off")
+        self.vars["lock_cursor"] = lock_cursor_var
+        sw = CTkSwitch(toggles, text="Lock Cursor", variable=lock_cursor_var, onvalue="on", offvalue="off")
+        sw.grid(row=4, column=0, padx=12, pady=8, sticky="w")
+        self.switches["lock_cursor"] = sw
+
         CTkLabel(toggles, text="Misc", font=CTkFont(size=14, weight="bold")).grid(row=0, column=2, padx=12, pady=8, sticky="w")
 
         CTkLabel(toggles, text="Select Rod Duration").grid(row=1, column=2, padx=12, pady=8, sticky="w")
@@ -1746,7 +1753,7 @@ class App(CTk):
         CTkLabel(shake_configuration, text="Shake Failsafe (attempts):").grid(row=1, column=0, padx=12, pady=10, sticky="w" )
         shake_failsafe_var = StringVar(value="80")
         self.vars["shake_failsafe"] = shake_failsafe_var
-        CTkEntry(shake_configuration, width=120, textvariable=shake_failsafe_var ).grid(row=1, column=1, padx=12, pady=10, sticky="w")
+        CTkEntry(shake_configuration, width=120, textvariable=shake_failsafe_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
         CTkLabel(shake_configuration, text="Shake Scan Delay:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
         shake_scan_delay_var = StringVar(value="0.07")
         self.vars["shake_scan_delay"] = shake_scan_delay_var
@@ -1799,24 +1806,23 @@ class App(CTk):
         CTkEntry(ratio_settings, width=120, textvariable=minigame_scan_delay_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
         CTkLabel(ratio_settings, text="Restart Delay:").grid(row=2, column=2, padx=12, pady=10, sticky="w" )
-        restart_delay_var = StringVar(value="1.5")
+        restart_delay_var = StringVar(value="2.5")
         self.vars["restart_delay"] = restart_delay_var
         CTkEntry(ratio_settings, width=120, textvariable=restart_delay_var ).grid(row=2, column=3, padx=12, pady=10, sticky="w")
-
-        CTkLabel(ratio_settings, text="Stabilize Threshold:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
-        stabilize_threshold_var = StringVar(value="6")
-        self.vars["stabilize_threshold"] = stabilize_threshold_var
-        CTkEntry(ratio_settings, width=120, textvariable=stabilize_threshold_var).grid(row=3, column=1, padx=12, pady=10, sticky="w")
 
         CTkLabel(ratio_settings, text="Required Fish Pixels:").grid(row=3, column=2, padx=12, pady=10, sticky="w")
         required_fish_pixels = StringVar(value="8")
         self.vars["required_fish_pixels"] = required_fish_pixels
         CTkEntry(ratio_settings, width=120, textvariable=required_fish_pixels).grid(row=3, column=3, padx=12, pady=10, sticky="w")
 
-        CTkLabel(ratio_settings, text="Tracking Threshold:").grid(row=4, column=0, padx=12, pady=10, sticky="w")
-        tracking_threshold_var = StringVar(value="0")
-        self.vars["tracking_threshold"] = tracking_threshold_var
-        CTkEntry(ratio_settings, width=120, textvariable=tracking_threshold_var).grid(row=4, column=1, padx=12, pady=10, sticky="w")
+        CTkLabel(ratio_settings, text="Amount of Arrows:").grid(row=3, column=0, padx=12, pady=10, sticky="w" )
+        arrow_method_var = StringVar(value="2")
+        self.vars["arrow_method"] = arrow_method_var
+        arrow_cb = CTkComboBox(ratio_settings, values=["2", "1"],
+                               variable=arrow_method_var, command=lambda v: self.set_status(f"This rod has {v} arrows")
+                               )
+        arrow_cb.grid(row=3, column=1, padx=12, pady=10, sticky="w")
+        self.comboboxes["arrow_method"] = arrow_cb
 
         pid_settings = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         pid_settings.grid(row=5, column=0, padx=20, pady=20, sticky="nw")
@@ -1847,51 +1853,51 @@ class App(CTk):
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_columnconfigure(0, weight=1)
         
-        # Discord Webhooks
-        discord_webhook = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
-        discord_webhook.grid(row=0, column=0, padx=20, pady=20, sticky="nw")
-        CTkLabel(discord_webhook, text="Discord Webhooks", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
+        # Loggings
+        logging = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
+        logging.grid(row=0, column=0, padx=20, pady=20, sticky="nw")
+        CTkLabel(logging, text="Loggings", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
         
-        CTkLabel(discord_webhook, text="Webhook Mode:").grid(row=1, column=0, padx=12, pady=10, sticky="w" )
-        discord_webhook_mode_var = StringVar(value="Screenshot")
-        self.vars["discord_webhook_mode"] = discord_webhook_mode_var
-        discord_webhook_cb = CTkComboBox(discord_webhook, values=["Screenshot", "Text", "Disabled"], 
-                               variable=discord_webhook_mode_var, command=lambda v: self.set_status(f"Discord Webhook mode: {v}")
+        CTkLabel(logging, text="Logging Mode:").grid(row=1, column=0, padx=12, pady=10, sticky="w" )
+        logging_mode_var = StringVar(value="Screenshot")
+        self.vars["logging_mode"] = logging_mode_var
+        logging_cb = CTkComboBox(logging, values=["Screenshot", "Text", "Debug", "Disabled"], 
+                               variable=logging_mode_var, command=lambda v: self.set_status(f"Logging mode: {v}")
                                )
-        discord_webhook_cb.grid(row=1, column=1, padx=12, pady=10, sticky="w")
-        self.comboboxes["discord_webhook_mode"] = discord_webhook_cb
+        logging_cb.grid(row=1, column=1, padx=12, pady=10, sticky="w")
+        self.comboboxes["logging_mode"] = logging_cb
 
-        CTkLabel(discord_webhook, text="Discord Webhook Type:").grid(row=1, column=2, padx=12, pady=10, sticky="w" )
-        discord_webhook_cd_var = StringVar(value="Cycles")
-        self.vars["discord_webhook_cd"] = discord_webhook_cd_var
-        discord_webhook_cb = CTkComboBox(discord_webhook, values=["Time", "Cycles", "Disabled"], 
-                               variable=discord_webhook_cd_var, command=lambda v: self.set_status(f"Discord Webhook Type: {v}")
+        CTkLabel(logging, text="Logging Type:").grid(row=1, column=2, padx=12, pady=10, sticky="w" )
+        logging_cd_var = StringVar(value="Cycles")
+        self.vars["logging_cd"] = logging_cd_var
+        logging_cb = CTkComboBox(logging, values=["Time", "Cycles", "Disabled"], 
+                               variable=logging_cd_var, command=lambda v: self.set_status(f"Logging Type: {v}")
                                )
-        discord_webhook_cb.grid(row=1, column=3, padx=12, pady=10, sticky="w")
-        self.comboboxes["discord_webhook_cd"] = discord_webhook_cb
+        logging_cb.grid(row=1, column=3, padx=12, pady=10, sticky="w")
+        self.comboboxes["logging_cd"] = logging_cb
 
-        CTkLabel(discord_webhook, text="Webhook URL:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
-        discord_webhook_url_var = StringVar(value="")
-        self.vars["discord_webhook_url"] = discord_webhook_url_var
-        CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_url_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
+        CTkLabel(logging, text="Webhook URL:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        logging_url_var = StringVar(value="")
+        self.vars["logging_url"] = logging_url_var
+        CTkEntry(logging, width=120, textvariable=logging_url_var).grid(row=2, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(discord_webhook, text="Webhook name:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
-        discord_webhook_name_var = StringVar(value="PyWare Fishing")
-        self.vars["discord_webhook_name"] = discord_webhook_name_var
-        CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_name_var).grid(row=3, column=1, padx=12, pady=10, sticky="w")
+        CTkLabel(logging, text="Webhook name:").grid(row=3, column=0, padx=12, pady=10, sticky="w")
+        logging_name_var = StringVar(value="PyWare Fishing")
+        self.vars["logging_name"] = logging_name_var
+        CTkEntry(logging, width=120, textvariable=logging_name_var).grid(row=3, column=1, padx=12, pady=10, sticky="w")
 
-        CTkLabel(discord_webhook, text="Cycles:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
-        discord_webhook_cycle_var = StringVar(value="3")
-        self.vars["discord_webhook_cycle"] = discord_webhook_cycle_var
-        CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_cycle_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
+        CTkLabel(logging, text="Cycles:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
+        logging_cycle_var = StringVar(value="3")
+        self.vars["logging_cycle"] = logging_cycle_var
+        CTkEntry(logging, width=120, textvariable=logging_cycle_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
 
-        CTkLabel(discord_webhook, text="Trigger in (seconds):").grid(row=3, column=2, padx=12, pady=10, sticky="w")
-        discord_webhook_time_var = StringVar(value="60")
-        self.vars["discord_webhook_time"] = discord_webhook_time_var
-        CTkEntry(discord_webhook, width=120, textvariable=discord_webhook_time_var).grid(row=3, column=3, padx=12, pady=10, sticky="w")
+        CTkLabel(logging, text="Trigger in (seconds):").grid(row=3, column=2, padx=12, pady=10, sticky="w")
+        logging_time_var = StringVar(value="60")
+        self.vars["logging_time"] = logging_time_var
+        CTkEntry(logging, width=120, textvariable=logging_time_var).grid(row=3, column=3, padx=12, pady=10, sticky="w")
 
         # Test webhook button
-        CTkButton(discord_webhook, text="Test Webhook", width=120, command=self.test_discord_webhook
+        CTkButton(logging, text="Test Webhook", width=120, command=self.test_logging
                   ).grid(row=4, column=0, columnspan=2, padx=12, pady=12, sticky="w")
         
         # Auto Totem
@@ -1925,7 +1931,7 @@ class App(CTk):
         CTkLabel(auto_totem, text="Cycles:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
         totem_cycles_var = StringVar(value="70")
         self.vars["totem_cycles"] = totem_cycles_var
-        CTkEntry(auto_totem, width=120, textvariable=discord_webhook_cycle_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
+        CTkEntry(auto_totem, width=120, textvariable=logging_cycle_var).grid(row=2, column=3, padx=12, pady=10, sticky="w")
 
         # Auto Reconnect
         auto_reconnect = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
@@ -2098,12 +2104,7 @@ class App(CTk):
         except Exception as e:
             print(f"Error saving checkboxes: {e}")
 
-        # Save Combobox States
-        try:
-            for key, combobox in self.comboboxes.items():
-                data[f"combobox_{key}"] = combobox.get()
-        except Exception as e:
-            print(f"Error saving comboboxes: {e}")
+        # Comboboxes are already saved via StringVars
 
         # Save Switch States
         try:
@@ -2145,14 +2146,7 @@ class App(CTk):
                         checkbox.deselect()
         except Exception as e:
             print(f"Error loading checkboxes: {e}")
-        # Load Combobox States
-        try:
-            for key, cb in self.comboboxes.items():
-                combobox_key = f"combobox_{key}"
-                if combobox_key in data:
-                    cb.set(data[combobox_key])
-        except Exception as e:
-            print(f"Error loading comboboxes: {e}")
+        # Comboboxes are already loaded via StringVars
         # Load Switch States (Must Call Select/Deselect To Update Visuals)
         try:
             for key, switch in self.switches.items():
@@ -2227,18 +2221,15 @@ class App(CTk):
                     # Important: Load Hotkeys If Present
                     start_key = data.get("start_key", "F5")
                     change_key = data.get("change_bar_areas_key", "F6")
-                    screenshot_key = data.get("screenshot_key", "F8")
                     stop_key = data.get("stop_key", "F7")
 
                     self.vars["start_key"].set(start_key)
                     self.vars["change_bar_areas_key"].set(change_key)
-                    self.vars["screenshot_key"].set(screenshot_key)
                     self.vars["stop_key"].set(stop_key)
 
                     # Convert To Pynput Keys
                     self.hotkey_start = self._string_to_key(start_key)
                     self.hotkey_change_areas = self._string_to_key(change_key)
-                    self.hotkey_screenshot = self._string_to_key(screenshot_key)
                     self.hotkey_stop = self._string_to_key(stop_key)
             else:
                 self.current_rod_name = "Basic Rod"
@@ -2276,7 +2267,6 @@ class App(CTk):
         # Save Hotkeys
         data["start_key"] = self.vars["start_key"].get()
         data["change_bar_areas_key"] = self.vars["change_bar_areas_key"].get()
-        data["screenshot_key"] = self.vars["screenshot_key"].get()
         data["stop_key"] = self.vars["stop_key"].get()
         # Write Merged Result
         with open(path, "w") as f:
@@ -2478,7 +2468,6 @@ class App(CTk):
         """Apply hotkey StringVars to the live hotkey attributes used by on_key_press."""
         self.hotkey_start = self._string_to_key(self.vars["start_key"].get())
         self.hotkey_change_areas = self._string_to_key(self.vars["change_bar_areas_key"].get())
-        self.hotkey_screenshot = self._string_to_key(self.vars["screenshot_key"].get())
         self.hotkey_stop = self._string_to_key(self.vars["stop_key"].get())
         # Show Status Lines
         # Self.Status_Overlay.Show()
@@ -2486,7 +2475,6 @@ class App(CTk):
         self.status_overlay.set_line(f"Press {self.hotkey_start} to start", row=2)
         self.status_overlay.set_line(f"Press {self.hotkey_change_areas} to change bar areas", row=3)
         self.status_overlay.set_line(f"Press {self.hotkey_stop} to stop", row=4)
-        self.status_overlay.set_line(f"Press {self.hotkey_screenshot} to take debug screenshot", row=5)
     def _string_to_key(self, key_string):
         key_string = key_string.strip().lower()
         # Try Special Keys
@@ -2513,7 +2501,6 @@ class App(CTk):
         self.hotkey_start = self.vars["start_key"].get()
         self.hotkey_change_areas = self.vars["change_bar_areas_key"].get()
         self.hotkey_stop = self.vars["stop_key"].get()
-        self.hotkey_screenshot = self.vars["screenshot_key"].get()
 
         if enable_hotkeys == "on":
             if pressed_key == self._normalize_hotkey_value(self.hotkey_start) and not self.macro_running:
@@ -2531,9 +2518,6 @@ class App(CTk):
 
             elif pressed_key == self._normalize_hotkey_value(self.hotkey_change_areas):
                 self.open_area_selector()
-
-            elif pressed_key == self._normalize_hotkey_value(self.hotkey_screenshot):
-                self._take_debug_screenshot()
 
             elif pressed_key == self._normalize_hotkey_value(self.hotkey_stop):
                 self.stop_macro()
@@ -2679,13 +2663,13 @@ class App(CTk):
     # Logging-Related Functions
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
         """Worker function to send text webhook."""
-        discord_webhook_name = self.vars["discord_webhook_name"].get()
+        logging_name = self.vars["logging_name"].get()
         webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.3rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             if show_status == True:
                 payload = {
                     'content': f'{message_prefix}🎣 Cycle completed\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': discord_webhook_name,
+                    'username': logging_name,
                     'embeds': [{
                         'description': f'{loop_count}',
                         'color': 0x5865F2,
@@ -2696,7 +2680,7 @@ class App(CTk):
             else:
                 payload = {
                     'content': f'{message_prefix}🎣 Cycle failed\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': discord_webhook_name,
+                    'username': logging_name,
                     'embeds': [{
                         'description': f'{loop_count}',
                         'color': 0x5865F2,
@@ -2712,7 +2696,7 @@ class App(CTk):
         except Exception as e:
             self.set_status(f"Error sending Discord text: {e}")
     def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
-        discord_webhook_name = self.vars["discord_webhook_name"].get()
+        logging_name = self.vars["logging_name"].get()
         webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.3rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             with mss.mss() as sct:
@@ -2728,13 +2712,13 @@ class App(CTk):
             if show_status == True:
                 payload = {
                     'content': f'{message_prefix}🎣 **Cycle completed**\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': discord_webhook_name
+                    'username': logging_name
                 }
                 response = requests.post(webhook_url, data=payload, files=files, timeout=10)
             else:
                 payload = {
                     'content': f'{message_prefix}🎣 **Cycle failed**\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': discord_webhook_name
+                    'username': logging_name
                 }
                 response = requests.post(webhook_url2, data=payload, files=files, timeout=10)
             if response.status_code in (200, 204):
@@ -2745,12 +2729,43 @@ class App(CTk):
 
         except Exception as e:
             self.set_status(f"Error: sending Discord screenshot: {e}")
-    def test_discord_webhook(self):
-        self.send_discord_webhook("**Discord Webhook is working**", "TEST", show_status=True)
+    def _debug_log_worker(self, text, loop_count, show_status=False):
+        """Write debug logs to a text file."""
+        try:
+            # Create logs folder
+            log_dir = "logs"
+            os.makedirs(log_dir, exist_ok=True)
+
+            # Daily log file
+            log_file = os.path.join(
+                log_dir,
+                f"debug_{time.strftime('%Y-%m-%d')}.txt"
+            )
+
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+            log_entry = (
+                "==================================================\n"
+                f"🎣 {text}\n"
+                f"🔄 {loop_count}\n"
+                f"🕐 {timestamp}\n"
+                "==================================================\n\n"
+            )
+
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(log_entry)
+
+            if show_status:
+                self.set_status(f"Debug log saved ({loop_count})")
+
+        except Exception as e:
+            self.set_status(f"Error writing debug log: {e}")
+    def test_logging(self):
+        self.send_logging("**Logging is working**", "TEST", show_status=True)
     def _auto_bug_report(self, error_text, phase="Unknown"):
         """Send a text-only crash report to the bug report webhook."""
-        webhook_url = self.vars["discord_webhook_url"].get()
-        discord_webhook_name = self.vars["discord_webhook_name"].get()
+        webhook_url = self.vars["logging_url"].get()
+        logging_name = self.vars["logging_name"].get()
         platform_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         report_text = (
@@ -2774,7 +2789,7 @@ class App(CTk):
                 f"Crash line: `{crash_line}`\n"
                 "Full traceback with line numbers is attached as text."
             ),
-            "username": discord_webhook_name
+            "username": logging_name
         }
 
         try:
@@ -2794,12 +2809,13 @@ class App(CTk):
             daemon=True
         )
         thread.start()
-    def send_discord_webhook(self, text, loop_count, show_status=True):
-        if self.vars["discord_webhook_mode"].get() == "Disabled":
-            self.set_status("⚠ Discord webhook is disabled.")
+    def send_logging(self, text, loop_count, show_status=True):
+        logging_mode = self.vars["logging_mode"].get()
+        if logging_mode == "Disabled":
+            self.set_status("⚠ Logging is disabled.")
             return
-        # Discord_Webhook_Url
-        webhook_url = self.vars["discord_webhook_url"].get().strip()
+        # logging_Url
+        webhook_url = self.vars["logging_url"].get().strip()
 
         if not webhook_url.startswith("https://discord.com/api/webhooks/"):
             self.set_status("Error: Invalid webhook URL.")
@@ -2807,12 +2823,17 @@ class App(CTk):
         
         if show_status == True:
             self.set_status("Sending test webhook...")
-        use_screenshot = self.vars["discord_webhook_mode"].get() == "Screenshot"
 
-        if use_screenshot:
+        if logging_mode == "Screenshot":
             thread = threading.Thread(
                 target=self._discord_screenshot_worker,
                 args=(webhook_url, f"{text}\n", loop_count, show_status),
+                daemon=True
+            )
+        elif logging_mode == "Debug":
+            thread = threading.Thread(
+                target=self._debug_log_worker,
+                args=(text, loop_count, show_status),
                 daemon=True
             )
         else:
@@ -3475,16 +3496,15 @@ class App(CTk):
 
         return indicator_x
 
-    def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
+    def _update_arrow_box_estimation(self, arrow_centroid_x, capture_width):
         """
-        Estimate box position based on arrow indicator using COMET-style logic (from comet.py).
+        Estimate box position based on arrow indicator using geometry-based logic.
         
         Determines which side the arrow is on by comparing to last known center position,
         uses proximity validation for self-correction, and falls back to default size if needed.
         
         Args:
             arrow_centroid_x: X coordinate of arrow center
-            is_holding: Unused (kept for backward compatibility)
             capture_width: Width of capture region
         
         Returns:
@@ -3709,15 +3729,18 @@ class App(CTk):
             shake_height = shake_bottom - shake_top
             shake_center_x = (shake_left + shake_right) / 2
 
-            # Determine cast X from detected bounds, or fall back to shake center
+            overlay_width = 60
+            overlay_height = max(36, shake_height)
+            y = shake_top
+            cast_center_x = shake_center_x
+
+            # Use the detected cast bounds if available to size/position the overlay
             if self._fish_overlay_cast_bounds is not None:
                 cast_left, cast_top, cast_right, cast_bottom = self._fish_overlay_cast_bounds
                 cast_center_x = (cast_left + cast_right) / 2
-            else:
-                cast_center_x = shake_center_x
-
-            overlay_width = 60
-            overlay_height = max(36, shake_height)
+                cast_height = max(36, cast_bottom - cast_top)
+                overlay_height = cast_height
+                y = cast_top
 
             # Cast on left half → overlay on right side; cast on right half → overlay on left side
             if cast_center_x <= shake_center_x:
@@ -3725,10 +3748,12 @@ class App(CTk):
             else:
                 x = shake_left - overlay_width
 
-            y = shake_top
             return x, y, overlay_width, overlay_height
         if mode == "fishing":
-            return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("fish"))
+            x, y, overlay_width, overlay_height = self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("fish"))
+            half_height = int(self.SCREEN_HEIGHT / 2)
+            y = y - 80 if y > half_height else y + 80
+            return x, y, overlay_width, overlay_height
         return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("friend"))
     def _is_fish_overlay_enabled(self):
         var = self.vars.get("fish_overlay")
@@ -3746,6 +3771,9 @@ class App(CTk):
         self._apply_fish_overlay_state()
     def _on_fish_overlay_toggle(self, *args):
         self._apply_fish_overlay_state()
+    def _on_always_on_top_toggle(self, *args):
+        enabled = self.vars["always_on_top"].get()
+        self.attributes("-topmost", enabled == "on")
     # Do Pixel/Image Search
     def _do_pixel_search(self, img):
         fish_hex = self.vars["fish_color"].get()
@@ -4010,7 +4038,7 @@ class App(CTk):
         self._reset_pid_state()
         self.set_status("Macro Status: Running")
 
-        # Reset Discord Webhook And Totem Counters For This Run
+        # Reset Logging And Totem Counters For This Run
         self.webhook_cycle_counter = 0
         self.webhook_start_time = time.time()
         self.totem_cycle_counter = 0
@@ -4032,6 +4060,8 @@ class App(CTk):
             while self.macro_running:
                 # Initial Camera And Cycle Alignment
                 mouse_controller.position = (shake_x, shake_y)
+                self._set_fish_overlay_mode("idle")
+                phase = "Misc/Totem"
                 # Totem
                 self._check_totem_trigger(shake_x, shake_y)
                 # Reconnect
@@ -4060,6 +4090,7 @@ class App(CTk):
                     self.fish_overlay.hide()
 
                 # Cast
+                phase = "Casting"
                 self.set_status("Casting")
                 if self.vars["casting_mode"].get() == "Perfect":
                     self._execute_cast_perfect()
@@ -4077,6 +4108,7 @@ class App(CTk):
                     break
 
                 # Shake
+                phase = "Shaking"
                 self.set_status("Shaking")
                 try:
                     shake_mode = self.vars["shake_mode"].get()
@@ -4092,15 +4124,15 @@ class App(CTk):
 
                 # Fish (Minigame)
                 self.set_status("Fishing")
+                phase = "Fishing"
                 time.sleep(bait_delay)
                 self._enter_minigame()
 
-                # ── Discord Webhook Trigger (Runs After Every Completed Cycle) ──
-                self._check_discord_webhook_trigger()
+                # Check Logging Triggers after each Cycle
+                self._check_logging_trigger()
                 # Restart: When Minigame Ends, Loop Repeats From Select Rod
         except Exception as e:
             error_text = traceback.format_exc()
-            phase = "Macro Loop"
             error_message = str(e).strip()
 
             if error_message.startswith("Macro crashed during "):
@@ -4118,26 +4150,26 @@ class App(CTk):
                 messagebox.showerror(f"Macro crashed during {phase}", f"Error: {e}")
             else: # Explicitly Reveal The Bug And The Traceback During Development
                 raise ValueError("Bug found during development") from e
-    def _check_discord_webhook_trigger(self):
-        """Check whether the Discord webhook should fire based on the selected mode.
+    def _check_logging_trigger(self):
+        """Check whether the Logging should fire based on the selected mode.
 
-        Modes (discord_webhook_cd):
-          Cycles  – fire every N completed cycles (configurable via discord_webhook_cycle)
-          Time    – fire every N seconds elapsed  (configurable via discord_webhook_time)
+        Modes (logging_cd):
+          Cycles  – fire every N completed cycles (configurable via logging_cycle)
+          Time    – fire every N seconds elapsed  (configurable via logging_time)
           Disabled – never fire
         """
-        cd_mode = self.vars["discord_webhook_cd"].get()
+        cd_mode = self.vars["logging_cd"].get()
 
         if cd_mode == "Disabled":
             return  # webhook type is disabled; do nothing
 
         try:
-            trigger_every = int(self.vars["discord_webhook_cycle"].get())
+            trigger_every = int(self.vars["logging_cycle"].get())
         except (ValueError, KeyError):
             trigger_every = 3  # safe fallback
         
         try:
-            trigger_secs = float(self.vars["discord_webhook_time"].get())
+            trigger_secs = float(self.vars["logging_time"].get())
         except (ValueError, KeyError):
             trigger_secs = 60.0  # safe fallback
 
@@ -4146,7 +4178,7 @@ class App(CTk):
 
             if trigger_every > 0 and self.webhook_cycle_counter % trigger_every == 0:
                 label = f"Cycle #{self.webhook_cycle_counter}"
-                self.send_discord_webhook("**Cycle Checkpoint**", label, show_status=True)
+                self.send_logging("**Cycle Checkpoint**", label, show_status=True)
 
         elif cd_mode == "Time":
             self.webhook_cycle_counter += 1  # still count cycles for the message label
@@ -4154,13 +4186,13 @@ class App(CTk):
 
             if trigger_secs > 0 and elapsed >= trigger_secs:
                 label = f"Cycle #{self.webhook_cycle_counter} | {int(elapsed)}s elapsed"
-                self.send_discord_webhook("**Time Checkpoint**", label, show_status=True)
+                self.send_logging("**Time Checkpoint**", label, show_status=True)
                 # Reset the timer so it fires again after another trigger_secs seconds
                 self.webhook_start_time = time.time()
     def _check_totem_trigger(self, shake_x, shake_y):
         """Check whether auto totem should trigger based on mode.
         
-        Uses shared trigger settings with Discord webhook:
+        Uses shared trigger settings with Logging:
           Cycles  – trigger every N completed cycles
           Time    – trigger every N seconds elapsed
           Disabled – never trigger
@@ -4264,7 +4296,7 @@ class App(CTk):
 
         # Webhook
         if totem_success:
-            self.send_discord_webhook(
+            self.send_logging(
                 "Totem used successfully",
                 self.totem_cycle_counter,
                 show_status=True
@@ -4519,19 +4551,31 @@ class App(CTk):
                 last_frame_time = None
                 speed_samples.clear()
 
-            if self.vars["fish_overlay"].get() == "on":
+            if self._is_fish_overlay_enabled():
                 cast_height = max(1, white_y_bottom - green_y)
                 green_ratio = 0.0
-                white_ratio = ( predicted_white_y_top - green_y ) / cast_height
+                white_ratio = (predicted_white_y_top - green_y) / cast_height
                 white_ratio = max(0.0, min(1.0, white_ratio))
-                draw_x = shake_left_s - 30
+                draw_x = self.fish_overlay.width / 2
                 bar_height = 0.08
                 # Green marker
-                self.after(0, lambda: self.fish_overlay.draw(bar_center=draw_x, box_size=15, color="green", canvas_offset=0, 
-                                                              bar_y1=max(0.0, green_ratio - bar_height / 2), bar_y2=min(1.0, green_ratio + bar_height / 2)))
+                self.after(0, lambda: self.fish_overlay.draw(
+                    bar_center=draw_x,
+                    box_size=15,
+                    color="green",
+                    canvas_offset=0,
+                    bar_y1=max(0.0, green_ratio - bar_height / 2),
+                    bar_y2=min(1.0, green_ratio + bar_height / 2)
+                ))
                 # White marker
-                self.after(0, lambda: self.fish_overlay.draw(bar_center=draw_x, box_size=30, color="white", canvas_offset=0, 
-                                                              bar_y1=max(0.0, white_ratio - bar_height / 2), bar_y2=min(1.0, white_ratio + bar_height / 2)))
+                self.after(0, lambda: self.fish_overlay.draw(
+                    bar_center=draw_x,
+                    box_size=30,
+                    color="white",
+                    canvas_offset=0,
+                    bar_y1=max(0.0, white_ratio - bar_height / 2),
+                    bar_y2=min(1.0, white_ratio + bar_height / 2)
+                ))
             if release_timing <= 0:
                 release_threshold = perfect_threshold
             else:
@@ -4717,8 +4761,10 @@ class App(CTk):
         # Set overlay to fishing mode (top of fish area)
         self._set_fish_overlay_mode("fishing")
         # Get All 3 Areas
-        _, shake_top, _, _, _, _ = self._get_areas("shake")
-        fish_left, fish_top, fish_right, fish_bottom, fish_width, fish_height = self._get_areas("fish")
+        shake_left, shake_top, shake_right, shake_bottom, _, _ = self._get_areas("shake")
+        shake_x = int((shake_left + shake_right) / 2)
+        shake_y = int((shake_top + shake_bottom) / 2)
+        fish_left, fish_top, fish_right, fish_bottom, fish_width, _ = self._get_areas("fish")
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
         self._reset_pid_state()
         mouse_down = False
@@ -4734,7 +4780,6 @@ class App(CTk):
         arrow_tol = int(self.vars["arrow_tolerance"].get() or 8)
         bar_ratio = float(self.vars["left_ratio"].get() or 0.5)
         pid_clamp = float(self.vars["pid_clamp"].get() or 100)
-        thresh = float(self.vars["stabilize_threshold"].get() or 8)
         detection_method = (self.vars["detection_method"].get())
         restart_method = (self.vars["restart_method"].get())
         restart_delay = float(self.vars["restart_delay"].get())
@@ -4743,7 +4788,8 @@ class App(CTk):
         note_box_tol = int(self.vars["note_box_tolerance"].get() or 8)
         note_track_ratio = float(self.vars["note_track_ratio"].get() or 0.1)
         scan_delay = float(self.vars["minigame_scan_delay"].get() or 0.05)
-        tracking_threshold = int(self.vars["tracking_threshold"].get() or 0)
+        arrow_method = int(self.vars["arrow_method"].get())
+        lock_cursor = (self.vars["lock_cursor"].get())
         previous_detection_source = None
         self.last_bar_size = None
         self.scan_height_ratio = None
@@ -4792,6 +4838,8 @@ class App(CTk):
             img = frame[fish_top:fish_bottom, fish_left:fish_right]
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
+            if lock_cursor == "on": # Lock cursor if enabled
+                mouse_controller.position = (shake_x, shake_y)
             # Step 2: Pixel Search
             fish_x, left_x, right_x = self._do_pixel_search(img)
             arrow_indicator_x = self._find_arrow_indicator_x(img, arrow_hex, arrow_tol, mouse_down)
@@ -4812,7 +4860,17 @@ class App(CTk):
                 detection_source = 0
             else:
                 capture_width = fish_right - fish_left
-                bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, mouse_down, capture_width)
+                if arrow_method == 2:
+                    bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, capture_width)
+                else:
+                    # This ensures rods with 1 arrow can be tracked normally
+                    bar_center = self._find_color_cluster(img, arrow_hex, arrow_tol, 10)
+                    try:
+                        bar_center = bar_center[0]
+                    except:
+                        pass
+                    left_x = bar_center - 20 if not bar_center == None else 0
+                    right_x = bar_center + 20 if not bar_center == None else 0
                 bars_found = True # Check 2
                 detection_source = 1
             source_changed = (
@@ -4854,6 +4912,9 @@ class App(CTk):
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size
                         self._last_bar_center_x = (left_x + right_x) / 2.0
+            # Tracking threshold and Stabilize Threshold is auto calculated
+            tracking_threshold = (0 - round(((bar_size / fish_width) - 0.5), 2)) * 33 
+            thresh = (0 - round((bar_size / fish_width), 2)) * 15
             # Fish Direction-Jump Rejection
             if fish_x is not None:
                 if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:
@@ -4974,13 +5035,13 @@ class App(CTk):
             previous_controller_mode = controller_mode
             now = time.perf_counter()
             time.sleep(0.01)
-        # Minigame ended — return overlay to idle (friend area)
-        self._set_fish_overlay_mode("idle")
     def stop_macro(self):
         if not self.macro_running:
             return
         self.macro_running = False
         self._reset_pid_state()
+        self._fish_overlay_cast_bounds = None
+        self._set_fish_overlay_mode("idle")
         self.after(0, self.deiconify)  # Show Window Safely
         self.set_status("Macro Status: Stopped")
 
