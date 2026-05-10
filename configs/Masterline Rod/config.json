@@ -78,7 +78,7 @@
     "reconnect_pixels": "67",
     "reconnect_wait_time": "67",
     "checkbox_auto_reconnect": "off",
-    "combobox_casting_mode": "Normal",
+    "combobox_casting_mode": "2",
     "combobox_shake_mode": "Click",
     "combobox_detection_method": "Fish",
     "combobox_restart_method": "Fish + Bar",

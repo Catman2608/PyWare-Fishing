@@ -77,7 +77,7 @@
     "combobox_capture_mode": "DXCAM",
     "combobox_active_config": "shadow.json",
     "combobox_fish_overlay": "Disabled",
-    "combobox_casting_mode": "Normal",
+    "combobox_casting_mode": "2",
     "combobox_release_method": "Simple",
     "combobox_shake_mode": "Click",
     "combobox_detection_method": "Fish",
