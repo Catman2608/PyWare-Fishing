@@ -56,7 +56,7 @@
     "derivative_gain": "0.6",
     "pid_clamp": "150",
     "discord_enabled": "off",
-    "discord_webhook_url": "https://discord.com/api/webhooks/",
+    "discord_webhook_url": "disabled/",
     "discord_webhook_name": "PyWare Fishing",
     "discord_screenshot": "off",
     "auto_totem_mode": "Time",

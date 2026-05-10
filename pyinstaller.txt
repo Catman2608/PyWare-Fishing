@@ -1,14 +1,17 @@
 First, run this code to change direction (change to your actual directory):
 cd /Users/YourName/directory/PyWareFishing
 Then, run this code to convert to app:
-MACOSX_DEPLOYMENT_TARGET=13.0 pyinstaller --onedir --windowed \
+
+pyinstaller --onedir --windowed \
 --icon="icon.icns" \
---add-data "images:images" \
 "PyWareFishingV3.py"
+
 Finally, run this code to convert to App
+
 hdiutil create -volname "VolumeName" -srcfolder cd /Users/YourName/directory/PyWareFishing
  -ov -format UDZO name.dmg
+
 For me, the first line of code in the terminal looks like this:
-cd "/Users/hcl/Documents/Code/Python/PyWare Fishing V3-2/Source code"
+cd "/Users/hcl/Documents/Code/Python/PyWare Fishing V3-3"
 Third line:
-hdiutil create -volname "VolumeName" -srcfolder "/Users/hcl/Documents/Code/Python/PyWare Fishing V3-2/Source code/dist" -ov -format UDZO PyWareFishingSetup.dmg
+hdiutil create -volname "VolumeName" -srcfolder "/Users/hcl/Documents/Code/Python/PyWare Fishing V3-3/dist" -ov -format UDZO PyWareFishingSetup.dmg

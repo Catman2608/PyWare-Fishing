@@ -58,7 +58,7 @@
     "pid_clamp": "100",
     "discord_webhook_mode": "Time",
     "discord_webhook_cd": "Cycles",
-    "discord_webhook_url": "https://discord.com/api/webhooks/",
+    "discord_webhook_url": "disabled/",
     "discord_webhook_name": "PyWare Fishing",
     "discord_webhook_cycle": "3",
     "discord_webhook_time": "60",

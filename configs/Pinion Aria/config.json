@@ -58,7 +58,7 @@
     "pid_clamp": "250",
     "discord_webhook_mode": "Screenshot",
     "discord_webhook_cd": "Time",
-    "discord_webhook_url": "https://discord.com/api/webhooks/1499622705631330314/bR1oxkVgYNUsDYW3S_rCU1w1hFMRaHXSbEpAUsyqZvn-cfmO4yj21tz4z_m2324YMwSg",
+    "discord_webhook_url": "disabled/1499622705631330314/bR1oxkVgYNUsDYW3S_rCU1w1hFMRaHXSbEpAUsyqZvn-cfmO4yj21tz4z_m2324YMwSg",
     "discord_webhook_name": "PyWare Fishing",
     "discord_webhook_cycle": "3",
     "discord_webhook_time": "60",

