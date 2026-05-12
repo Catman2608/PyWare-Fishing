@@ -4307,7 +4307,7 @@ class App(CTk):
                 if detection_area is None:
                     break
                 if detection_method == "Friend Area":
-                    friend_x = self._find_color_center( detection_area, "#9bff9b", tolerance )
+                    friend_x = self._find_color_center( detection_area, "#9BFF9B", tolerance )
                 fish_x = self._find_color_cluster(detection_area, fish_hex, tolerance, required_fish_pixels)
                 bar_x = self._find_color_center( detection_area, bar_hex, bar_tolerance )
                 if detection_method == "Friend Area":
@@ -4380,7 +4380,7 @@ class App(CTk):
                 if detection_area is None:
                     break
                 if detection_method == "Friend Area":
-                    friend_x = self._find_color_center( detection_area, "#9bff9b", tolerance )
+                    friend_x = self._find_color_center( detection_area, "#9BFF9B", tolerance )
                 fish_x = self._find_color_cluster(detection_area, fish_hex, tolerance, required_fish_pixels)
                 bar_x = self._find_color_center( detection_area, bar_hex, bar_tolerance )
                 if detection_method == "Friend Area":
@@ -4566,7 +4566,7 @@ class App(CTk):
                     self.last_fish_x = fish_x
                 # Step 4: Restart Method And Cache
                 if restart_method == "Friend Area":
-                    friend_x = self._find_color_center(friend_img, "# 9Bff9B", 2)
+                    friend_x = self._find_color_center(friend_img, "#9BFF9B", 2)
                     if friend_x is not None:
                         release_mouse()
                         time.sleep(restart_delay)

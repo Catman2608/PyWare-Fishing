@@ -3374,7 +3374,7 @@ class App(CTk):
         if detection_area is None:
             return False
         if detection_method == "Friend Area":
-            return not self._find_color_center(detection_area, "#9bff9b", fish_tolerance)
+            return not self._find_color_center(detection_area, "#9BFF9B", fish_tolerance)
         fish_x = self._find_color_cluster(
             detection_area, fish_hex, fish_tolerance, required_fish_pixels
         )
@@ -4515,7 +4515,7 @@ class App(CTk):
 
         # Load friend area for Friend Area detection/restart method
         friend_area = areas.get("friend")
-        friend_hex = "#9bff9b"
+        friend_hex = "#9BFF9B"
         friend_tolerance = int(self.vars["shake_tolerance"].get())
 
         stop_event = self._start_capture(scan_delay)
