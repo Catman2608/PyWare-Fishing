@@ -1497,7 +1497,7 @@ class App(CTk):
         CTkButton(color_settings, text="Pick Colors", corner_radius=10, width=120, command=self.eyedropper.start).grid(row=0, column=1, padx=12, pady=12, sticky="w")
         CTkButton(color_settings, text="Take Screenshot", corner_radius=10, width=120, command=self._take_debug_screenshot).grid(row=0, column=3, padx=12, pady=12, sticky="w")
 
-        CTkLabel(color_settings, text="Left Bar:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(color_settings, text="Left Bar:").grid(row=2, column=0, padx=12, pady=10, sticky="w") # Left/Right Bar
         left_color_var = StringVar(value="#F1F1F1")
         self.vars["left_color"] = left_color_var
         left_entry = CTkEntry(color_settings, placeholder_text="#F1F1F1", width=120, fg_color="green", textvariable=left_color_var)
@@ -1511,20 +1511,49 @@ class App(CTk):
         right_entry.grid(row=3, column=1, padx=12, pady=10, sticky="w")
         right_color_var.trace_add("write", lambda *args: self._update_entry_color(right_color_var, right_entry))
         self._update_entry_color(right_color_var, right_entry)
-        CTkLabel(color_settings, text="Arrow:").grid(row=4, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(color_settings, text="Arrow:").grid(row=4, column=0, padx=12, pady=10, sticky="w") # Arrow
         arrow_color_var = StringVar(value="#848587")
         self.vars["arrow_color"] = arrow_color_var
         arrow_entry = CTkEntry(color_settings, placeholder_text="#848587", width=120, fg_color="green", textvariable=arrow_color_var)
         arrow_entry.grid(row=4, column=1, padx=12, pady=10, sticky="w")
         arrow_color_var.trace_add("write", lambda *args: self._update_entry_color(arrow_color_var, arrow_entry))
         self._update_entry_color(arrow_color_var, arrow_entry)
-        CTkLabel(color_settings, text="Fish:").grid(row=5, column=0, padx=12, pady=10, sticky="w")
+        CTkLabel(color_settings, text="Fish:").grid(row=5, column=0, padx=12, pady=10, sticky="w") # Fish
         fish_color_var = StringVar(value="#434B5B")
         self.vars["fish_color"] = fish_color_var
         fish_entry = CTkEntry(color_settings, placeholder_text="#434B5B", width=120, fg_color="green", textvariable=fish_color_var)
         fish_entry.grid(row=5, column=1, padx=12, pady=10, sticky="w")
         fish_color_var.trace_add("write", lambda *args: self._update_entry_color(fish_color_var, fish_entry))
         self._update_entry_color(fish_color_var, fish_entry)
+        CTkLabel(color_settings, text="Click Shake:").grid(row=6, column=0, padx=12, pady=10, sticky="w" ) # Shake Color
+        shake_color_var = StringVar(value="#FFFFFF")
+        self.vars["shake_color"] = shake_color_var
+        shake_entry = CTkEntry(color_settings, width=120, fg_color="green", textvariable=shake_color_var)
+        shake_entry.grid(row=6, column=1, padx=12, pady=10, sticky="w")
+        shake_color_var.trace_add("write", lambda *args: self._update_entry_color(shake_color_var, shake_entry))
+        self._update_entry_color(shake_color_var, shake_entry)
+        CTkLabel(color_settings, text="Tracking Target:").grid(row=7, column=0, padx=12, pady=10, sticky="w") # Tracking Target
+        note_box_color_var = StringVar(value="#00990c")
+        self.vars["note_box_color"] = note_box_color_var
+        note_box_entry = CTkEntry(color_settings, width=120, fg_color="green", textvariable=note_box_color_var)
+        note_box_entry.grid(row=7, column=1, padx=12, pady=10, sticky="w")
+        note_box_color_var.trace_add("write", lambda *args: self._update_entry_color(note_box_color_var, note_box_entry))
+        self._update_entry_color(note_box_color_var, note_box_entry)
+        CTkLabel(color_settings, text="Cast Release:").grid(row=8, column=0, padx=12, pady=10, sticky="w") # Green
+        perfect_color_var = StringVar(value="#64a04c")
+        self.vars["perfect_color"] = perfect_color_var
+        perfect_entry = CTkEntry(color_settings, width=120, fg_color="green", textvariable=perfect_color_var)
+        perfect_entry.grid(row=8, column=1, padx=12, pady=10, sticky="w")
+        perfect_color_var.trace_add("write", lambda *args: self._update_entry_color(perfect_color_var, perfect_entry))
+        self._update_entry_color(perfect_color_var, perfect_entry)
+        CTkLabel(color_settings, text="Cast Hold:").grid(row=9, column=0, padx=12, pady=10, sticky="w") # White
+        perfect_color2_var = StringVar(value="#d4d3ca")
+        self.vars["perfect_color2"] = perfect_color2_var
+        perfect2_entry = CTkEntry(color_settings, width=120, fg_color="green", textvariable=perfect_color2_var)
+        perfect2_entry.grid(row=9, column=1, padx=12, pady=10, sticky="w")
+        perfect_color2_var.trace_add("write", lambda *args: self._update_entry_color(perfect_color2_var, perfect2_entry))
+        self._update_entry_color(perfect_color2_var, perfect2_entry)
+        # Tolerance
         left_tolerance_var = StringVar(value="8")
         self.vars["left_tolerance"] = left_tolerance_var
         CTkLabel(color_settings, text="Tolerance:").grid(row=2, column=2, padx=12, pady=10, sticky="w")
@@ -1544,54 +1573,19 @@ class App(CTk):
         fish_tolerance_var = StringVar(value="4")
         self.vars["fish_tolerance"] = fish_tolerance_var
         CTkEntry(color_settings, width=120, textvariable=fish_tolerance_var).grid(row=5, column=3, padx=12, pady=10, sticky="w")
-        # Shake Color
-        CTkLabel(color_settings, text="Click Shake:").grid(row=6, column=0, padx=12, pady=10, sticky="w" )
-        shake_color_var = StringVar(value="#FFFFFF")
-        self.vars["shake_color"] = shake_color_var
-        shake_entry = CTkEntry(color_settings, width=120, fg_color="green", textvariable=shake_color_var)
-        shake_entry.grid(row=6, column=1, padx=12, pady=10, sticky="w")
-        shake_color_var.trace_add("write", lambda *args: self._update_entry_color(shake_color_var, shake_entry))
-        self._update_entry_color(shake_color_var, shake_entry)
-        # Shake Tolerance
         CTkLabel(color_settings, text="Tolerance:").grid(row=6, column=2, padx=12, pady=10, sticky="w" )
         shake_tolerance_var = StringVar(value="5")
         self.vars["shake_tolerance"] = shake_tolerance_var
         CTkEntry(color_settings, width=120, textvariable=shake_tolerance_var).grid(row=6, column=3, padx=12, pady=10, sticky="w")
-        # note box color and tolerance
-        CTkLabel(color_settings, text="Tracking Target:").grid(row=7, column=0, padx=12, pady=10, sticky="w")
-        note_box_color_var = StringVar(value="#00990c")
-        self.vars["note_box_color"] = note_box_color_var
-        note_box_entry = CTkEntry(color_settings, width=120, fg_color="green", textvariable=note_box_color_var)
-        note_box_entry.grid(row=7, column=1, padx=12, pady=10, sticky="w")
-        note_box_color_var.trace_add("write", lambda *args: self._update_entry_color(note_box_color_var, note_box_entry))
-        self._update_entry_color(note_box_color_var, note_box_entry)
         CTkLabel(color_settings, text="Tolerance:").grid(row=7, column=2, padx=12, pady=10, sticky="w")
         note_box_tolerance_var = StringVar(value="2")
         self.vars["note_box_tolerance"] = note_box_tolerance_var
         CTkEntry(color_settings, width=120, textvariable=note_box_tolerance_var).grid(row=7, column=3, padx=12, pady=10, sticky="w")
-
-        CTkLabel(color_settings, text="Perfect Target:").grid(row=8, column=0, padx=12, pady=10, sticky="w")
-        perfect_color_var = StringVar(value="#64a04c")
-        self.vars["perfect_color"] = perfect_color_var
-        perfect_entry = CTkEntry(color_settings, width=120, fg_color="green", textvariable=perfect_color_var)
-        perfect_entry.grid(row=8, column=1, padx=12, pady=10, sticky="w")
-        perfect_color_var.trace_add("write", lambda *args: self._update_entry_color(perfect_color_var, perfect_entry))
-        self._update_entry_color(perfect_color_var, perfect_entry)
-
         CTkLabel(color_settings, text="Tolerance:").grid(row=8, column=2, padx=12, pady=10, sticky="w")
         perfect_cast_tolerance_var = StringVar(value="16")
         self.vars["perfect_cast_tolerance"] = perfect_cast_tolerance_var
         perfect_cast_tolerance_entry = CTkEntry(color_settings, width=120, textvariable=perfect_cast_tolerance_var)
         perfect_cast_tolerance_entry.grid(row=8, column=3, padx=12, pady=10, sticky="w")
-
-        CTkLabel(color_settings, text="Casting:").grid(row=9, column=0, padx=12, pady=10, sticky="w")
-        perfect_color2_var = StringVar(value="#d4d3ca")
-        self.vars["perfect_color2"] = perfect_color2_var
-        perfect2_entry = CTkEntry(color_settings, width=120, fg_color="green", textvariable=perfect_color2_var)
-        perfect2_entry.grid(row=9, column=1, padx=12, pady=10, sticky="w")
-        perfect_color2_var.trace_add("write", lambda *args: self._update_entry_color(perfect_color2_var, perfect2_entry))
-        self._update_entry_color(perfect_color2_var, perfect2_entry)
-
         CTkLabel(color_settings, text="Tolerance:").grid(row=9, column=2, padx=12, pady=10, sticky="w")
         perfect_cast2_tolerance_var = StringVar(value="5")
         self.vars["perfect_cast2_tolerance"] = perfect_cast2_tolerance_var
@@ -1861,7 +1855,7 @@ class App(CTk):
         CTkLabel(logging, text="Logging Mode:").grid(row=1, column=0, padx=12, pady=10, sticky="w" )
         logging_mode_var = StringVar(value="Screenshot")
         self.vars["logging_mode"] = logging_mode_var
-        logging_cb = CTkComboBox(logging, values=["Screenshot", "Text", "Debug", "Disabled"], 
+        logging_cb = CTkComboBox(logging, values=["Screenshot", "Text", "File", "Disabled"], 
                                variable=logging_mode_var, command=lambda v: self.set_status(f"Logging mode: {v}")
                                )
         logging_cb.grid(row=1, column=1, padx=12, pady=10, sticky="w")
@@ -2502,7 +2496,12 @@ class App(CTk):
         self.hotkey_change_areas = self.vars["change_bar_areas_key"].get()
         self.hotkey_stop = self.vars["stop_key"].get()
 
-        if enable_hotkeys == "on":
+        enable_hotkeys2 = True if enable_hotkeys == "on" else False
+        # Fallback
+        if self.macro_running == True:
+            enable_hotkeys2 = True
+
+        if enable_hotkeys2 == True:
             if pressed_key == self._normalize_hotkey_value(self.hotkey_start) and not self.macro_running:
                 self.save_settings(config_name, prompt=True)
 
@@ -2732,8 +2731,8 @@ class App(CTk):
     def _debug_log_worker(self, text, loop_count, show_status=False):
         """Write debug logs to a text file."""
         try:
-            # Create logs folder
-            log_dir = "logs"
+            # Use base path for logs
+            log_dir = BASE_PATH
             os.makedirs(log_dir, exist_ok=True)
 
             # Daily log file
@@ -2763,11 +2762,17 @@ class App(CTk):
     def test_logging(self):
         self.send_logging("**Logging is working**", "TEST", show_status=True)
     def _auto_bug_report(self, error_text, phase="Unknown"):
-        """Send a text-only crash report to the bug report webhook."""
-        webhook_url = self.vars["logging_url"].get()
-        logging_name = self.vars["logging_name"].get()
+        """Send a text-only crash report to the bug report webhook or save to file."""
+        # Safely get values and reset state
+        self._set_fish_overlay_mode("idle")
+        logging_mode = self.vars["logging_mode"].get()
+        if logging_mode == "Disabled":
+            return
+
         platform_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Prepare the report text
         report_text = (
             "Auto Bug Report\n"
             f"Version: {APP_VERSION}\n"
@@ -2776,6 +2781,35 @@ class App(CTk):
             f"Time: {timestamp}\n\n"
             f"{error_text}"
         )
+
+        if logging_mode == "File":
+            try:
+                log_dir = BASE_PATH
+                os.makedirs(log_dir, exist_ok=True)
+                log_file = os.path.join(log_dir, f"debug_{time.strftime('%Y-%m-%d')}.txt")
+                
+                log_entry = (
+                    "==================================================\n"
+                    "🐞 AUTO BUG REPORT\n"
+                    f"📂 Phase: {phase}\n"
+                    f"🕐 {timestamp}\n"
+                    "--------------------------------------------------\n"
+                    f"{report_text}\n"
+                    "==================================================\n\n"
+                )
+                
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(log_entry)
+                
+                self.set_status(f"Bug report saved to file ({phase})")
+                return
+            except Exception as e:
+                self.set_status(f"Error saving bug report to file: {e}")
+                return
+
+        webhook_url = self.vars["logging_url"].get()
+        logging_name = self.vars["logging_name"].get()
+        
         crash_line = "Unknown"
         for line in reversed(error_text.splitlines()):
             if line.strip().startswith('File "') and ", line " in line:
@@ -2814,12 +2848,13 @@ class App(CTk):
         if logging_mode == "Disabled":
             self.set_status("⚠ Logging is disabled.")
             return
-        # logging_Url
-        webhook_url = self.vars["logging_url"].get().strip()
+        if not logging_mode == "File":
+            # logging_url
+            webhook_url = self.vars["logging_url"].get().strip()
 
-        if not webhook_url.startswith("https://discord.com/api/webhooks/"):
-            self.set_status("Error: Invalid webhook URL.")
-            return
+            if not webhook_url.startswith("https://discord.com/api/webhooks/"):
+                self.set_status("Error: Invalid webhook URL.")
+                return
         
         if show_status == True:
             self.set_status("Sending test webhook...")
@@ -2830,7 +2865,7 @@ class App(CTk):
                 args=(webhook_url, f"{text}\n", loop_count, show_status),
                 daemon=True
             )
-        elif logging_mode == "Debug":
+        elif logging_mode == "File":
             thread = threading.Thread(
                 target=self._debug_log_worker,
                 args=(text, loop_count, show_status),
@@ -3259,8 +3294,9 @@ class App(CTk):
         return []
     def _find_color_center(self, frame, target_color_hex, tolerance=8):
         """
-        Find the center point of a color cluster in a frame.
-        Using vectorized detection.
+        Find the center point of a color cluster in a frame
+        Using vectorized detection
+        Returns: Tuple of X, Y
         """
 
         if frame is None:
@@ -3779,18 +3815,26 @@ class App(CTk):
         fish_hex = self.vars["fish_color"].get()
         left_bar_hex = self.vars["left_color"].get()
         right_bar_hex = self.vars["right_color"].get()
-
-        left_tol = int(self.vars["left_tolerance"].get() or 8)
-        right_tol = int(self.vars["right_tolerance"].get() or 8)
-        fish_tol = int(self.vars["fish_tolerance"].get() or 1)
-
-        required_fish_pixels = int(self.vars["required_fish_pixels"].get() or 10)
+        try: # Handle Nonetype and int properly
+            left_tol = int(self.vars["left_tolerance"].get() or 8)
+            right_tol = int(self.vars["right_tolerance"].get() or 8)
+            fish_tol = int(self.vars["fish_tolerance"].get() or 1)
+            required_fish_pixels = int(self.vars["required_fish_pixels"].get() or 10)
+        except:
+            left_tol = 8
+            right_tol = 8
+            fish_tol = 1
+            required_fish_pixels = 10
         # macOS Tolerance Buffer To Make Configs Cross-Compatible
         if sys.platform == "darwin":
             left_tol += 2
             right_tol += 2
             fish_tol += 2
         fish_center = self._find_color_cluster(img, fish_hex, fish_tol, required_fish_pixels)
+        try:
+            fish_center = fish_center[0]
+        except:
+            pass
         left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, right_bar_hex, left_tol, right_tol)
         if left_bar_center is None:
             left_bar_center, right_bar_center = self._find_bar_edges(img, right_bar_hex, right_bar_hex, right_tol, right_tol)
@@ -3802,10 +3846,10 @@ class App(CTk):
         """Get PID gains from config, with sensible defaults."""
         try:
             kp = float(self.vars["proportional_gain"].get() or 0.6)
-            kd = float(self.vars["derivative_gain"].get() or 0.2)
+            kd = float(self.vars["derivative_gain"].get() or 0.6)
         except:
             kp = 0.6
-            kd = 0.2
+            kd = 0.6
         return kp, kd
 
     def _pid_control(self, error, bar_center_x=None):
@@ -4178,7 +4222,7 @@ class App(CTk):
 
             if trigger_every > 0 and self.webhook_cycle_counter % trigger_every == 0:
                 label = f"Cycle #{self.webhook_cycle_counter}"
-                self.send_logging("**Cycle Checkpoint**", label, show_status=True)
+                self.send_logging("**Cycle Checkpoint**", label, show_status=False)
 
         elif cd_mode == "Time":
             self.webhook_cycle_counter += 1  # still count cycles for the message label
@@ -4186,7 +4230,7 @@ class App(CTk):
 
             if trigger_secs > 0 and elapsed >= trigger_secs:
                 label = f"Cycle #{self.webhook_cycle_counter} | {int(elapsed)}s elapsed"
-                self.send_logging("**Time Checkpoint**", label, show_status=True)
+                self.send_logging("**Time Checkpoint**", label, show_status=False)
                 # Reset the timer so it fires again after another trigger_secs seconds
                 self.webhook_start_time = time.time()
     def _check_totem_trigger(self, shake_x, shake_y):
@@ -4299,7 +4343,7 @@ class App(CTk):
             self.send_logging(
                 "Totem used successfully",
                 self.totem_cycle_counter,
-                show_status=True
+                show_status=False
             )
     def _auto_reconnect(self, center_x, center_y):
         reconnect_pixels = int(self.vars["reconnect_pixels"].get())
@@ -4314,9 +4358,9 @@ class App(CTk):
         # 1520
         reconnect_pixels = int((reconnect_pixels / 1500) * shake_width)
         img = self._grab_screen_region(shake_left_s, shake_top_s, shake_right_s, shake_bottom_s)
-        disconnect_x = self._find_color_cluster(img, "#393b3d", 5, reconnect_pixels)
+        disconnect_area = self._find_color_cluster(img, "#393b3d", 5, reconnect_pixels)
         while self.macro_running:
-            if not disconnect_x == None:
+            if not disconnect_area == None:
                 reconnect = self._find_color_cluster(img, "#FFFFFF", 8, int(reconnect_pixels / 2))
                 time.sleep(1)
                 reconnect_x = reconnect[0] + shake_left_s if not reconnect == None else shake_left_s
@@ -4654,9 +4698,9 @@ class App(CTk):
                 if detection_area is None:
                     break
                 if detection_method == "Friend Area":
-                    friend_x = self._find_color_center( detection_area, "#9bff9b", tolerance )
+                    friend_x = self._find_color_center(detection_area, "#9BFF9B", tolerance)
                 fish_x = self._find_color_cluster(detection_area, fish_hex, tolerance, required_fish_pixels)
-                bar_x = self._find_color_center( detection_area, bar_hex, bar_tolerance )
+                bar_x = self._find_color_center(detection_area, bar_hex, bar_tolerance)
                 if detection_method == "Friend Area":
                     if not friend_x:
                         detected = True
@@ -4727,7 +4771,7 @@ class App(CTk):
                 if detection_area is None:
                     break
                 if detection_method == "Friend Area":
-                    friend_x = self._find_color_center( detection_area, "#9bff9b", tolerance )
+                    friend_x = self._find_color_center( detection_area, "#9BFF9B", tolerance )
                 fish_x = self._find_color_cluster(detection_area, fish_hex, tolerance, required_fish_pixels)
                 bar_x = self._find_color_center( detection_area, bar_hex, bar_tolerance )
                 if detection_method == "Friend Area":
@@ -4777,7 +4821,6 @@ class App(CTk):
         self._pred_filtered_vel = 0.0
         # Load Values From Gui
         arrow_hex = self.vars["arrow_color"].get()
-        arrow_tol = int(self.vars["arrow_tolerance"].get() or 8)
         bar_ratio = float(self.vars["left_ratio"].get() or 0.5)
         pid_clamp = float(self.vars["pid_clamp"].get() or 100)
         detection_method = (self.vars["detection_method"].get())
@@ -4785,19 +4828,20 @@ class App(CTk):
         restart_delay = float(self.vars["restart_delay"].get())
         track_notes = self.vars["track_notes"].get()
         note_box_hex = self.vars["note_box_color"].get()
-        note_box_tol = int(self.vars["note_box_tolerance"].get() or 8)
         note_track_ratio = float(self.vars["note_track_ratio"].get() or 0.1)
         scan_delay = float(self.vars["minigame_scan_delay"].get() or 0.05)
-        arrow_method = int(self.vars["arrow_method"].get())
         lock_cursor = (self.vars["lock_cursor"].get())
+        try:
+            note_box_tol = int(self.vars["note_box_tolerance"].get() or 8)
+            arrow_tol = int(self.vars["arrow_tolerance"].get() or 8)
+            arrow_method = int(self.vars["arrow_method"].get())
+        except:
+            note_box_tol = 8
+            arrow_tol = 8
+            arrow_method = 2
         previous_detection_source = None
         self.last_bar_size = None
         self.scan_height_ratio = None
-        # Get Default Positions
-        if detection_method == "Fish":
-            img = self._grab_screen_region(fish_left, fish_top, fish_right, fish_bottom)
-            left_x, right_x = self._find_bar_edges(img, arrow_hex, arrow_hex, arrow_tol, arrow_tol)
-            self.last_cached_box_length = right_x - left_x if left_x and right_x else None
         self._last_should_hold = False
         self._last_input_time = 0
         # Hold And Release Mouse
@@ -4926,7 +4970,7 @@ class App(CTk):
                 self.last_fish_x = fish_x
             # Step 4: Restart Method And Cache
             if restart_method == "Friend Area":
-                friend_x = self._find_color_center(friend_img, "#9Bff9B", 2)
+                friend_x = self._find_color_center(friend_img, "#9BFF9B", 2)
                 if friend_x is not None:
                     release_mouse()
                     time.sleep(restart_delay)

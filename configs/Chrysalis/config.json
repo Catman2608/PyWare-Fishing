@@ -1,5 +1,5 @@
 {
-    "enable_hotkeys": "off",
+    "enable_hotkeys": "on",
     "start_key": "F5",
     "change_bar_areas_key": "F6",
     "stop_key": "F7",
@@ -30,6 +30,7 @@
     "efficiency_mode": "off",
     "track_notes": "off",
     "always_on_top": "off",
+    "lock_cursor": "off",
     "bag_delay": "0.3",
     "casting_mode": "Normal",
     "shake_mode": "Click",
@@ -77,5 +78,6 @@
     "switch_efficiency_mode": "off",
     "switch_track_notes": "off",
     "switch_always_on_top": "off",
+    "switch_lock_cursor": "off",
     "switch_auto_reconnect": "off"
 }

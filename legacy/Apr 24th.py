@@ -3346,7 +3346,7 @@ class App(CTk):
                 if detection_area is None:
                     break
                 if detection_method == "Friend Area":
-                    friend_x = self._find_color_center( detection_area, "#9bff9b", tolerance )
+                    friend_x = self._find_color_center( detection_area, "#9BFF9B", tolerance )
                 fish_x = self._find_color_cluster(detection_area, fish_hex, tolerance, required_fish_pixels)
                 bar_x = self._find_color_center( detection_area, bar_hex, bar_tolerance )
                 if detection_method == "Friend Area":
@@ -3452,7 +3452,7 @@ class App(CTk):
                 if detection_area is None:
                     break
                 if detection_method == "Friend Area":
-                    friend_x = self._find_color_center( detection_area, "#9bff9b", tolerance )
+                    friend_x = self._find_color_center( detection_area, "#9BFF9B", tolerance )
                 fish_x = self._find_color_cluster(detection_area, fish_hex, tolerance, required_fish_pixels)
                 bar_x = self._find_color_center( detection_area, bar_hex, bar_tolerance )
                 if detection_method == "Friend Area":
@@ -3657,7 +3657,7 @@ class App(CTk):
                 # Fish restart and clear overlay logic with multiple restart methods and PID reset when bars are lost
                 self.fish_overlay.clear()
                 if restart_method == "Friend Area":
-                    friend_x = self._find_color_center(friend_img, "#9bff9b", 2)
+                    friend_x = self._find_color_center(friend_img, "#9BFF9B", 2)
                     # Cache fish and bar positions when found
                     if fish_x is not None:
                         self.last_fish_x = fish_x
