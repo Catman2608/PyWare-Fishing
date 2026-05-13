@@ -7,8 +7,8 @@
     "last_rod": "Basic Rod",
     "bar_areas": {
         "shake": {
-            "x": 199,
-            "y": 99,
+            "x": 198,
+            "y": 61,
             "width": 1520,
             "height": 800
         },
