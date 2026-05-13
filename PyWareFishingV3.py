@@ -1283,7 +1283,7 @@ class App(CTk):
         self.eyedropper = Eyedropper(self)
         self.status_overlay = StatusOverlay(self)
 
-        # Start Hotkey Listener
+        # Start Hotkey Listener (this causes illegal hardware instructions on macOS)
         self.key_listener = KeyListener(on_press=self.on_key_press)
         self.key_listener.daemon = True
         self.key_listener.start()
@@ -2033,47 +2033,66 @@ class App(CTk):
             text_color="white"
         )
     # Save And Load Settings
-    def save_settings(self, name="default", prompt=True):
-        """Save all settings to a JSON config file with optional comparison."""
+    def save_settings(self, name="default", prompt=True, default_value=True):
+        """Save all settings to a JSON config file with optional confirmation."""
+
         if not os.path.exists(CONFIG_PATH):
             os.makedirs(CONFIG_PATH)
 
-        data = self._collect_settings_data()
-        
         config_folder = os.path.join(CONFIG_DIR, name)
         os.makedirs(config_folder, exist_ok=True)
         path = os.path.join(config_folder, "config.json")
-        
-        # Check If Settings Have Changed
-        settings_changed = False
-        if os.path.exists(path) and prompt:
+
+        # Collect current GUI data
+        data = self._collect_settings_data()
+
+        # Load old config for comparison / revert
+        old_data = None
+        if os.path.exists(path):
             try:
                 with open(path, "r") as f:
                     old_data = json.load(f)
-                if old_data != data:
-                    settings_changed = True
             except:
-                settings_changed = True
-        
-        # If Settings Changed And Prompt Is True, Ask User
+                old_data = None
+
+        # Detect changes
+        settings_changed = old_data != data
+
+        # Ask user if prompt enabled
         if settings_changed and prompt:
             result = messagebox.askyesno(
                 "Settings Changed",
                 f"The settings for '{name}' have changed.\nDo you want to save these changes?",
                 icon=messagebox.QUESTION
             )
+
+            # User clicked NO -> revert
             if not result:
-                self.set_status(f"Cancelled: Settings not saved")
+                if old_data:
+                    self.load_settings(name)
+
+                self.set_status("Cancelled: Settings reverted")
                 return
-        
-        # Save Misc Settings And Set Status
+
+        # If no prompt and default_value is False -> revert
+        if not prompt and not default_value:
+            if old_data:
+                self.load_settings(name)
+
+            self.set_status("Cancelled: Settings reverted")
+            return
+
+        # Save settings
         self.save_misc_settings()
         self._apply_hotkeys_from_vars()
+
         try:
             with open(path, "w") as f:
                 json.dump(data, f, indent=4)
+
             self.save_last_config(name)
             self.set_status(f"Config saved: {name}")
+
         except Exception as e:
             self.set_status(f"Error saving config: {e}")
     def _collect_settings_data(self):
@@ -2541,8 +2560,10 @@ class App(CTk):
     # Area Selector
     def open_area_selector(self):
         self.update_idletasks()
+        self._set_fish_overlay_mode("idle")
         # Toggle Off If Already Open
         if hasattr(self, "area_selector") and self.area_selector and self.area_selector.window.winfo_exists():
+            self._set_fish_overlay_mode("idle")
             self.area_selector.close()
             self.area_selector = None
             return
@@ -2953,24 +2974,29 @@ class App(CTk):
         if self._scale_cache is not None:
             return self._scale_cache
         if sys.platform == "darwin":
+            # Prefer Tk scaling
             try:
-                try:
-                    main_display  = Quartz.CGMainDisplayID()
-                    pixel_width   = Quartz.CGDisplayPixelsWide(main_display)
-                    bounds        = Quartz.CGDisplayBounds(main_display)
-                    logical_width = bounds.size.width
-                    self._scale_cache = pixel_width / logical_width if logical_width else 1.0
-                except Exception:
-                    self._scale_cache = 1.0
-            except Exception:
-                tk_dpi = self.winfo_fpixels('1i')   # e.g. 144.0 on Retina
-                scale  = tk_dpi / 72.0              # 144/72 = 2.0 on Retina
-                scale  = max(1.0, min(4.0, scale))
+                tk_dpi = self.winfo_fpixels('1i')
+                scale = tk_dpi / 72.0
+                scale = max(1.0, min(scale, 4.0))
                 self._scale_cache = scale
+                return scale
+            except Exception:
+                pass
+            # Fallback to Quartz
+            try:
+                main_display = Quartz.CGMainDisplayID()
+                pixel_width = Quartz.CGDisplayPixelsWide(main_display)
+                bounds = Quartz.CGDisplayBounds(main_display)
+                logical_width = bounds.size.width
+                scale = pixel_width / logical_width if logical_width else 1.0
+                scale = max(1.0, min(scale, 4.0))
+                self._scale_cache = scale
+            except Exception:
+                self._scale_cache = 1.0
         else:
             self._scale_cache = 1.0
         return self._scale_cache
-
     def _invalidate_scale_cache(self):
         """Force _get_scale_factor to re-query on next call (e.g. window moved to another monitor)."""
         self._scale_cache = None
@@ -2997,7 +3023,7 @@ class App(CTk):
         if not hasattr(self._thread_local, "sct"):
             self._thread_local.sct = mss.mss()
         img = self._thread_local.sct.grab(m)
-        # Mss Returns Bgra; Take Only First 3 Channels (Bgr) Without A Copy
+        # MSS Returns BGRA; Take Only First 3 Channels (BGR) Without A Copy
         return np.frombuffer(img.raw, dtype=np.uint8).reshape(height, width, 4)[:, :, :3]
     
     def _grab_screen_full(self, thread_local):
@@ -4169,7 +4195,10 @@ class App(CTk):
             self.after(0, self.deiconify)  # Show Window Safely
             self.set_status(f"Macro crashed during {phase}: {e}")
             if IS_COMPILED == True:
-                messagebox.showerror(f"Macro crashed during {phase}", f"Error: {e}")
+                if sys.platform == "win32":
+                    messagebox.showerror(f"Macro crashed during {phase}", f"Error: {e}")
+                else:
+                    messagebox.showerror("why are you here", f"Macro crashed during {phase}\nError: {e}")
             else: # Explicitly Reveal The Bug And The Traceback During Development
                 raise ValueError("Bug found during development") from e
     def _check_logging_trigger(self):
@@ -4814,7 +4843,6 @@ class App(CTk):
         arrow_hex = self.vars["arrow_color"].get()
         bar_ratio = float(self.vars["left_ratio"].get() or 0.5)
         pid_clamp = float(self.vars["pid_clamp"].get() or 100)
-        detection_method = (self.vars["detection_method"].get())
         restart_method = (self.vars["restart_method"].get())
         restart_delay = float(self.vars["restart_delay"].get())
         track_notes = self.vars["track_notes"].get()
@@ -5069,7 +5097,7 @@ class App(CTk):
                     release_mouse()
             previous_controller_mode = controller_mode
             now = time.perf_counter()
-            time.sleep(0.01)
+            time.sleep(scan_delay)
     def stop_macro(self):
         if not self.macro_running:
             return
