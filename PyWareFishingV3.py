@@ -117,7 +117,7 @@ IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 
 CONFIG_PATH = os.path.join(BASE_PATH, "last_config.json")
-APP_VERSION = "3.31"
+APP_VERSION = "3.4"
 
 set_appearance_mode("dark")
 
@@ -714,7 +714,7 @@ class StatusOverlay:
         # Title
         title = tk.Label(
             self.window,
-            text="PyWare Fishing V3.31",
+            text="PyWare Fishing V3.4",
             fg="# 00C8Ff",
             bg="black",
             font=("Segoe UI", 12, "bold")
@@ -795,15 +795,17 @@ class FishOverlay:
             return
 
         self.window = tk.Toplevel(self.parent_app)
+
+        # Position
         overlay_x = int(self.parent_app.SCREEN_WIDTH * 0.5) - int(self.width / 2)
         overlay_y = int(self.parent_app.SCREEN_HEIGHT * 0.65)
         self.window.geometry(f"{self.width}x{self.height}+{overlay_x}+{overlay_y}")
         
-        if sys.platform == "darwin":
-            self.window.overrideredirect(False)
-        else:
-            self.window.overrideredirect(True)
-        
+        # Remove title bar and transparency
+        self.window.overrideredirect(True)  # Remove title bar on macOS
+        self.window.attributes("-alpha", 0.85)  # Optional Transparency
+
+        # General settings for Windows and macOS compatibility
         self.window.attributes("-topmost", True)
         self.canvas = tk.Canvas(
             self.window,
@@ -892,6 +894,7 @@ class App(CTk):
         # Store Screen Width And Height To Use Later
         self.SCREEN_WIDTH = self.winfo_screenwidth()
         self.SCREEN_HEIGHT = self.winfo_screenheight()
+        self.SCREEN_SCALE = ((self.SCREEN_WIDTH / 1920) + (self.SCREEN_HEIGHT / 1080)) / 2
         self.BASE_PATH = BASE_PATH
 
         # Detection Variables
@@ -980,7 +983,7 @@ class App(CTk):
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
-        self.title("PyWare Fishing V3.31")
+        self.title("PyWare Fishing V3.4")
 
         # Status Bar
         self.grid_columnconfigure(0, weight=1)
@@ -995,7 +998,7 @@ class App(CTk):
         # Logo Label
         logo_label = CTkLabel(
             top_bar, 
-            text="PYWARE FISHING V3.31",
+            text="PYWARE FISHING V3.4",
             font=CTkFont(size=16, weight="bold")
         )
         logo_label.grid(row=0, column=0, sticky="w")
@@ -1347,6 +1350,12 @@ class App(CTk):
         sw = CTkSwitch(toggles, text="Lock Cursor", variable=lock_cursor_var, onvalue="on", offvalue="off")
         sw.grid(row=4, column=0, padx=12, pady=8, sticky="w")
         self.switches["lock_cursor"] = sw
+
+        click_after_minigame_var = StringVar(value="off")
+        self.vars["click_after_minigame"] = click_after_minigame_var
+        sw = CTkSwitch(toggles, text="Click After Minigame", variable=click_after_minigame_var, onvalue="on", offvalue="off")
+        sw.grid(row=4, column=1, padx=12, pady=8, sticky="w")
+        self.switches["click_after_minigame"] = sw
 
         CTkLabel(toggles, text="Misc", font=CTkFont(size=14, weight="bold")).grid(row=0, column=2, padx=12, pady=8, sticky="w")
 
@@ -2344,7 +2353,7 @@ class App(CTk):
             left = int(screen_w * 0.1041)
             top = int(screen_h * 0.0925)
             right = int(screen_w * 0.8958)
-            bottom = int(screen_h * 0.8333)
+            bottom = int(screen_h * 0.7888)
             return {"x": left, "y": top, 
                     "width": right - left, "height": bottom - top}
         def default_fish_area():
@@ -2691,7 +2700,7 @@ class App(CTk):
             int(self.SCREEN_WIDTH * 0.1041),
             int(self.SCREEN_HEIGHT * 0.0925),
             int(self.SCREEN_WIDTH * 0.8958),
-            int(self.SCREEN_HEIGHT * 0.8333),
+            int(self.SCREEN_HEIGHT * 0.7888),
         ))
 
         fish = get_area("fish", (
@@ -2944,24 +2953,18 @@ class App(CTk):
         thread.start()
         return stop_event
     # Pixel And Image Search
-    def _detect_day_or_night(self, confidence_threshold=0.6):
+    def _detect_day_or_night(self, confidence_threshold=0.7):
         """
         Robust day/night detection using white-mask template matching.
-        Fully guarded against empty arrays and invalid template states.
         """
 
-        totem = self.bar_areas.get("totem")
-        if not isinstance(totem, dict):
-            return None, 0.0
+        totem_left, totem_top, totem_right, totem_bottom, _, _ = self.get_areas("totem")
 
-        frame = self._grab_screen_region(
-            totem["x"],
-            totem["y"],
-            totem["x"] + totem["width"],
-            totem["y"] + totem["height"],
-        )
-        if frame is None or frame.size == 0:
+        frame2 = self._grab_screen_region(totem_left, totem_top, totem_right, totem_bottom)
+        if frame2 is None or frame2.size == 0:
             return None, 0.0
+        image_size = int(50 / self.SCREEN_SCALE)
+        frame = cv2.resize(frame2, (image_size, image_size))
 
         def white_mask(img):
             lower = np.array([200, 200, 200], dtype=np.uint8)
@@ -3012,7 +3015,7 @@ class App(CTk):
             try:
                 result = cv2.matchTemplate(frame_mask, ref_mask, cv2.TM_CCOEFF_NORMED)
 
-                # 🔥 THIS prevents your exact crash
+                # THIS prevents your exact crash
                 if result is None or result.size == 0:
                     return 0.0
 
@@ -3515,7 +3518,7 @@ class App(CTk):
             left = int(self.SCREEN_WIDTH * 0.1041)
             top = int(self.SCREEN_HEIGHT * 0.0925)
             right = int(self.SCREEN_WIDTH * 0.8958)
-            bottom = int(self.SCREEN_HEIGHT * 0.8333)
+            bottom = int(self.SCREEN_HEIGHT * 0.7888)
         elif area == "fish":
             left   = int(self.SCREEN_WIDTH  * 0.2844)
             top    = int(self.SCREEN_HEIGHT * 0.7981)
@@ -3864,17 +3867,9 @@ class App(CTk):
     def start_macro(self):
         self.macro_running = True # Flag To Control Macro Loop And Allow Safe Stopping
         # Get Shake Area For Mouse Movement Areas
-        shake = self.bar_areas.get("shake")
-        if isinstance(shake, dict):
-            shake_left   = shake["x"]
-            shake_top    = shake["y"]
-            shake_right  = shake["x"] + shake["width"]
-            shake_bottom = shake["y"] + shake["height"]
-            shake_x = int((shake_left + shake_right) / 2)
-            shake_y = int((shake_top + shake_bottom) / 2)
-        else:
-            shake_x = int(self.SCREEN_WIDTH * 0.5)
-            shake_y = int(self.SCREEN_HEIGHT * 0.3)
+        shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self._get_areas("shake")
+        shake_x = shake_left + int(shake_width / 2)
+        shake_y = shake_top + int(shake_height / 2)
         self._reset_pid_state()
         self.set_status("Macro Status: Running")
 
@@ -3887,6 +3882,7 @@ class App(CTk):
         rod_slot = str(self.vars["rod_slot"].get())
         bag_slot = str(self.vars["bag_slot"].get())
         bait_delay = float(self.vars["bait_delay"].get())
+        click_after_minigame = (self.vars["click_after_minigame"].get())
 
         if self.vars["auto_zoom"].get() == "on":
             for _ in range(20):
@@ -3968,8 +3964,10 @@ class App(CTk):
                 time.sleep(bait_delay)
                 self._enter_minigame()
 
-                # Check Logging Triggers after each Cycle
+                # Utilities at the bottom
                 self._check_logging_trigger()
+                if click_after_minigame == "on":
+                    self._click_at(shake_x, shake_y)
                 # Restart: When Minigame Ends, Loop Repeats From Select Rod
         except Exception as e:
             error_text = traceback.format_exc()
@@ -4041,6 +4039,7 @@ class App(CTk):
           Disabled – never trigger
         """
         mode = self.vars["auto_totem_mode"].get()
+        # self.SCREEN_SCALE
 
         if mode == "Disabled":
             return
@@ -4251,7 +4250,7 @@ class App(CTk):
             last_frame_time = None
             speed_samples.clear()
 
-        # Start Capture Thread; This Remains The Existing V3.31 Capture Path.
+        # Start Capture Thread; This Remains The Existing V3.4 Capture Path.
         stop_event = self._start_capture(scan_delay)
         start_time = time.time()
         if self.vars["fish_overlay"].get() == "Enabled":

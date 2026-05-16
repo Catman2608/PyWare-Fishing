@@ -2446,7 +2446,7 @@ class App(CTk):
             left = int(screen_w * 0.1041)
             top = int(screen_h * 0.0925)
             right = int(screen_w * 0.8958)
-            bottom = int(screen_h * 0.8333)
+            bottom = int(screen_h * 0.7888)
             return {"x": left, "y": top, 
                     "width": right - left, "height": bottom - top}
         def default_fish_area():
@@ -2466,7 +2466,7 @@ class App(CTk):
         def default_totem_area():
             # 1830, 900, 1870, 950
             left = int(screen_w * 0.9531)
-            top = int(screen_h * 0.8333)
+            top = int(screen_h * 0.7888)
             right = int(screen_w * 0.9739)
             bottom = int(screen_h * 0.8796)
             return {"x": left, "y": top, 
@@ -2691,7 +2691,7 @@ class App(CTk):
             int(self.SCREEN_WIDTH * 0.1041),
             int(self.SCREEN_HEIGHT * 0.0925),
             int(self.SCREEN_WIDTH * 0.8958),
-            int(self.SCREEN_HEIGHT * 0.8333),
+            int(self.SCREEN_HEIGHT * 0.7888),
         ))
 
         fish = get_area("fish", (
@@ -3368,7 +3368,7 @@ class App(CTk):
             left = int(self.SCREEN_WIDTH * 0.1041)
             top = int(self.SCREEN_HEIGHT * 0.0925)
             right = int(self.SCREEN_WIDTH * 0.8958)
-            bottom = int(self.SCREEN_HEIGHT * 0.8333)
+            bottom = int(self.SCREEN_HEIGHT * 0.7888)
         elif area == "fish":
             left   = int(self.SCREEN_WIDTH  * 0.2844)
             top    = int(self.SCREEN_HEIGHT * 0.7981)
