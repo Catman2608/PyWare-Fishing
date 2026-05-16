@@ -1436,7 +1436,10 @@ class App(CTk):
             self.area_selector.close()
             self.area_selector = None
             self.set_status("Area selector closed")
+            self.after(0, self.deiconify)
             return
+        else:
+            self.after(0, self.withdraw)
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
         # Default fallback areas 

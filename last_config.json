@@ -7,32 +7,32 @@
     "last_rod": "Basic Rod",
     "bar_areas": {
         "shake": {
-            "x": 198,
-            "y": 61,
-            "width": 1520,
-            "height": 800
+            "x": 192,
+            "y": 104,
+            "width": 1529,
+            "height": 815
         },
         "fish": {
-            "x": 546,
-            "y": 861,
+            "x": 545,
+            "y": 910,
             "width": 825,
             "height": 42
         },
         "friend": {
-            "x": 8,
-            "y": 926,
+            "x": 7,
+            "y": 972,
             "width": 68,
             "height": 89
         },
         "totem": {
-            "x": 1829,
-            "y": 899,
+            "x": 1828,
+            "y": 940,
             "width": 40,
             "height": 50
         }
     },
-    "start_key": "F5",
+    "start_key": "F5 ",
     "change_bar_areas_key": "F6",
     "stop_key": "F7",
-    "last_config": "Default"
+    "last_config": "Masterline Rod"
 }
