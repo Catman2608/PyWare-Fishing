@@ -1482,7 +1482,7 @@ class App(CTk):
             left = int(screen_w * 0.1041)
             top = int(screen_h * 0.0925)
             right = int(screen_w * 0.8958)
-            bottom = int(screen_h * 0.8333)
+            bottom = int(screen_h * 0.7888)
             return {"x": left, "y": top, 
                     "width": right - left, "height": bottom - top}
         def default_fish_area():
@@ -2425,7 +2425,7 @@ class App(CTk):
             shake_left = int(self.SCREEN_WIDTH * 0.1041)
             shake_top = int(self.SCREEN_HEIGHT * 0.0925)
             shake_right = int(self.SCREEN_WIDTH * 0.8958)
-            shake_bottom = int(self.SCREEN_HEIGHT * 0.8333)
+            shake_bottom = int(self.SCREEN_HEIGHT * 0.7888)
             shake_height = shake_bottom - shake_top
         shake_left_s   = int(shake_left * scale)
         shake_top_s    = int(shake_top * scale)
@@ -2573,7 +2573,7 @@ class App(CTk):
             shake_left = int(self.SCREEN_WIDTH * 0.1041)
             shake_top = int(self.SCREEN_HEIGHT * 0.0925)
             shake_right = int(self.SCREEN_WIDTH * 0.8958)
-            shake_bottom = int(self.SCREEN_HEIGHT * 0.8333)
+            shake_bottom = int(self.SCREEN_HEIGHT * 0.7888)
             shake_x = int(self.SCREEN_WIDTH * 0.5)
             shake_y = int(self.SCREEN_HEIGHT * 0.3)
         # Fish area
@@ -2833,7 +2833,7 @@ class App(CTk):
             shake_left = int(self.SCREEN_WIDTH * 0.1041)
             shake_top = int(self.SCREEN_HEIGHT * 0.0925)
             shake_right = int(self.SCREEN_WIDTH * 0.8958)
-            shake_bottom = int(self.SCREEN_HEIGHT * 0.8333)
+            shake_bottom = int(self.SCREEN_HEIGHT * 0.7888)
             shake_x = int(self.SCREEN_WIDTH * 0.5)
             shake_y = int(self.SCREEN_HEIGHT * 0.3)
         # Fish area

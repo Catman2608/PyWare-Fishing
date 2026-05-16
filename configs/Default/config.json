@@ -31,6 +31,7 @@
     "track_notes": "off",
     "always_on_top": "off",
     "lock_cursor": "off",
+    "click_after_minigame": "off",
     "bag_delay": "0.36",
     "casting_mode": "Normal",
     "shake_mode": "Click",
@@ -79,5 +80,6 @@
     "switch_track_notes": "off",
     "switch_always_on_top": "off",
     "switch_lock_cursor": "off",
+    "switch_click_after_minigame": "off",
     "switch_auto_reconnect": "off"
 }
