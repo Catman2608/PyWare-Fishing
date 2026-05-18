@@ -39,7 +39,8 @@ import math
 import gdown
 import shutil
 import traceback
-from collections import deque
+import zipfile
+import tempfile
 # Ctypes/Quartz For Special Click Types
 if sys.platform == "win32":
     windll = ctypes.windll.user32
@@ -117,7 +118,7 @@ IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 
 CONFIG_PATH = os.path.join(BASE_PATH, "last_config.json")
-APP_VERSION = "3.4"
+APP_VERSION = "3.41"
 
 set_appearance_mode("dark")
 
@@ -217,12 +218,12 @@ def download_and_extract_packs(status_callback=None):
     Handles nested zip structures like:
       configs.zip → configs/configs/<files>   (strips the outer wrapper)
       images.zip  → images/images/<files>     (strips the outer wrapper)
+    
+    Also cleans up __MACOSX folder and moves configs folder if present.
 
     status_callback(msg: str) is called with progress text so the UI can
     display it.  Pass None to suppress UI updates.
     """
-    import zipfile
-    import tempfile
 
     def _status(msg):
         print(msg)
@@ -272,6 +273,36 @@ def download_and_extract_packs(status_callback=None):
                 with zf.open(member) as src, open(out_path, "wb") as dst:
                     dst.write(src.read())
 
+    def _cleanup_downloaded_files(download_dir):
+        """
+        Clean up __MACOSX folder and move configs folder contents if present.
+        """
+        # Delete __MACOSX folder if it exists
+        macosx_path = os.path.join(download_dir, "__MACOSX")
+        if os.path.exists(macosx_path) and os.path.isdir(macosx_path):
+            _status("Deleting __MACOSX folder...")
+            shutil.rmtree(macosx_path)
+            _status("__MACOSX folder deleted.")
+        
+        # Move configs folder contents if it exists
+        configs_folder = os.path.join(download_dir, "configs")
+        if os.path.exists(configs_folder) and os.path.isdir(configs_folder):
+            _status("Moving configs folder contents...")
+            # Move contents from configs folder to the download directory
+            for item in os.listdir(configs_folder):
+                source = os.path.join(configs_folder, item)
+                destination = os.path.join(download_dir, item)
+                # If destination exists, handle appropriately
+                if os.path.exists(destination):
+                    if os.path.isdir(destination):
+                        shutil.rmtree(destination)
+                    else:
+                        os.remove(destination)
+                shutil.move(source, destination)
+            # Remove the now-empty configs folder
+            os.rmdir(configs_folder)
+            _status("Configs folder contents moved successfully.")
+
     try:
         os.makedirs(CONFIG_DIR, exist_ok=True)
         os.makedirs(IMAGES_PATH, exist_ok=True)
@@ -285,6 +316,9 @@ def download_and_extract_packs(status_callback=None):
                 quiet=True,
                 use_cookies=False
             )
+            
+            # Clean up downloaded files (remove __MACOSX, move configs folder)
+            _cleanup_downloaded_files(tmp_dir)
 
             # ── configs.zip ──────────────────────────────────────────────
             configs_zip = os.path.join(tmp_dir, "configs.zip")
@@ -685,13 +719,11 @@ class StatusOverlay:
         # Position (Top-Left Like V1)
         self.window.geometry(f"260x180+20+40")
 
-        # Window Behavior (Aligned With Fishoverlay Style)
-        if sys.platform == "darwin":
-            self.window.overrideredirect(False)
-            self.window.attributes("-transparent", True)
-        else:
-            self.window.overrideredirect(True)
+        # Remove title bar and transparency
+        self.window.overrideredirect(True)  # Remove title bar on macOS
+        self.window.attributes("-alpha", 0.85)  # Optional Transparency
 
+        # General settings for Windows and macOS compatibility
         self.window.attributes("-topmost", True)
         self.window.configure(bg="black")
 
@@ -714,8 +746,8 @@ class StatusOverlay:
         # Title
         title = tk.Label(
             self.window,
-            text="PyWare Fishing V3.4",
-            fg="# 00C8Ff",
+            text="PyWare Fishing V3.41",
+            fg="#ca0000",
             bg="black",
             font=("Segoe UI", 12, "bold")
         )
@@ -983,7 +1015,7 @@ class App(CTk):
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
-        self.title("PyWare Fishing V3.4")
+        self.title("PyWare Fishing V3.41")
 
         # Status Bar
         self.grid_columnconfigure(0, weight=1)
@@ -998,7 +1030,7 @@ class App(CTk):
         # Logo Label
         logo_label = CTkLabel(
             top_bar, 
-            text="PYWARE FISHING V3.4",
+            text="PYWARE FISHING V3.41",
             font=CTkFont(size=16, weight="bold")
         )
         logo_label.grid(row=0, column=0, sticky="w")
@@ -1384,7 +1416,16 @@ class App(CTk):
             shake_cb.grid(row=3, column=3, padx=12, pady=10, sticky="w")
             self.comboboxes["shake_mode"] = shake_cb
         else:
-            CTkLabel(toggles, text="Navigation").grid(row=2, column=2, padx=12, pady=10, sticky="w")
+            CTkLabel(toggles, text="Navigation").grid(row=3, column=2, padx=12, pady=10, sticky="w")
+
+        CTkLabel(toggles, text="Fishing Mode:").grid(row=4, column=2, padx=12, pady=10, sticky="w" )
+        fishing_mode_var = StringVar(value="Color")
+        self.vars["fishing_mode"] = fishing_mode_var
+        fishing_cb = CTkComboBox(toggles, values=["Line", "Color"], 
+                               variable=fishing_mode_var, command=lambda v: self.set_status(f"Fishing Mode: {v}")
+                               )
+        fishing_cb.grid(row=4, column=3, padx=12, pady=10, sticky="w")
+        self.comboboxes["fishing_mode"] = fishing_cb
 
         # Normal Casting Group
         self.normal_casting = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
@@ -2261,7 +2302,6 @@ class App(CTk):
         self.hotkey_change_areas = self._string_to_key(self.vars["change_bar_areas_key"].get())
         self.hotkey_stop = self._string_to_key(self.vars["stop_key"].get())
         # Show Status Lines
-        # Self.Status_Overlay.Show()
         self.status_overlay.set_line(f"Ready to start", row=1)
         self.status_overlay.set_line(f"Press {self.hotkey_start} to start", row=2)
         self.status_overlay.set_line(f"Press {self.hotkey_change_areas} to change bar areas", row=3)
@@ -2634,14 +2674,6 @@ class App(CTk):
                 self.set_status(f"Error: Bug report failed: {response.status_code}")
         except Exception as e:
             self.set_status(f"Error sending bug report: {e}")
-    def send_bug_report(self, error_text, phase="Unknown"):
-        """Send a text-only crash/bug report when Auto Bug Reports is enabled."""
-        thread = threading.Thread(
-            target=self._auto_bug_report,
-            args=(error_text, phase),
-            daemon=True
-        )
-        thread.start()
     def send_logging(self, text, loop_count, show_status=True):
         logging_mode = self.vars["logging_mode"].get()
         if logging_mode == "Disabled":
@@ -2958,7 +2990,7 @@ class App(CTk):
         Robust day/night detection using white-mask template matching.
         """
 
-        totem_left, totem_top, totem_right, totem_bottom, _, _ = self.get_areas("totem")
+        totem_left, totem_top, totem_right, totem_bottom, _, _ = self._get_areas("totem")
 
         frame2 = self._grab_screen_region(totem_left, totem_top, totem_right, totem_bottom)
         if frame2 is None or frame2.size == 0:
@@ -3490,27 +3522,30 @@ class App(CTk):
             self._last_bar_center_x = bar_center_x
             return bar_center_x, bar_left_x, bar_right_x
     # Get Values From Gui
-    def _get_areas(self, area):
+    def _get_areas(self, area_key):
         # Apply Scale Factor
         scale = self._get_scale_factor()
-        # Get Area
-        area = self.bar_areas.get(area)
-        if isinstance(area, dict):
-            left   = area["x"]
-            top    = area["y"]
-            right  = area["x"] + area["width"]
-            bottom = area["y"] + area["height"]
-            width = area["width"]
-            height = area["height"]
+        
+        # FIX: Avoid mutating 'area_key' parameter tracking variable
+        area_data = self.bar_areas.get(area_key)
+        if isinstance(area_data, dict):
+            left   = area_data["x"]
+            top    = area_data["y"]
+            right  = area_data["x"] + area_data["width"]
+            bottom = area_data["y"] + area_data["height"]
+            width  = area_data["width"]
+            height = area_data["height"]
         else:
-            left, top, right, bottom = self._get_default_areas(area)
-            width = right - left
+            # Passes original string key securely to fallback definition handler
+            left, top, right, bottom = self._get_default_areas(area_key)
+            width  = right - left
             height = bottom - top
+            
         left2   = int(left * scale)
         top2    = int(top * scale)
         right2  = int(right * scale)
         bottom2 = int(bottom * scale)
-        width2 = int(width * scale)
+        width2  = int(width * scale)
         height2 = int(height * scale)
         return left2, top2, right2, bottom2, width2, height2
     def _get_default_areas(self, area):
@@ -3598,11 +3633,13 @@ class App(CTk):
     def _apply_fish_overlay_state(self):
         if not self._is_fish_overlay_enabled():
             self.fish_overlay.hide()
+            self.status_overlay.hide()
             return
 
         x, y, width, height = self._get_fish_overlay_layout()
         self.fish_overlay.set_layout(x, y, width, height)
         self.fish_overlay.show()
+        self.status_overlay.show()
     def _set_fish_overlay_mode(self, mode):
         self._fish_overlay_mode = mode
         self._apply_fish_overlay_state()
@@ -3611,8 +3648,8 @@ class App(CTk):
     def _on_always_on_top_toggle(self, *args):
         enabled = self.vars["always_on_top"].get()
         self.attributes("-topmost", enabled == "on")
-    # Do Pixel/Image Search
-    def _do_pixel_search(self, img):
+    # Do Pixel/Image/Line Search
+    def _do_pixel_search(self, frame):
         fish_hex = self.vars["fish_color"].get()
         left_bar_hex = self.vars["left_color"].get()
         right_bar_hex = self.vars["right_color"].get()
@@ -3631,17 +3668,207 @@ class App(CTk):
             left_tol += 15
             right_tol += 15
             fish_tol += 15
-        fish_center = self._find_color_cluster(img, fish_hex, fish_tol, required_fish_pixels)
+        fish_center = self._find_color_cluster(frame, fish_hex, fish_tol, required_fish_pixels)
         try:
             fish_center = fish_center[0]
         except:
             pass
-        left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, right_bar_hex, left_tol, right_tol)
+        left_bar_center, right_bar_center = self._find_bar_edges(frame, left_bar_hex, right_bar_hex, left_tol, right_tol)
         if left_bar_center is None:
-            left_bar_center, right_bar_center = self._find_bar_edges(img, right_bar_hex, right_bar_hex, right_tol, right_tol)
+            left_bar_center, right_bar_center = self._find_bar_edges(frame, right_bar_hex, right_bar_hex, right_tol, right_tol)
         elif right_bar_center is None:
-            left_bar_center, right_bar_center = self._find_bar_edges(img, left_bar_hex, left_bar_hex, left_tol, left_tol)
+            left_bar_center, right_bar_center = self._find_bar_edges(frame, left_bar_hex, left_bar_hex, left_tol, left_tol)
         return fish_center, left_bar_center, right_bar_center
+    def _do_line_search(self, frame, original_width=None):
+        """
+        Detect vertical lines in frame and identify fish and bar positions.
+        Based on comet.py line detection pipeline with brightness and density filtering.
+        Uses line identification logic similar to _execute_fish_stage_line.
+        
+        Frame is normalized to reference fish box dimensions (517x22 at 720p)
+        for consistent detection across all resolutions. Line coordinates are scaled
+        back to match the original frame dimensions.
+        
+        Returns tuple of (fish_x, left_bar_x, right_bar_x):
+            - fish_x: Center X coordinate of the two target lines (fish)
+            - left_bar_x: X coordinate of the left bar line
+            - right_bar_x: X coordinate of the right bar line
+            Returns (None, None, None) if unable to identify lines
+
+        Args:
+            frame: BGR image from MSS
+            original_width: Original frame width before normalization (for coordinate scaling back)
+        """
+        try:
+            # Get minimum line density from settings (configurable via GUI)
+            MIN_LINE_DENSITY = self._get_rod_specific_setting("fish_line_min_density", 0.8)
+            BRIGHTNESS_THRESHOLD = 10  # Minimum brightness for edge pixels
+            
+            # Reference fish box dimensions at 1280x720
+            REFERENCE_FISH_WIDTH = 517   # Fish box width at 720p
+            REFERENCE_FISH_HEIGHT = 22   # Fish box height at 720p
+            
+            # Store original dimensions for coordinate scaling
+            original_height, original_frame_width = frame.shape[:2]
+            if original_width is None:
+                original_width = original_frame_width
+            
+            # Normalize frame to reference dimensions for consistent detection
+            if original_frame_width != REFERENCE_FISH_WIDTH or original_height != REFERENCE_FISH_HEIGHT:
+                frame = cv2.resize(frame, (REFERENCE_FISH_WIDTH, REFERENCE_FISH_HEIGHT), interpolation=cv2.INTER_LINEAR)
+                width_scale = original_width / REFERENCE_FISH_WIDTH
+            else:
+                width_scale = 1.0
+
+            # Step 1: Convert to grayscale
+            grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # Step 2: Laplacian edge detection
+            laplacian = cv2.Laplacian(grayscale, cv2.CV_8U)
+
+            # Step 3: Filter vertical lines by brightness threshold and density
+            height, width = laplacian.shape
+            
+            # Vectorized column density calculation
+            column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
+            line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
+
+            # Merge adjacent lines into single lines
+            if line_coordinates:
+                merged_lines = []
+                group_start = line_coordinates[0]
+                group_end = line_coordinates[0]
+                
+                for i in range(1, len(line_coordinates)):
+                    if line_coordinates[i] <= group_end + 2:
+                        group_end = line_coordinates[i]
+                    else:
+                        middle = (group_start + group_end) // 2
+                        merged_lines.append(middle)
+                        group_start = line_coordinates[i]
+                        group_end = line_coordinates[i]
+                
+                middle = (group_start + group_end) // 2
+                merged_lines.append(middle)
+                
+                line_coordinates = merged_lines
+
+            # Scale line coordinates back to original frame dimensions
+            if width_scale != 1.0:
+                line_coordinates = [int(x * width_scale) for x in line_coordinates]
+
+            # Initialize state variables if not already done
+            if not hasattr(self, '_line_state'):
+                self._line_state = {
+                    'initial_target_gap': None,
+                    'last_target_left_x': None,
+                    'last_target_right_x': None,
+                    'last_left_bar_x': None,
+                    'last_right_bar_x': None,
+                    'is_initial_run': True
+                }
+
+            state = self._line_state
+            image_center_x = original_width // 2
+
+            # Need at least 2 lines to identify fish and bars
+            if len(line_coordinates) < 2:
+                return None, None, None
+
+            # INITIAL RUN: Find 2 closest lines to center as target (fish) lines
+            if state['is_initial_run'] or state['initial_target_gap'] is None:
+                distance_coords = sorted(
+                    [(abs(coord - image_center_x), coord) for coord in line_coordinates],
+                    key=lambda x: x[0]
+                )
+                target_pair = sorted([distance_coords[0][1], distance_coords[1][1]])
+                target_left_x = target_pair[0]
+                target_right_x = target_pair[1]
+                initial_target_gap = target_right_x - target_left_x
+
+                # Find bars - closest to left of left target, closest to right of right target
+                left_candidates = [x for x in line_coordinates if x < target_left_x]
+                right_candidates = [x for x in line_coordinates if x > target_right_x]
+                
+                left_bar_x = max(left_candidates) if left_candidates else target_left_x
+                right_bar_x = min(right_candidates) if right_candidates else target_right_x
+
+                # Update state
+                state['last_target_left_x'] = target_left_x
+                state['last_target_right_x'] = target_right_x
+                state['last_left_bar_x'] = left_bar_x
+                state['last_right_bar_x'] = right_bar_x
+                state['initial_target_gap'] = initial_target_gap
+                state['is_initial_run'] = False
+
+            else:
+                # SUBSEQUENT RUNS: Find pair with gap matching initial_target_gap
+                best_gap_diff = float('inf')
+                target_left_x = state['last_target_left_x']
+                target_right_x = state['last_target_right_x']
+
+                for i in range(len(line_coordinates) - 1):
+                    curr_left = line_coordinates[i]
+                    curr_right = line_coordinates[i + 1]
+                    curr_gap = curr_right - curr_left
+                    gap_diff = abs(curr_gap - state['initial_target_gap'])
+
+                    if gap_diff < best_gap_diff:
+                        best_gap_diff = gap_diff
+                        target_left_x = curr_left
+                        target_right_x = curr_right
+                
+                # If best gap is more than 4x initial gap, keep old positions
+                actual_gap = target_right_x - target_left_x
+                if actual_gap > state['initial_target_gap'] * 4:
+                    target_left_x = state['last_target_left_x']
+                    target_right_x = state['last_target_right_x']
+                
+                # Find bars from non-target lines
+                other_lines = [x for x in line_coordinates if x != target_left_x and x != target_right_x]
+                
+                if len(other_lines) >= 2:
+                    # Pick closest to last positions
+                    left_bar_x = min(other_lines, key=lambda x: abs(x - state['last_left_bar_x'])) if state['last_left_bar_x'] is not None else other_lines[0]
+                    remaining_lines = [x for x in other_lines if x != left_bar_x]
+                    right_bar_x = min(remaining_lines, key=lambda x: abs(x - state['last_right_bar_x'])) if remaining_lines and state['last_right_bar_x'] is not None else (remaining_lines[0] if remaining_lines else state['last_right_bar_x'])
+                
+                elif len(other_lines) == 1:
+                    # Only one non-target line - assign to closest bar
+                    single_line = other_lines[0]
+                    if state['last_left_bar_x'] is not None and state['last_right_bar_x'] is not None:
+                        dist_to_left = abs(single_line - state['last_left_bar_x'])
+                        dist_to_right = abs(single_line - state['last_right_bar_x'])
+                        if dist_to_left < dist_to_right:
+                            left_bar_x = single_line
+                            right_bar_x = state['last_right_bar_x']
+                        else:
+                            right_bar_x = single_line
+                            left_bar_x = state['last_left_bar_x']
+                    else:
+                        left_bar_x = single_line
+                        right_bar_x = target_right_x
+                else:
+                    # No other lines - use last known positions
+                    left_bar_x = state['last_left_bar_x'] if state['last_left_bar_x'] is not None else target_left_x
+                    right_bar_x = state['last_right_bar_x'] if state['last_right_bar_x'] is not None else target_right_x
+                
+                # Update state with new values
+                state['last_target_left_x'] = target_left_x
+                state['last_target_right_x'] = target_right_x
+                state['last_left_bar_x'] = left_bar_x
+                state['last_right_bar_x'] = right_bar_x
+
+            # Calculate centers
+            fish_x = (target_left_x + target_right_x) / 2.0
+            left_x = left_bar_x
+            right_x = right_bar_x
+
+            return fish_x, left_x, right_x
+
+        except Exception as e:
+            print(f"    Error in line detection: {e}")
+            return None, None, None
     # Controllers (PID And Stopping Distance)
     def _get_pid_gains(self):
         """Get PID gains from config, with sensible defaults."""
@@ -3883,6 +4110,8 @@ class App(CTk):
         bag_slot = str(self.vars["bag_slot"].get())
         bait_delay = float(self.vars["bait_delay"].get())
         click_after_minigame = (self.vars["click_after_minigame"].get())
+        self.status_overlay.set_line(f"Made by Catman2608", row=1)
+        self.status_overlay.set_line(f"Process: Auto Zoom", row=2)
 
         if self.vars["auto_zoom"].get() == "on":
             for _ in range(20):
@@ -3898,12 +4127,16 @@ class App(CTk):
                 mouse_controller.position = (shake_x, shake_y)
                 self._set_fish_overlay_mode("idle")
                 phase = "Misc/Totem"
+                self.status_overlay.set_line(f"Timer: {self.webhook_cycle_counter}", row=1)
                 # Totem
+                self.status_overlay.set_line(f"Process: Auto Totem", row=2)
                 self._check_totem_trigger(shake_x, shake_y)
                 # Reconnect
+                self.status_overlay.set_line(f"Process: Auto Reconnect", row=2)
                 if self.vars["auto_reconnect"].get() == "on":
                     self._auto_reconnect(shake_x, shake_y)
                 # Select Rod
+                self.status_overlay.set_line(f"Process: Auto Refresh", row=2)
                 if self.vars["auto_refresh"].get() == "on":
                     bag_delay = float(self.vars["bag_delay"].get())
                     self.set_status("Selecting rod")
@@ -3919,18 +4152,14 @@ class App(CTk):
                     time.sleep(0.2)
                 if not self.macro_running:
                     break
-                # Toggle Fish Overlay
-                if self.vars["fish_overlay"].get() == "on":
-                    self.fish_overlay.show()
-                else:
-                    self.fish_overlay.hide()
-
                 # Cast
                 phase = "Casting"
                 self.set_status("Casting")
                 if self.vars["casting_mode"].get() == "Perfect":
+                    self.status_overlay.set_line(f"Process: Casting (Perfect)", row=2)
                     self._execute_cast_perfect()
                 else:
+                    self.status_overlay.set_line(f"Process: Casting (Normal)", row=2)
                     self._execute_cast_normal()
 
                 # Optional Delay After Cast
@@ -3951,8 +4180,10 @@ class App(CTk):
                 except:
                     shake_mode = "Navigation"
                 if shake_mode == "Click":
+                    self.status_overlay.set_line(f"Process: Shaking (Click)", row=2)
                     self._execute_shake_click()
                 else:
+                    self.status_overlay.set_line(f"Process: Shaking (Navigation)", row=2)
                     self._execute_shake_navigation()
 
                 if not self.macro_running:
@@ -3962,9 +4193,11 @@ class App(CTk):
                 self.set_status("Fishing")
                 phase = "Fishing"
                 time.sleep(bait_delay)
+                self.status_overlay.set_line(f"Process: Minigame", row=2)
                 self._enter_minigame()
 
                 # Utilities at the bottom
+                self.status_overlay.set_line(f"Process: Other Utilities", row=2)
                 self._check_logging_trigger()
                 if click_after_minigame == "on":
                     self._click_at(shake_x, shake_y)
@@ -3976,7 +4209,7 @@ class App(CTk):
             if error_message.startswith("Macro crashed during "):
                 phase = error_message[len("Macro crashed during "):].split(":", 1)[0].strip() or phase
 
-            self.send_bug_report(error_text, phase)
+            self._auto_bug_report(error_text, phase)
                     
             if not self.macro_running:
                 return
@@ -4180,6 +4413,7 @@ class App(CTk):
         delay2 = float(self.vars["delay_before_casting"].get() or 0.0)
         duration = float(self.vars["cast_duration"].get() or 0.6)
         delay = float(self.vars["cast_delay"].get() or 0.2)
+        self.status_overlay.set_line(f"Casting for {duration} seconds", row=3)
         # Set Status
         time.sleep(delay2)  # Wait For Cast To Register In Other Games
         mouse_controller.press(Button.left)
@@ -4233,6 +4467,10 @@ class App(CTk):
         speed_samples = []
         max_speed_samples = 20
 
+        if sys.platform == "darwin":
+            white_tol += 15
+            green_tol += 15
+
         def color_mask(img, target_bgr, tolerance):
             img_i = img.astype(np.int32)
             diff = img_i - target_bgr
@@ -4250,7 +4488,7 @@ class App(CTk):
             last_frame_time = None
             speed_samples.clear()
 
-        # Start Capture Thread; This Remains The Existing V3.4 Capture Path.
+        # Start Capture Thread; This Remains The Existing V3.41 Capture Path.
         stop_event = self._start_capture(scan_delay)
         start_time = time.time()
         if self.vars["fish_overlay"].get() == "Enabled":
@@ -4313,7 +4551,7 @@ class App(CTk):
             green_left_x = int(np.min(cols_in_row)) + green_left
             green_right_x = int(np.max(cols_in_row)) + green_left
             green_y = found_y_relative + green_top
-            self.status_overlay.set_line(f"Green Y: {green_y}", row=4)
+            self.status_overlay.set_line(f"Green Y: {green_y}", row=3)
 
             if green_right_x <= green_left_x:
                 reset_tracking()
@@ -4443,7 +4681,7 @@ class App(CTk):
     def _execute_shake_click(self):
         """
         Search for first shake pixel then click
-        Duplicate pixel logic from v13 is coming soon
+        Contains duplicate pixel logic from v13 (NEW)
         """
         # Get areas (scale factor applied inside _get_areas)
         shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, _ = self._get_areas("shake")
@@ -4467,7 +4705,8 @@ class App(CTk):
             failsafe = 80
             bar_tolerance = 8
             shake_clicks = 1
-
+        if sys.platform == "darwin":
+            tolerance += 15
         required_fish_pixels = int(self.vars["required_fish_pixels"].get() or 10)
         # Initialize attempts and stop event
         attempts = 0
@@ -4488,13 +4727,58 @@ class App(CTk):
                 continue
             # 2. Look for shake pixel
             shake_pixel = self._find_first_pixel(shake_area, shake_hex, tolerance)
+
             if shake_pixel:
                 x, y = shake_pixel
+
                 screen_x = shake_left_s + x
                 screen_y = shake_top_s + y
-                self._click_at(screen_x, screen_y, shake_clicks)
+
+                self.status_overlay.set_line(f"X: {x} Y: {y}", row=3)
+
+                # Initialize variables if missing
+                if not hasattr(self, "last_shake_x"):
+                    self.last_shake_x = None
+                    self.last_shake_y = None
+                    self.shake_repeat_bypass = 0
+
+                # Duplicate pixel prevention
+                is_duplicate = (
+                    screen_x == self.last_shake_x and
+                    screen_y == self.last_shake_y
+                )
+
+                if not is_duplicate:
+                    # New pixel found
+                    self.shake_repeat_bypass = 0
+
+                    self._click_at(screen_x, screen_y, shake_clicks)
+
+                    self.last_shake_x = screen_x
+                    self.last_shake_y = screen_y
+
+                    self.status_overlay.set_line(
+                        f"Bypass: {self.shake_repeat_bypass}/10",
+                        row=5
+                    )
+
+                else:
+                    # Same pixel detected
+                    self.shake_repeat_bypass += 1
+
+                    self.status_overlay.set_line(
+                        f"Bypass: {self.shake_repeat_bypass}/10",
+                        row=5
+                    )
+
+                    # Recovery reset
+                    if self.shake_repeat_bypass >= 10:
+                        self.last_shake_x = None
+                        self.last_shake_y = None
+                        self.shake_repeat_bypass = 0
             # 2. Fish detection (Multiple Methods)
             detected = False
+            self.status_overlay.set_line(f"Fish: Not detected", row=4)
             while detected == False and self.macro_running:
                 if detection_method == "Friend Area":
                     detection_area = frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
@@ -4526,15 +4810,20 @@ class App(CTk):
                         break
             # 3. Fish detected → enter minigame
             if detected == True:
+                self.status_overlay.set_line(f"Fish: Detected", row=4)
                 self.set_status("Entering Minigame")
                 mouse_controller.press(Button.left)
                 time.sleep(0.003)
                 mouse_controller.release(Button.left)
+                # Reset shake
+                self.last_shake_x = None
+                self.last_shake_y = None
+                self.shake_repeat_bypass = 0
                 return  # exit shake cleanly
             attempts += 1
             time.sleep(scan_delay)
     def _execute_shake_navigation(self):
-        """Spams the enter key until fish detection is found (ICF V1 logic)"""
+        """Spams the enter key until fish detection is found"""
         self.set_status("Shake Mode: Navigation")
         # Get areas (scale factor applied inside _get_areas)
         fish_left_s, fish_top_s, fish_right_s, fish_bottom_s, _, _         = self._get_areas("fish")
@@ -4555,6 +4844,8 @@ class App(CTk):
             failsafe = 80
             bar_tolerance = 8
             required_fish_pixels = 10
+        if sys.platform == "darwin":
+            tolerance += 15
         attempts = 0
         stop_event = self._start_capture(scan_delay)
         while self.macro_running and attempts < failsafe:
@@ -4641,6 +4932,7 @@ class App(CTk):
         note_track_ratio = float(self.vars["note_track_ratio"].get() or 0.1)
         scan_delay = float(self.vars["minigame_scan_delay"].get() or 0.05)
         lock_cursor = (self.vars["lock_cursor"].get())
+        fishing_mode = (self.vars["fishing_mode"].get())
         try:
             note_box_tol = int(self.vars["note_box_tolerance"].get() or 8)
             arrow_tol = int(self.vars["arrow_tolerance"].get() or 8)
@@ -4687,8 +4979,11 @@ class App(CTk):
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
             if lock_cursor == "on": # Lock cursor if enabled
                 mouse_controller.position = (shake_x, shake_y)
-            # Step 2: Pixel Search
-            fish_x, left_x, right_x = self._do_pixel_search(img)
+            # Step 2: Detection
+            if fishing_mode == "Line":
+                fish_x, left_x, right_x = self._do_line_search(img)
+            else:
+                fish_x, left_x, right_x = self._do_pixel_search(img)
             arrow_indicator_x = self._find_arrow_indicator_x(img, arrow_hex, arrow_tol, mouse_down)
             if track_notes == "on":
                 note_box_pos = self._find_color_center(note_img, note_box_hex, note_box_tol)
