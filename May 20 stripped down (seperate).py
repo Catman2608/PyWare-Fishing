@@ -7,17 +7,6 @@ import json
 import os
 import subprocess
 import sys
-# Cocoa For macOS Overlays
-if sys.platform == "darwin":
-    try:
-        import AppKit
-        import Foundation
-    except ImportError:
-        AppKit = None
-        Foundation = None
-else:
-    AppKit = None
-    Foundation = None
 # Keyboard And Mouse
 from pynput import keyboard, mouse
 from pynput.keyboard import Controller as KeyboardController
@@ -47,12 +36,8 @@ import webbrowser
 # Utilities
 import requests
 import io
-import queue as _queue
-import gdown
 import shutil
 import traceback
-import zipfile
-import tempfile
 # Ctypes/Quartz For Special Click Types
 if sys.platform == "win32":
     windll = ctypes.windll.user32
@@ -193,144 +178,6 @@ def save_app_state(state):
         print(f"Error saving config: {e}")
         # Optionally Show Error To User
         messagebox.showerror("Save Error", f"Could not save configuration: {e}")
-# ── Pack Download Helper ─────────────────────────────────────────────────────
-# Drive folder that contains configs.zip and images.zip
-PACK_FOLDER_URL = "https://drive.google.com/drive/folders/1pDSSKYRmMHQcv2SSrMxfzcGz4mgY-esS"
-
-def download_and_extract_packs(status_callback=None):
-    """
-    Downloads configs.zip and images.zip from the Drive folder,
-    extracts configs.zip → CONFIG_DIR, images.zip → IMAGES_PATH.
-
-    Handles nested zip structures like:
-      configs.zip → configs/configs/<files>   (strips the outer wrapper)
-      images.zip  → images/images/<files>     (strips the outer wrapper)
-    
-    Also cleans up __MACOSX folder and moves configs folder if present.
-
-    status_callback(msg: str) is called with progress text so the UI can
-    display it.  Pass None to suppress UI updates.
-    """
-
-    def _status(msg):
-        print(msg)
-        if status_callback:
-            status_callback(msg)
-
-    def _extract_flat(zip_path, dest_dir):
-        """
-        Extract zip into dest_dir, stripping any common leading path prefix
-        so files always land directly in dest_dir regardless of how many
-        wrapper folders the zip contains.
-
-        e.g.  configs/configs/rod1.json  →  <dest_dir>/rod1.json
-              images/images/sun.png      →  <dest_dir>/sun.png
-              rod1.json                  →  <dest_dir>/rod1.json  (no prefix)
-        """
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            members = [m for m in zf.infolist() if not m.filename.endswith("/")]
-
-            if not members:
-                return  # empty zip
-
-            # Find the longest common leading path shared by all members
-            # e.g. ["configs/configs/a.json", "configs/configs/b.json"]
-            #   → common prefix parts = ["configs", "configs"]
-            def parts(name):
-                return name.replace("\\", "/").split("/")[:-1]  # drop filename
-
-            common = parts(members[0].filename)
-            for m in members[1:]:
-                p = parts(m.filename)
-                # Keep only the shared leading portion
-                common = [c for c, q in zip(common, p) if c == q]
-                if not common:
-                    break
-
-            prefix = "/".join(common) + "/" if common else ""
-
-            for member in members:
-                rel = member.filename.replace("\\", "/")
-                if prefix and rel.startswith(prefix):
-                    rel = rel[len(prefix):]  # strip the wrapper folder(s)
-                if not rel:
-                    continue
-                out_path = os.path.join(dest_dir, rel.replace("/", os.sep))
-                os.makedirs(os.path.dirname(out_path), exist_ok=True)
-                with zf.open(member) as src, open(out_path, "wb") as dst:
-                    dst.write(src.read())
-
-    def _cleanup_downloaded_files(download_dir):
-        """
-        Clean up __MACOSX folder and move configs folder contents if present.
-        """
-        # Delete __MACOSX folder if it exists
-        macosx_path = os.path.join(download_dir, "__MACOSX")
-        if os.path.exists(macosx_path) and os.path.isdir(macosx_path):
-            _status("Deleting __MACOSX folder...")
-            shutil.rmtree(macosx_path)
-            _status("__MACOSX folder deleted.")
-        
-        # Move configs folder contents if it exists
-        configs_folder = os.path.join(download_dir, "configs")
-        if os.path.exists(configs_folder) and os.path.isdir(configs_folder):
-            _status("Moving configs folder contents...")
-            # Move contents from configs folder to the download directory
-            for item in os.listdir(configs_folder):
-                source = os.path.join(configs_folder, item)
-                destination = os.path.join(download_dir, item)
-                # If destination exists, handle appropriately
-                if os.path.exists(destination):
-                    if os.path.isdir(destination):
-                        shutil.rmtree(destination)
-                    else:
-                        os.remove(destination)
-                shutil.move(source, destination)
-            # Remove the now-empty configs folder
-            os.rmdir(configs_folder)
-            _status("Configs folder contents moved successfully.")
-
-    try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        os.makedirs(IMAGES_PATH, exist_ok=True)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _status("Downloading packs from Google Drive…")
-            # gdown downloads every file in the folder into tmp_dir
-            gdown.download_folder(
-                url=PACK_FOLDER_URL,
-                output=tmp_dir,
-                quiet=True,
-                use_cookies=False
-            )
-            
-            # Clean up downloaded files (remove __MACOSX, move configs folder)
-            _cleanup_downloaded_files(tmp_dir)
-
-            # ── configs.zip ──────────────────────────────────────────────
-            configs_zip = os.path.join(tmp_dir, "configs.zip")
-            if os.path.exists(configs_zip):
-                _status("Extracting configs.zip…")
-                _extract_flat(configs_zip, CONFIG_DIR)
-                _status(f"Config pack installed → {CONFIG_DIR}")
-            else:
-                _status("Warning: configs.zip not found in download.")
-
-            # ── images.zip ───────────────────────────────────────────────
-            images_zip = os.path.join(tmp_dir, "images.zip")
-            if os.path.exists(images_zip):
-                _status("Extracting images.zip…")
-                _extract_flat(images_zip, IMAGES_PATH)
-                _status(f"Image pack installed → {IMAGES_PATH}")
-            else:
-                _status("Warning: images.zip not found in download.")
-
-        _status("Done! Both packs installed successfully.")
-        return True
-
-    except Exception as e:
-        _status(f"Download/extract failed: {e}")
-        return False
 
 # Pre-compiled transformation matrix (Display P3 -> sRGB approximation for OpenCV BGR)
 # Designed for cv2.transform() which expects an array of shape (1, 3, 3) or (3, 4)
@@ -353,6 +200,71 @@ def _correct_macos_color(frame):
         # cv2.transform operates directly on the 3 channels very fast in C++
         return cv2.transform(frame, P3_TO_SRGB_MATRIX)
     return frame
+
+def _make_tk_window_non_focusable_macos(window):
+    """Make a Tk overlay non-activating/click-through on macOS."""
+    if sys.platform != "darwin" or not window or not window.winfo_exists():
+        return
+
+    try:
+        import AppKit
+        import objc
+        from ctypes import c_void_p
+    except Exception:
+        return
+
+    try:
+        window.update_idletasks()
+        ns_view = objc.objc_object(c_void_p=int(window.winfo_id()))
+        ns_window = ns_view.window()
+    except Exception:
+        ns_window = None
+
+    if ns_window is None:
+        try:
+            title = window.title()
+            for candidate in reversed(AppKit.NSApp.windows()):
+                if str(candidate.title()) == title:
+                    ns_window = candidate
+                    break
+        except Exception:
+            ns_window = None
+
+    if ns_window is None:
+        return
+
+    nonactivating_mask = getattr(
+        AppKit,
+        "NSWindowStyleMaskNonactivatingPanel",
+        getattr(AppKit, "NSNonactivatingPanelMask", 0)
+    )
+    if nonactivating_mask:
+        try:
+            ns_window.setStyleMask_(ns_window.styleMask() | nonactivating_mask)
+        except Exception:
+            pass
+
+    try:
+        ns_window.setIgnoresMouseEvents_(True)
+    except Exception:
+        pass
+
+    try:
+        behavior = ns_window.collectionBehavior()
+        for flag_name in (
+            "NSWindowCollectionBehaviorCanJoinAllSpaces",
+            "NSWindowCollectionBehaviorFullScreenAuxiliary",
+            "NSWindowCollectionBehaviorStationary",
+        ):
+            behavior |= getattr(AppKit, flag_name, 0)
+        ns_window.setCollectionBehavior_(behavior)
+    except Exception:
+        pass
+
+    try:
+        ns_window.orderFrontRegardless()
+    except Exception:
+        pass
 # Area Selector Class
 class AreaSelector:
     HANDLE_SIZE = 8
@@ -644,182 +556,6 @@ class AreaSelector:
             self.parent.set_status("Area selector closed")
         self.callback(self.shake, self.fish, self.friend, self.totem)
         self.window.destroy()
-# Cocoa Status Overlay (macOS only)
-class CocoaStatusOverlay:
-    """Native Cocoa status overlay for macOS."""
-    def __init__(self, parent_app):
-        self.parent_app = parent_app
-        self.window = None
-        self.text_fields = {}
-        self.visible = False
-
-    def init_window(self):
-        """Create native Cocoa window."""
-        if self.window:
-            return
-
-        # Create a borderless, non-activating panel
-        rect = Foundation.NSMakeRect(20, 40, 260, 180)
-        self.window = AppKit.NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-            rect,
-            AppKit.NSWindowStyleMaskBorderless,
-            AppKit.NSBackingStoreBuffered,
-            False
-        )
-        self.window.setTitle_("PyWare Status Overlay")
-        self.window.setLevel_(AppKit.NSScreenSaverWindowLevel)
-        self.window.setIgnoresMouseEvents_(True)
-        self.window.setOpaque_(False)
-        self.window.setBackgroundColor_(AppKit.NSColor.clearColor())
-        
-        # Make it always on top and not focusable
-        behavior = self.window.collectionBehavior()
-        behavior |= AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
-        behavior |= AppKit.NSWindowCollectionBehaviorStationary
-        self.window.setCollectionBehavior_(behavior)
-        
-        # Create content view with dark background
-        view = AppKit.NSView.alloc().initWithFrame_(rect)
-        view.setWantsLayer_(True)
-        view.layer().setBackgroundColor_(AppKit.NSColor.blackColor().CGColor())
-        
-        # Title
-        title_frame = Foundation.NSMakeRect(10, rect.size.height - 30, rect.size.width - 20, 20)
-        title_field = AppKit.NSTextField.alloc().initWithFrame_(title_frame)
-        title_field.setStringValue_("PyWare Fishing V3.42")
-        title_field.setTextColor_(AppKit.NSColor.redColor())
-        title_field.setBezeled_(False)
-        title_field.setDrawsBackground_(False)
-        title_field.setEditable_(False)
-        title_field.setSelectable_(False)
-        view.addSubview_(title_field)
-        
-        # Create 7 status line fields
-        for i in range(7):
-            y = rect.size.height - 45 - (i * 20)
-            text_field = AppKit.NSTextField.alloc().initWithFrame_(Foundation.NSMakeRect(10, y, rect.size.width - 20, 16))
-            text_field.setStringValue_("")
-            text_field.setTextColor_(AppKit.NSColor.whiteColor())
-            text_field.setBezeled_(False)
-            text_field.setDrawsBackground_(False)
-            text_field.setEditable_(False)
-            text_field.setSelectable_(False)
-            view.addSubview_(text_field)
-            self.text_fields[i + 1] = text_field
-        
-        self.window.setContentView_(view)
-
-    def show(self):
-        """Show the overlay."""
-        self.init_window()
-        if self.window and not self.visible:
-            self.window.orderFrontRegardless()
-            self.visible = True
-
-    def hide(self):
-        """Hide the overlay."""
-        if self.window and self.visible:
-            self.window.orderOut_(None)
-            self.visible = False
-
-    def destroy(self):
-        """Destroy overlay completely."""
-        if self.window:
-            self.window.close()
-            self.window = None
-        self.text_fields.clear()
-
-    def set_line(self, text, row=1):
-        """Set text for a specific row."""
-        if row in self.text_fields:
-            self.text_fields[row].setStringValue_(text)
-
-    def clear(self):
-        """Clear all lines."""
-        for field in self.text_fields.values():
-            field.setStringValue_("")
-
-# Cocoa Fish Overlay (macOS only)
-class CocoaFishOverlay:
-    """Native Cocoa fish overlay for macOS using a custom NSView."""
-    def __init__(self, parent_app):
-        self.parent_app = parent_app
-        self.window = None
-        self.visible = False
-        self.width = 800
-        self.height = 60
-
-    def init_window(self):
-        """Create native Cocoa window with canvas."""
-        if self.window:
-            return
-        
-        overlay_x = int(self.parent_app.SCREEN_WIDTH * 0.5) - int(self.width / 2)
-        overlay_y = int(self.parent_app.SCREEN_HEIGHT * 0.65)
-        
-        rect = Foundation.NSMakeRect(overlay_x, overlay_y, self.width, self.height)
-        self.window = AppKit.NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-            rect,
-            AppKit.NSWindowStyleMaskBorderless,
-            AppKit.NSBackingStoreBuffered,
-            False
-        )
-        self.window.setTitle_("PyWare Fish Overlay")
-        self.window.setLevel_(AppKit.NSScreenSaverWindowLevel)
-        self.window.setIgnoresMouseEvents_(True)
-        self.window.setOpaque_(False)
-        self.window.setBackgroundColor_(AppKit.NSColor.clearColor())
-        
-        # Make it always on top
-        behavior = self.window.collectionBehavior()
-        behavior |= AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
-        behavior |= AppKit.NSWindowCollectionBehaviorStationary
-        self.window.setCollectionBehavior_(behavior)
-        
-        # Create canvas view
-        view = AppKit.NSView.alloc().initWithFrame_(rect)
-        view.setWantsLayer_(True)
-        view.layer().setBackgroundColor_(AppKit.NSColor.colorWithRed_green_blue_alpha_(0.11, 0.11, 0.11, 0.85).CGColor())
-        self.window.setContentView_(view)
-
-    def set_layout(self, x, y, width, height):
-        """Resize and reposition the overlay."""
-        width = max(60, int(width))
-        height = max(36, int(height))
-        x = max(0, min(int(x), max(0, self.parent_app.SCREEN_WIDTH - width)))
-        y = max(0, min(int(y), max(0, self.parent_app.SCREEN_HEIGHT - height)))
-        
-        self.width = width
-        self.height = height
-        
-        if self.window:
-            rect = Foundation.NSMakeRect(x, y, width, height)
-            self.window.setFrame_display_(rect, True)
-
-    def show(self):
-        """Show the overlay window."""
-        self.init_window()
-        if self.window and not self.visible:
-            self.window.orderFrontRegardless()
-            self.visible = True
-
-    def hide(self):
-        """Hide the overlay window."""
-        if self.window and self.visible:
-            self.window.orderOut_(None)
-            self.visible = False
-
-    def clear(self):
-        """Clear all drawn elements from the overlay."""
-        # For Cocoa, we just set background to dark
-        pass
-
-    def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
-        """Draw a box on the overlay (placeholder for Cocoa)."""
-        # Cocoa drawing would require custom NSView subclass with drawRect_
-        # For now, this is a placeholder
-        pass
-
 # Live Eyedropper - Can Be Safely Pasted In Other Macros
 class Eyedropper:
     """Encapsulates color picking eyedropper functionality."""
@@ -884,48 +620,9 @@ class Eyedropper:
         if self.window and self.window.winfo_exists():
             self.window.destroy()
         self.window = None
-# Status Overlay (Platform-Specific)
+# Status Overlay
 class StatusOverlay:
-    """Text-based status overlay - uses native Cocoa on macOS, Tkinter elsewhere."""
-
-    def __init__(self, parent_app):
-        self.parent_app = parent_app
-        
-        # Use native Cocoa on macOS if available, otherwise Tkinter
-        if sys.platform == "darwin" and AppKit is not None:
-            self.impl = CocoaStatusOverlay(parent_app)
-            self.is_cocoa = True
-        else:
-            self.impl = TkinterStatusOverlay(parent_app)
-            self.is_cocoa = False
-
-    def init_window(self):
-        """Initialize the overlay window."""
-        self.impl.init_window()
-
-    def show(self):
-        """Show the overlay."""
-        self.impl.show()
-
-    def hide(self):
-        """Hide the overlay."""
-        self.impl.hide()
-
-    def destroy(self):
-        """Destroy overlay completely."""
-        self.impl.destroy()
-
-    def set_line(self, text, row=1):
-        """Set text for a specific row."""
-        self.impl.set_line(text, row)
-
-    def clear(self):
-        """Clear all lines."""
-        self.impl.clear()
-
-# Tkinter Status Overlay (Windows/Linux)
-class TkinterStatusOverlay:
-    """Tkinter-based status overlay for Windows and Linux."""
+    """Encapsulates the text-based status overlay (v1 → v3 refactor)."""
 
     def __init__(self, parent_app):
         self.parent_app = parent_app
@@ -944,14 +641,21 @@ class TkinterStatusOverlay:
         self.window.geometry(f"260x180+20+40")
 
         # Remove title bar and transparency
-        self.window.overrideredirect(True)
-        self.window.attributes("-alpha", 0.93)
+        self.window.overrideredirect(True)  # Remove title bar on macOS
+        self.window.attributes("-alpha", 0.85)  # Optional Transparency
 
-        # General settings
+        # General settings for Windows and macOS compatibility
         self.window.attributes("-topmost", True)
         self.window.configure(bg="black")
+        _make_tk_window_non_focusable_macos(self.window)
 
-        # Disable Interaction On Windows
+        # Optional Transparency
+        try:
+            self.window.attributes("-alpha", 0.93)
+        except:
+            pass
+
+        # Disable Interaction On Windows (Same Intent As V1)
         if sys.platform.startswith("win"):
             try:
                 self.window.attributes("-disabled", True)
@@ -971,7 +675,7 @@ class TkinterStatusOverlay:
         )
         title.grid(row=0, column=0, pady=(8, 2), sticky="n")
 
-        # Create 7 Status Lines
+        # Create 7 Status Lines (Changed From 5 To 7)
         for row in range(1, 8):
             lbl = tk.Label(
                 self.window,
@@ -983,12 +687,16 @@ class TkinterStatusOverlay:
             lbl.grid(row=row, column=0, sticky="n")
             self.labels[row] = lbl
 
+    # Lifecycle
     def show(self):
         """Show the overlay."""
         self.init_window()
         if self.window and self.window.winfo_exists():
             self.window.deiconify()
-            self.window.lift()
+            if sys.platform == "darwin":
+                _make_tk_window_non_focusable_macos(self.window)
+            else:
+                self.window.lift()
 
     def hide(self):
         """Hide the overlay."""
@@ -1002,8 +710,10 @@ class TkinterStatusOverlay:
         self.window = None
         self.labels.clear()
 
+    # Content Control
+
     def set_line(self, text, row=1):
-        """Set text for a specific row."""
+        """Set text for a specific row (like ToolTip)."""
         if not self.window or not self.window.winfo_exists():
             return
 
@@ -1026,47 +736,9 @@ class TkinterStatusOverlay:
                 lbl.config(text="")
 
         self.window.after(0, _clear)
-# Fish/Perfect Cast Overlay (Platform-Specific)
+# Fish/Perfect Cast Overlay
 class FishOverlay:
-    """Fishing minigame overlay - uses native Cocoa on macOS, Tkinter elsewhere."""
-    def __init__(self, parent_app):
-        self.parent_app = parent_app
-        
-        # Use native Cocoa on macOS if available, otherwise Tkinter
-        if sys.platform == "darwin" and AppKit is not None:
-            self.impl = CocoaFishOverlay(parent_app)
-            self.is_cocoa = True
-        else:
-            self.impl = TkinterFishOverlay(parent_app)
-            self.is_cocoa = False
-
-    def init_window(self):
-        """Initialize the overlay window."""
-        self.impl.init_window()
-
-    def set_layout(self, x, y, width, height):
-        """Resize and reposition the overlay."""
-        self.impl.set_layout(x, y, width, height)
-
-    def show(self):
-        """Show the overlay window."""
-        self.impl.show()
-
-    def hide(self):
-        """Hide the overlay window."""
-        self.impl.hide()
-
-    def clear(self):
-        """Clear all drawn elements from the overlay."""
-        self.impl.clear()
-
-    def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
-        """Draw a box on the overlay."""
-        self.impl.draw(bar_center, box_size, color, canvas_offset, show_bar_center, bar_y1, bar_y2)
-
-# Tkinter Fish Overlay (Windows/Linux)
-class TkinterFishOverlay:
-    """Tkinter-based fishing minigame overlay for Windows and Linux."""
+    """Encapsulates the fishing minigame overlay visualization."""
     def __init__(self, parent_app):
         self.parent_app = parent_app
         self.window = None
@@ -1088,11 +760,12 @@ class TkinterFishOverlay:
         self.window.geometry(f"{self.width}x{self.height}+{overlay_x}+{overlay_y}")
         
         # Remove title bar and transparency
-        self.window.overrideredirect(True)
-        self.window.attributes("-alpha", 0.85)
+        self.window.overrideredirect(True)  # Remove title bar on macOS
+        self.window.attributes("-alpha", 0.85)  # Optional Transparency
 
-        # General settings
+        # General settings for Windows and macOS compatibility
         self.window.attributes("-topmost", True)
+        _make_tk_window_non_focusable_macos(self.window)
         self.canvas = tk.Canvas(
             self.window,
             width=self.width,
@@ -1127,7 +800,10 @@ class TkinterFishOverlay:
         self.init_window()
         if self.window and self.window.winfo_exists():
             self.window.deiconify()
-            self.window.lift()
+            if sys.platform == "darwin":
+                _make_tk_window_non_focusable_macos(self.window)
+            else:
+                self.window.lift()
 
     def hide(self):
         """Hide the overlay window."""
@@ -1261,14 +937,11 @@ class App(CTk):
         self.eyedropper = Eyedropper(self)
         self.status_overlay = StatusOverlay(self)
 
-        # Start Hotkey Listener
-        try:
-            self.key_listener = KeyListener(on_press=self.on_key_press)
-            self.key_listener.daemon = True
-            self.key_listener.start()
-        except Exception as e:
-            print("Error: ", e)
-            
+        # Start Hotkey Listener (this causes illegal hardware instructions on macOS)
+        self.key_listener = KeyListener(on_press=self.on_key_press)
+        self.key_listener.daemon = True
+        self.key_listener.start()
+
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
@@ -1404,15 +1077,6 @@ class App(CTk):
             corner_radius=8,
             command=self.refresh_config_dropdown
         ).grid(row=0, column=2, padx=12, pady=10, sticky="w")
-
-        self.download_btn = CTkButton(
-            basic_settings,
-            text="Download",
-            width=40,
-            corner_radius=8,
-            command=self.download_configs
-        )
-        self.download_btn.grid(row=0, column=3, padx=12, pady=10, sticky="w")
 
         CTkButton(basic_settings, text="Open Base Folder", corner_radius=8, 
                   command=self.open_base_folder,
@@ -1900,7 +1564,7 @@ class App(CTk):
         CTkLabel(logging, text="Logging Mode:").grid(row=1, column=0, padx=12, pady=10, sticky="w" )
         logging_mode_var = StringVar(value="Screenshot")
         self.vars["logging_mode"] = logging_mode_var
-        logging_cb = CTkComboBox(logging, values=["Screenshot", "Text", "File", "Disabled"], 
+        logging_cb = CTkComboBox(logging, values=["Screenshot", "Text", "Disabled"], 
                                variable=logging_mode_var, command=lambda v: self.set_status(f"Logging mode: {v}")
                                )
         logging_cb.grid(row=1, column=1, padx=12, pady=10, sticky="w")
@@ -2569,61 +2233,18 @@ class App(CTk):
             msg = (
                 "Missing required image files:\n\n"
                 + "\n".join(missing)
-                + "\n\nDo you want to download the config and images pack?"
+                + "\n\nDownload the latest image pack here:\n"
+                "https://drive.google.com/drive/folders/1e9tZwDtAaiYKTVFeArjWTIuztLgLg88a"
             )
 
-            result = messagebox.askyesno("Missing Images", msg)
-            if not result:
-                return False
+            try:
+                messagebox.showerror("Missing Images", msg)
+            except:
+                pass
 
-            self.download_configs()
+            return False
+
         return True
-    def download_configs(self):
-        """Download configs and image packs from Google Drive in the background."""
-        if getattr(self, "_download_in_progress", False):
-            self.set_status("Download already in progress…")
-            return
-        
-        self._download_in_progress = True
-        self._download_queue = _queue.Queue()
-        self._download_success = False
-
-        if hasattr(self, "download_btn"):
-            self.download_btn.configure(state="disabled")
-
-        self.set_status("Starting download…")
-
-        def _worker():
-            self._download_success = download_and_extract_packs(
-                status_callback=self._download_queue.put
-            )
-            self._download_queue.put(None)
-
-        threading.Thread(target=_worker, daemon=True).start()
-        self._poll_download_queue()
-
-    def _poll_download_queue(self):
-        try:
-            while True:
-                item = self._download_queue.get_nowait()
-                if item is None:
-                    if self._download_success:
-                        self.set_status("Completed: Packs installed successfully.")
-                    else:
-                        self.set_status("❌ Download failed. Install packs manually later.")
-
-                    if hasattr(self, "download_btn"):
-                        self.download_btn.configure(state="normal")
-
-                    self._download_in_progress = False
-                    return
-                else:
-                    self.set_status(item)
-        except _queue.Empty:
-            pass
-
-        self.after(100, self._poll_download_queue)
-
     # Key Press Functions
     def _apply_hotkeys_from_vars(self):
         """Apply hotkey StringVars to the live hotkey attributes used by on_key_press."""
@@ -2922,80 +2543,6 @@ class App(CTk):
             self.set_status(f"Error writing debug log: {e}")
     def test_logging(self):
         self.send_logging("**Logging is working**", "TEST", show_status=True)
-    def _auto_bug_report(self, error_text, phase="Unknown"):
-        """Send a text-only crash report to the bug report webhook or save to file."""
-        # Safely get values and reset state
-        self._set_fish_overlay_mode("idle")
-        logging_mode = self.vars["logging_mode"].get()
-        if logging_mode == "Disabled":
-            return
-
-        platform_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Prepare the report text
-        report_text = (
-            "Auto Bug Report\n"
-            f"Version: {APP_VERSION}\n"
-            f"Platform: {platform_name}\n"
-            f"Phase: {phase}\n"
-            f"Time: {timestamp}\n\n"
-            f"{error_text}"
-        )
-
-        if logging_mode == "File":
-            try:
-                log_dir = BASE_PATH
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, f"debug_{time.strftime('%Y-%m-%d')}.txt")
-                
-                log_entry = (
-                    "==================================================\n"
-                    "🐞 AUTO BUG REPORT\n"
-                    f"📂 Phase: {phase}\n"
-                    f"🕐 {timestamp}\n"
-                    "--------------------------------------------------\n"
-                    f"{report_text}\n"
-                    "==================================================\n\n"
-                )
-                
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(log_entry)
-                
-                self.set_status(f"Bug report saved to file ({phase})")
-                return
-            except Exception as e:
-                self.set_status(f"Error saving bug report to file: {e}")
-                return
-
-        webhook_url = self.vars["logging_url"].get()
-        logging_name = self.vars["logging_name"].get()
-        
-        crash_line = "Unknown"
-        for line in reversed(error_text.splitlines()):
-            if line.strip().startswith('File "') and ", line " in line:
-                crash_line = line.strip()
-                break
-
-        payload = {
-            "content": (
-                "**Auto Bug Report**\n"
-                f"Version: `{APP_VERSION}` | Platform: `{platform_name}` | Phase: `{phase}`\n"
-                f"Crash line: `{crash_line}`\n"
-                "Full traceback with line numbers is attached as text."
-            ),
-            "username": logging_name
-        }
-
-        try:
-            report_bytes = io.BytesIO(report_text.encode("utf-8"))
-            files = {"file": ("bug_report.txt", report_bytes, "text/plain")}
-            response = requests.post(webhook_url, data=payload, files=files, timeout=10)
-
-            if response.status_code not in (200, 204):
-                self.set_status(f"Error: Bug report failed: {response.status_code}")
-        except Exception as e:
-            self.set_status(f"Error sending bug report: {e}")
     def send_logging(self, text, loop_count, show_status=True):
         logging_mode = self.vars["logging_mode"].get()
         if logging_mode == "Disabled":
@@ -3019,11 +2566,7 @@ class App(CTk):
                 daemon=True
             )
         elif logging_mode == "File":
-            thread = threading.Thread(
-                target=self._debug_log_worker,
-                args=(text, loop_count, show_status),
-                daemon=True
-            )
+            pass
         else:
             thread = threading.Thread(
                 target=self._discord_text_worker,
@@ -4546,20 +4089,18 @@ class App(CTk):
 
             if error_message.startswith("Macro crashed during "):
                 phase = error_message[len("Macro crashed during "):].split(":", 1)[0].strip() or phase
-
-            self._auto_bug_report(error_text, phase)
                     
             if not self.macro_running:
                 return
             self.macro_running = False
             self._reset_pid_state()
             self.after(0, self.deiconify)  # Show Window Safely
-            self.set_status(f"Macro crashed during {phase}: {e}")
+            self.set_status(f"Macro crashed")
             if IS_COMPILED == True:
                 if sys.platform == "win32":
-                    messagebox.showerror(f"Macro crashed during {phase}", f"Error: {e}")
+                    messagebox.showerror(f"Macro crashed", error_text)
                 else:
-                    messagebox.showerror("why are you here", f"Macro crashed during {phase}\nError: {e}")
+                    messagebox.showerror("why are you here", error_text)
             else: # Explicitly Reveal The Bug And The Traceback During Development
                 raise ValueError("Bug found during development") from e
     def _check_logging_trigger(self):
@@ -5250,7 +4791,6 @@ class App(CTk):
         mouse_down = False
         controller_mode = 3
         previous_controller_mode = controller_mode
-        deadzone_action = 0
         self._pred_prev_fish_x = None
         self._pred_prev_bar_x = None
         self._pred_prev_time = None
@@ -5415,9 +4955,6 @@ class App(CTk):
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size
                         self._last_bar_center_x = (left_x + right_x) / 2.0
-            # Tracking threshold and Stabilize Threshold is auto calculated
-            tracking_threshold = (0 - round(((bar_size / fish_width) - 0.5), 2)) * 33 
-            thresh = (0 - round((bar_size / fish_width), 2)) * 15
             # Fish Direction-Jump Rejection
             if fish_x is not None:
                 if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:
@@ -5471,8 +5008,8 @@ class App(CTk):
                 elif track_notes == "off":
                     pass
                 # Compute Bar Left And Bar Right (Screen Coords)
-                bar_left_screen  = left_x  + fish_left - tracking_threshold if not left_x == None else None
-                bar_right_screen = right_x + fish_left + tracking_threshold if not right_x == None else None
+                bar_left_screen  = left_x  + fish_left if not left_x == None else None
+                bar_right_screen = right_x + fish_left if not right_x == None else None
                 # Check Max Left And Max Right
                 if fish_x == None:
                     fish_x = 0
@@ -5485,8 +5022,6 @@ class App(CTk):
                         controller_mode = 0
                         if self.vars["efficiency_mode"].get() == "on":
                             controller_mode = 5
-                    else:
-                        controller_mode = 1
             # Step 6: Draw Boxes
             self.fish_overlay.clear() # Make Sure To Clear Overlay
             if self.vars["fish_overlay"].get() == "on":
@@ -5509,22 +5044,12 @@ class App(CTk):
                 control = max((0 - pid_clamp), min(pid_clamp, control))
                 self.status_overlay.set_line(f"Distance: {round(control)}", row=5)
                 # Stabilize Deadzone Checker
-                if control > thresh:
-                    hold_mouse()
-                elif control < -thresh:
-                    release_mouse()
-                else:
-                    if deadzone_action == 1:
-                        hold_mouse()
-                    else:
-                        release_mouse()
-            elif controller_mode == 1 and bar_center is not None: # Simple Tracking
-                control = fish_x - bar_center
-                # Stabilize Deadzone Checker
                 if control > 0:
                     hold_mouse()
                 else:
                     release_mouse()
+            elif controller_mode == 1 and bar_center is not None: # Simple Tracking
+                pass # deleted
             elif controller_mode == 2:
                 hold_mouse()
             elif controller_mode == 3:
