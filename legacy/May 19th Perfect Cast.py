@@ -6,18 +6,6 @@ from tkinter import messagebox
 import json
 import os
 import subprocess
-import sys
-# Cocoa For macOS Overlays
-if sys.platform == "darwin":
-    try:
-        import AppKit
-        import Foundation
-    except ImportError:
-        AppKit = None
-        Foundation = None
-else:
-    AppKit = None
-    Foundation = None
 # Keyboard And Mouse
 from pynput import keyboard, mouse
 from pynput.keyboard import Controller as KeyboardController
@@ -47,7 +35,7 @@ import webbrowser
 # Utilities
 import requests
 import io
-import queue as _queue
+import math
 import gdown
 import shutil
 import traceback
@@ -98,6 +86,31 @@ def get_base_path():
     # Dev Mode → Project Directory
     return os.path.dirname(os.path.abspath(__file__)), compiled
 
+def verify_images_exist(required_files):
+    missing = []
+
+    for file in required_files:
+        path = os.path.join(IMAGES_PATH, file)
+        if not os.path.exists(path):
+            missing.append(file)
+
+    if missing:
+        msg = (
+            "Missing required image files:\n\n"
+            + "\n".join(missing)
+            + "\n\nDownload the latest image pack here:\n"
+            "https://drive.google.com/drive/folders/1e9tZwDtAaiYKTVFeArjWTIuztLgLg88a"
+        )
+
+        try:
+            messagebox.showerror("Missing Images", msg)
+        except:
+            pass
+
+        return False
+
+    return True
+
 BASE_PATH, IS_COMPILED = get_base_path()
 
 CONFIG_DIR = os.path.join(BASE_PATH, "configs")
@@ -105,7 +118,7 @@ IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 
 CONFIG_PATH = os.path.join(BASE_PATH, "last_config.json")
-APP_VERSION = "3.42"
+APP_VERSION = "3.41"
 
 set_appearance_mode("dark")
 
@@ -332,27 +345,6 @@ def download_and_extract_packs(status_callback=None):
         _status(f"Download/extract failed: {e}")
         return False
 
-# Pre-compiled transformation matrix (Display P3 -> sRGB approximation for OpenCV BGR)
-# Designed for cv2.transform() which expects an array of shape (1, 3, 3) or (3, 4)
-if sys.platform == "darwin":
-    # Columns are mapped to match BGR channel ordering
-    P3_TO_SRGB_MATRIX = np.array([
-        [ 1.0983, -0.0786, -0.0197],  # B_out depends heavily on B_in
-        [ 0.0000,  1.0720, -0.0720],  # G_out 
-        [ 0.0000, -0.2248,  1.2249]   # R_out depends heavily on R_in
-    ], dtype=np.float32)
-else:
-    P3_TO_SRGB_MATRIX = None
-
-def _correct_macos_color(frame):
-    """
-    Applies an optimized matrix transformation to correct Display P3 
-    colors back into standard sRGB space instantly on macOS.
-    """
-    if P3_TO_SRGB_MATRIX is not None:
-        # cv2.transform operates directly on the 3 channels very fast in C++
-        return cv2.transform(frame, P3_TO_SRGB_MATRIX)
-    return frame
 # Area Selector Class
 class AreaSelector:
     HANDLE_SIZE = 8
@@ -644,182 +636,6 @@ class AreaSelector:
             self.parent.set_status("Area selector closed")
         self.callback(self.shake, self.fish, self.friend, self.totem)
         self.window.destroy()
-# Cocoa Status Overlay (macOS only)
-class CocoaStatusOverlay:
-    """Native Cocoa status overlay for macOS."""
-    def __init__(self, parent_app):
-        self.parent_app = parent_app
-        self.window = None
-        self.text_fields = {}
-        self.visible = False
-
-    def init_window(self):
-        """Create native Cocoa window."""
-        if self.window:
-            return
-
-        # Create a borderless, non-activating panel
-        rect = Foundation.NSMakeRect(20, 40, 260, 180)
-        self.window = AppKit.NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-            rect,
-            AppKit.NSWindowStyleMaskBorderless,
-            AppKit.NSBackingStoreBuffered,
-            False
-        )
-        self.window.setTitle_("PyWare Status Overlay")
-        self.window.setLevel_(AppKit.NSScreenSaverWindowLevel)
-        self.window.setIgnoresMouseEvents_(True)
-        self.window.setOpaque_(False)
-        self.window.setBackgroundColor_(AppKit.NSColor.clearColor())
-        
-        # Make it always on top and not focusable
-        behavior = self.window.collectionBehavior()
-        behavior |= AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
-        behavior |= AppKit.NSWindowCollectionBehaviorStationary
-        self.window.setCollectionBehavior_(behavior)
-        
-        # Create content view with dark background
-        view = AppKit.NSView.alloc().initWithFrame_(rect)
-        view.setWantsLayer_(True)
-        view.layer().setBackgroundColor_(AppKit.NSColor.blackColor().CGColor())
-        
-        # Title
-        title_frame = Foundation.NSMakeRect(10, rect.size.height - 30, rect.size.width - 20, 20)
-        title_field = AppKit.NSTextField.alloc().initWithFrame_(title_frame)
-        title_field.setStringValue_("PyWare Fishing V3.42")
-        title_field.setTextColor_(AppKit.NSColor.redColor())
-        title_field.setBezeled_(False)
-        title_field.setDrawsBackground_(False)
-        title_field.setEditable_(False)
-        title_field.setSelectable_(False)
-        view.addSubview_(title_field)
-        
-        # Create 7 status line fields
-        for i in range(7):
-            y = rect.size.height - 45 - (i * 20)
-            text_field = AppKit.NSTextField.alloc().initWithFrame_(Foundation.NSMakeRect(10, y, rect.size.width - 20, 16))
-            text_field.setStringValue_("")
-            text_field.setTextColor_(AppKit.NSColor.whiteColor())
-            text_field.setBezeled_(False)
-            text_field.setDrawsBackground_(False)
-            text_field.setEditable_(False)
-            text_field.setSelectable_(False)
-            view.addSubview_(text_field)
-            self.text_fields[i + 1] = text_field
-        
-        self.window.setContentView_(view)
-
-    def show(self):
-        """Show the overlay."""
-        self.init_window()
-        if self.window and not self.visible:
-            self.window.orderFrontRegardless()
-            self.visible = True
-
-    def hide(self):
-        """Hide the overlay."""
-        if self.window and self.visible:
-            self.window.orderOut_(None)
-            self.visible = False
-
-    def destroy(self):
-        """Destroy overlay completely."""
-        if self.window:
-            self.window.close()
-            self.window = None
-        self.text_fields.clear()
-
-    def set_line(self, text, row=1):
-        """Set text for a specific row."""
-        if row in self.text_fields:
-            self.text_fields[row].setStringValue_(text)
-
-    def clear(self):
-        """Clear all lines."""
-        for field in self.text_fields.values():
-            field.setStringValue_("")
-
-# Cocoa Fish Overlay (macOS only)
-class CocoaFishOverlay:
-    """Native Cocoa fish overlay for macOS using a custom NSView."""
-    def __init__(self, parent_app):
-        self.parent_app = parent_app
-        self.window = None
-        self.visible = False
-        self.width = 800
-        self.height = 60
-
-    def init_window(self):
-        """Create native Cocoa window with canvas."""
-        if self.window:
-            return
-        
-        overlay_x = int(self.parent_app.SCREEN_WIDTH * 0.5) - int(self.width / 2)
-        overlay_y = int(self.parent_app.SCREEN_HEIGHT * 0.65)
-        
-        rect = Foundation.NSMakeRect(overlay_x, overlay_y, self.width, self.height)
-        self.window = AppKit.NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-            rect,
-            AppKit.NSWindowStyleMaskBorderless,
-            AppKit.NSBackingStoreBuffered,
-            False
-        )
-        self.window.setTitle_("PyWare Fish Overlay")
-        self.window.setLevel_(AppKit.NSScreenSaverWindowLevel)
-        self.window.setIgnoresMouseEvents_(True)
-        self.window.setOpaque_(False)
-        self.window.setBackgroundColor_(AppKit.NSColor.clearColor())
-        
-        # Make it always on top
-        behavior = self.window.collectionBehavior()
-        behavior |= AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
-        behavior |= AppKit.NSWindowCollectionBehaviorStationary
-        self.window.setCollectionBehavior_(behavior)
-        
-        # Create canvas view
-        view = AppKit.NSView.alloc().initWithFrame_(rect)
-        view.setWantsLayer_(True)
-        view.layer().setBackgroundColor_(AppKit.NSColor.colorWithRed_green_blue_alpha_(0.11, 0.11, 0.11, 0.85).CGColor())
-        self.window.setContentView_(view)
-
-    def set_layout(self, x, y, width, height):
-        """Resize and reposition the overlay."""
-        width = max(60, int(width))
-        height = max(36, int(height))
-        x = max(0, min(int(x), max(0, self.parent_app.SCREEN_WIDTH - width)))
-        y = max(0, min(int(y), max(0, self.parent_app.SCREEN_HEIGHT - height)))
-        
-        self.width = width
-        self.height = height
-        
-        if self.window:
-            rect = Foundation.NSMakeRect(x, y, width, height)
-            self.window.setFrame_display_(rect, True)
-
-    def show(self):
-        """Show the overlay window."""
-        self.init_window()
-        if self.window and not self.visible:
-            self.window.orderFrontRegardless()
-            self.visible = True
-
-    def hide(self):
-        """Hide the overlay window."""
-        if self.window and self.visible:
-            self.window.orderOut_(None)
-            self.visible = False
-
-    def clear(self):
-        """Clear all drawn elements from the overlay."""
-        # For Cocoa, we just set background to dark
-        pass
-
-    def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
-        """Draw a box on the overlay (placeholder for Cocoa)."""
-        # Cocoa drawing would require custom NSView subclass with drawRect_
-        # For now, this is a placeholder
-        pass
-
 # Live Eyedropper - Can Be Safely Pasted In Other Macros
 class Eyedropper:
     """Encapsulates color picking eyedropper functionality."""
@@ -884,48 +700,9 @@ class Eyedropper:
         if self.window and self.window.winfo_exists():
             self.window.destroy()
         self.window = None
-# Status Overlay (Platform-Specific)
+# Status Overlay
 class StatusOverlay:
-    """Text-based status overlay - uses native Cocoa on macOS, Tkinter elsewhere."""
-
-    def __init__(self, parent_app):
-        self.parent_app = parent_app
-        
-        # Use native Cocoa on macOS if available, otherwise Tkinter
-        if sys.platform == "darwin" and AppKit is not None:
-            self.impl = CocoaStatusOverlay(parent_app)
-            self.is_cocoa = True
-        else:
-            self.impl = TkinterStatusOverlay(parent_app)
-            self.is_cocoa = False
-
-    def init_window(self):
-        """Initialize the overlay window."""
-        self.impl.init_window()
-
-    def show(self):
-        """Show the overlay."""
-        self.impl.show()
-
-    def hide(self):
-        """Hide the overlay."""
-        self.impl.hide()
-
-    def destroy(self):
-        """Destroy overlay completely."""
-        self.impl.destroy()
-
-    def set_line(self, text, row=1):
-        """Set text for a specific row."""
-        self.impl.set_line(text, row)
-
-    def clear(self):
-        """Clear all lines."""
-        self.impl.clear()
-
-# Tkinter Status Overlay (Windows/Linux)
-class TkinterStatusOverlay:
-    """Tkinter-based status overlay for Windows and Linux."""
+    """Encapsulates the text-based status overlay (v1 → v3 refactor)."""
 
     def __init__(self, parent_app):
         self.parent_app = parent_app
@@ -938,20 +715,25 @@ class TkinterStatusOverlay:
             return
 
         self.window = tk.Toplevel(self.parent_app)
-        self.window.title("PyWare Status Overlay")
 
         # Position (Top-Left Like V1)
         self.window.geometry(f"260x180+20+40")
 
         # Remove title bar and transparency
-        self.window.overrideredirect(True)
-        self.window.attributes("-alpha", 0.93)
+        self.window.overrideredirect(True)  # Remove title bar on macOS
+        self.window.attributes("-alpha", 0.85)  # Optional Transparency
 
-        # General settings
+        # General settings for Windows and macOS compatibility
         self.window.attributes("-topmost", True)
         self.window.configure(bg="black")
 
-        # Disable Interaction On Windows
+        # Optional Transparency
+        try:
+            self.window.attributes("-alpha", 0.93)
+        except:
+            pass
+
+        # Disable Interaction On Windows (Same Intent As V1)
         if sys.platform.startswith("win"):
             try:
                 self.window.attributes("-disabled", True)
@@ -964,14 +746,14 @@ class TkinterStatusOverlay:
         # Title
         title = tk.Label(
             self.window,
-            text="PyWare Fishing V3.42",
+            text="PyWare Fishing V3.41",
             fg="#ca0000",
             bg="black",
             font=("Segoe UI", 12, "bold")
         )
         title.grid(row=0, column=0, pady=(8, 2), sticky="n")
 
-        # Create 7 Status Lines
+        # Create 7 Status Lines (Changed From 5 To 7)
         for row in range(1, 8):
             lbl = tk.Label(
                 self.window,
@@ -983,6 +765,7 @@ class TkinterStatusOverlay:
             lbl.grid(row=row, column=0, sticky="n")
             self.labels[row] = lbl
 
+    # Lifecycle
     def show(self):
         """Show the overlay."""
         self.init_window()
@@ -1002,8 +785,10 @@ class TkinterStatusOverlay:
         self.window = None
         self.labels.clear()
 
+    # Content Control
+
     def set_line(self, text, row=1):
-        """Set text for a specific row."""
+        """Set text for a specific row (like ToolTip)."""
         if not self.window or not self.window.winfo_exists():
             return
 
@@ -1026,47 +811,9 @@ class TkinterStatusOverlay:
                 lbl.config(text="")
 
         self.window.after(0, _clear)
-# Fish/Perfect Cast Overlay (Platform-Specific)
+# Fish/Perfect Cast Overlay
 class FishOverlay:
-    """Fishing minigame overlay - uses native Cocoa on macOS, Tkinter elsewhere."""
-    def __init__(self, parent_app):
-        self.parent_app = parent_app
-        
-        # Use native Cocoa on macOS if available, otherwise Tkinter
-        if sys.platform == "darwin" and AppKit is not None:
-            self.impl = CocoaFishOverlay(parent_app)
-            self.is_cocoa = True
-        else:
-            self.impl = TkinterFishOverlay(parent_app)
-            self.is_cocoa = False
-
-    def init_window(self):
-        """Initialize the overlay window."""
-        self.impl.init_window()
-
-    def set_layout(self, x, y, width, height):
-        """Resize and reposition the overlay."""
-        self.impl.set_layout(x, y, width, height)
-
-    def show(self):
-        """Show the overlay window."""
-        self.impl.show()
-
-    def hide(self):
-        """Hide the overlay window."""
-        self.impl.hide()
-
-    def clear(self):
-        """Clear all drawn elements from the overlay."""
-        self.impl.clear()
-
-    def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
-        """Draw a box on the overlay."""
-        self.impl.draw(bar_center, box_size, color, canvas_offset, show_bar_center, bar_y1, bar_y2)
-
-# Tkinter Fish Overlay (Windows/Linux)
-class TkinterFishOverlay:
-    """Tkinter-based fishing minigame overlay for Windows and Linux."""
+    """Encapsulates the fishing minigame overlay visualization."""
     def __init__(self, parent_app):
         self.parent_app = parent_app
         self.window = None
@@ -1080,7 +827,6 @@ class TkinterFishOverlay:
             return
 
         self.window = tk.Toplevel(self.parent_app)
-        self.window.title("PyWare Fish Overlay")
 
         # Position
         overlay_x = int(self.parent_app.SCREEN_WIDTH * 0.5) - int(self.width / 2)
@@ -1088,10 +834,10 @@ class TkinterFishOverlay:
         self.window.geometry(f"{self.width}x{self.height}+{overlay_x}+{overlay_y}")
         
         # Remove title bar and transparency
-        self.window.overrideredirect(True)
-        self.window.attributes("-alpha", 0.85)
+        self.window.overrideredirect(True)  # Remove title bar on macOS
+        self.window.attributes("-alpha", 0.85)  # Optional Transparency
 
-        # General settings
+        # General settings for Windows and macOS compatibility
         self.window.attributes("-topmost", True)
         self.canvas = tk.Canvas(
             self.window,
@@ -1261,18 +1007,15 @@ class App(CTk):
         self.eyedropper = Eyedropper(self)
         self.status_overlay = StatusOverlay(self)
 
-        # Start Hotkey Listener
-        try:
-            self.key_listener = KeyListener(on_press=self.on_key_press)
-            self.key_listener.daemon = True
-            self.key_listener.start()
-        except Exception as e:
-            print("Error: ", e)
-            
+        # Start Hotkey Listener (this causes illegal hardware instructions on macOS)
+        self.key_listener = KeyListener(on_press=self.on_key_press)
+        self.key_listener.daemon = True
+        self.key_listener.start()
+
         # Create Window
         self.configure(fg_color="#181836")   # <- Main Window Ultra Dark
         self.geometry("800x600")
-        self.title("PyWare Fishing V3.42")
+        self.title("PyWare Fishing V3.41")
 
         # Status Bar
         self.grid_columnconfigure(0, weight=1)
@@ -1287,7 +1030,7 @@ class App(CTk):
         # Logo Label
         logo_label = CTkLabel(
             top_bar, 
-            text="PYWARE FISHING V3.42",
+            text="PYWARE FISHING V3.41",
             font=CTkFont(size=16, weight="bold")
         )
         logo_label.grid(row=0, column=0, sticky="w")
@@ -1407,7 +1150,7 @@ class App(CTk):
 
         self.download_btn = CTkButton(
             basic_settings,
-            text="Download",
+            text="⬇️",
             width=40,
             corner_radius=8,
             command=self.download_configs
@@ -1646,13 +1389,6 @@ class App(CTk):
         sw.grid(row=4, column=1, padx=12, pady=8, sticky="w")
         self.switches["click_after_minigame"] = sw
 
-        # hdr = self.vars["hdr"].get()
-        hdr_var = StringVar(value="off")
-        self.vars["hdr"] = hdr_var
-        sw = CTkSwitch(toggles, text="HDR", variable=hdr_var, onvalue="on", offvalue="off")
-        sw.grid(row=5, column=0, padx=12, pady=8, sticky="w")
-        self.switches["hdr"] = sw
-
         CTkLabel(toggles, text="Misc", font=CTkFont(size=14, weight="bold")).grid(row=0, column=2, padx=12, pady=8, sticky="w")
 
         CTkLabel(toggles, text="Select Rod Duration").grid(row=1, column=2, padx=12, pady=8, sticky="w")
@@ -1752,29 +1488,6 @@ class App(CTk):
         perfect_release_delay_entry = CTkEntry(self.perfect_casting, width=120, textvariable=perfect_release_delay_var)
         perfect_release_delay_entry.grid(row=3, column=3, padx=12, pady=10, sticky="w")
 
-        CTkLabel(self.perfect_casting, text="Release Band Adjustments (ms)", font=CTkFont(size=14, weight="bold")).grid(row=4, column=0, columnspan=4, padx=12, pady=(18, 8), sticky="w")
-        CTkLabel(self.perfect_casting, text="+ releases earlier, - releases later").grid(row=5, column=0, columnspan=4, padx=12, pady=(0, 8), sticky="w")
-        perfect_cast_bands = [
-            ("<700 px/s", "perfect_cast_timing_700"),
-            ("700-800 px/s", "perfect_cast_timing_800"),
-            ("800-900 px/s", "perfect_cast_timing_900"),
-            ("900-1000 px/s", "perfect_cast_timing_1000"),
-            ("1000-1100 px/s", "perfect_cast_timing_1100"),
-            ("1100-1200 px/s", "perfect_cast_timing_1200"),
-            ("1200-1300 px/s", "perfect_cast_timing_1300"),
-            ("1300-1400 px/s", "perfect_cast_timing_1400"),
-            ("1400-1500 px/s", "perfect_cast_timing_1500"),
-            ("1500-1600 px/s", "perfect_cast_timing_1600"),
-            ("1600+ px/s", "perfect_cast_timing_1600plus"),
-        ]
-        for idx, (label, key) in enumerate(perfect_cast_bands):
-            row = 6 + idx // 2
-            col = (idx % 2) * 2
-            CTkLabel(self.perfect_casting, text=label).grid(row=row, column=col, padx=12, pady=6, sticky="w")
-            band_var = StringVar(value="0")
-            self.vars[key] = band_var
-            CTkEntry(self.perfect_casting, width=120, textvariable=band_var).grid(row=row, column=col + 1, padx=12, pady=6, sticky="w")
-
         shake_configuration = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         shake_configuration.grid(row=3, column=0, padx=20, pady=20, sticky="nw")
         # Shake Configuration
@@ -1852,16 +1565,6 @@ class App(CTk):
                                )
         arrow_cb.grid(row=3, column=1, padx=12, pady=10, sticky="w")
         self.comboboxes["arrow_method"] = arrow_cb
-
-        CTkLabel(ratio_settings, text="Line Bar Ratio:").grid(row=4, column=0, padx=12, pady=10, sticky="w")
-        line_bar_ratio_var = StringVar(value="0.45")
-        self.vars["fish_line_bar_ratio"] = line_bar_ratio_var
-        CTkEntry(ratio_settings, width=120, textvariable=line_bar_ratio_var).grid(row=4, column=1, padx=12, pady=10, sticky="w")
-
-        CTkLabel(ratio_settings, text="Min Line Density:").grid(row=4, column=2, padx=12, pady=10, sticky="w")
-        line_min_density_var = StringVar(value="0.8")
-        self.vars["fish_line_min_density"] = line_min_density_var
-        CTkEntry(ratio_settings, width=120, textvariable=line_min_density_var).grid(row=4, column=3, padx=12, pady=10, sticky="w")
 
         pid_settings = CTkFrame(scroll, border_width=2, border_color = "#364167", fg_color = "#222244")
         pid_settings.grid(row=5, column=0, padx=20, pady=20, sticky="nw")
@@ -2014,21 +1717,6 @@ class App(CTk):
         return lambda: webbrowser.open(url)
     def set_status(self, text, key=None):
         self.status_label.configure(text=text)
-    def _get_var_number(self, key, default, cast=float):
-        """Read a numeric GUI setting with a safe fallback."""
-        try:
-            value = self.vars.get(key)
-            if value is None:
-                return default
-            raw_value = value.get() if hasattr(value, "get") else value
-            if raw_value in ("", None):
-                return default
-            return cast(raw_value)
-        except Exception:
-            return default
-    def _get_rod_specific_setting(self, key, default):
-        """Compatibility shim for comet.py-derived settings now stored in self.vars."""
-        return self._get_var_number(key, default, float)
     # Get Config List To Save
     def get_config_list(self):
         if not os.path.exists(CONFIG_DIR):
@@ -2236,7 +1924,7 @@ class App(CTk):
             print(f"Error loading switches: {e}")
         # Verify required images exist for totem detection
         required_images = ["sun.png", "moon.png"]
-        if self.verify_images_exist(required_images) == False:
+        if verify_images_exist(required_images) == False:
             return  # Stop Instead Of Crashing
         self.set_status(f"Config loaded: {name}")
     
@@ -2557,33 +2245,14 @@ class App(CTk):
             for key in color_keys
             if key in self.default_settings_data
         }
-    def verify_images_exist(self, required_files):
-        missing = []
-
-        for file in required_files:
-            path = os.path.join(IMAGES_PATH, file)
-            if not os.path.exists(path):
-                missing.append(file)
-
-        if missing:
-            msg = (
-                "Missing required image files:\n\n"
-                + "\n".join(missing)
-                + "\n\nDo you want to download the config and images pack?"
-            )
-
-            result = messagebox.askyesno("Missing Images", msg)
-            if not result:
-                return False
-
-            self.download_configs()
-        return True
     def download_configs(self):
         """Download configs and image packs from Google Drive in the background."""
         if getattr(self, "_download_in_progress", False):
             self.set_status("Download already in progress…")
             return
-        
+
+        import queue as _queue
+
         self._download_in_progress = True
         self._download_queue = _queue.Queue()
         self._download_success = False
@@ -2603,6 +2272,8 @@ class App(CTk):
         self._poll_download_queue()
 
     def _poll_download_queue(self):
+        import queue as _queue
+
         try:
             while True:
                 item = self._download_queue.get_nowait()
@@ -2783,9 +2454,16 @@ class App(CTk):
             except ValueError:
                 return None
         return None
-    # Click At X/Y Position
+    # Click At X/Y Position (Using Ctypes)
     def _click_at(self, x, y, click_count=1):
+        click_mode = 2 # Will Be Replaced Later
         if sys.platform == "win32":
+            click_mode = 0
+        elif sys.platform == "darwin":
+            click_mode = 1
+        else:
+            click_mode = 2
+        if click_mode == 0:
             # Move Cursor
             windll.SetCursorPos(x, y)
             # Important: Tiny Movement So Roblox Registers Input
@@ -2795,7 +2473,7 @@ class App(CTk):
                 windll.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
                 if i < click_count - 1:
                     time.sleep(0.03)
-        elif sys.platform == "darwin":
+        elif click_mode == 1:
             x = int(x)
             y = int(y)
 
@@ -2811,7 +2489,7 @@ class App(CTk):
 
                 if i < click_count - 1:
                     time.sleep(0.03)
-        else:
+        elif click_mode == 2:
             mouse_controller.position = (x, y)
             time.sleep(0.01)
             # Jitter To Prevent Roblox From Crashing
@@ -3162,8 +2840,6 @@ class App(CTk):
         height = bottom - top
         if width <= 0 or height <= 0:
             return None
-        
-        hdr = self.vars["hdr"].get()
 
         # Use a local dict rather than self._monitor to avoid concurrent mutation
         m = {"left": left, "top": top, "width": width, "height": height}
@@ -3175,14 +2851,9 @@ class App(CTk):
         # MSS Returns BGRA. We convert the memory view to a standard numpy array safely.
         frame = np.array(img, dtype=np.uint8) 
         
-        # Slice to BGR (dropping Alpha channel).
-        bgr_frame = frame[:, :, :3]
-        
-        # Mathematical shift correction safely applied for macOS stability
-        if hdr == "on":
-            return _correct_macos_color(bgr_frame)
-        else:
-            return bgr_frame
+        # Slice to BGR (dropping Alpha channel). 
+        # Note: On macOS, raw P3 colors may still stretch your hex values.
+        return frame[:, :, :3]
     
     def _grab_screen_full(self, thread_local):
         scale = self._get_scale_factor()
@@ -3198,21 +2869,14 @@ class App(CTk):
                 "height": int(self.SCREEN_HEIGHT * scale)
             }
 
-        hdr = self.vars["hdr"].get()
-
         m = thread_local.monitor
         img = thread_local.sct.grab(m)
 
         # Convert the mss image object directly to a numpy array to handle channel alignment
         frame = np.array(img, dtype=np.uint8)
         
-        bgr_frame = frame[:, :, :3]
-        
-        # Mathematical shift correction safely applied for macOS stability
-        if hdr == "on":
-            return _correct_macos_color(bgr_frame)
-        else:
-            return bgr_frame
+        return frame[:, :, :3]
+
     def _capture_loop_full(self, stop_event, scan_delay):
         thread_local = threading.local()
 
@@ -3220,7 +2884,8 @@ class App(CTk):
         # Enforce A Minimum Sleep So We Don'T Saturate The Cpu And Starve The Game
         # And The Pid Thread.  At 20 Fps A Frame Is ~0.05 S; Floor At 0.033 S
         # (~30 Fps) So We Never Spin Faster Than The Game Can Produce New Pixels.
-        _mac_floor = 0.033 if sys.platform == "darwin" else 0.0
+        import sys as _sys
+        _mac_floor = 0.033 if _sys.platform == "darwin" else 0.0
 
         try:
             while self.macro_running and not stop_event.is_set():
@@ -3283,7 +2948,8 @@ class App(CTk):
         stop_event = threading.Event()
         self._active_capture_stop = stop_event  # Track The Active Stop Event
 
-        _mac_floor = 0.033 if sys.platform == "darwin" else 0.0
+        import sys as _sys
+        _mac_floor = 0.033 if _sys.platform == "darwin" else 0.0
 
         def _loop():
             try:
@@ -3999,9 +3665,9 @@ class App(CTk):
             required_fish_pixels = 10
         # macOS Tolerance Buffer To Make Configs Cross-Compatible
         if sys.platform == "darwin":
-            left_tol += 2
-            right_tol += 2
-            fish_tol += 2
+            left_tol += 15
+            right_tol += 15
+            fish_tol += 15
         fish_center = self._find_color_cluster(frame, fish_hex, fish_tol, required_fish_pixels)
         try:
             fish_center = fish_center[0]
@@ -4758,27 +4424,6 @@ class App(CTk):
         time.sleep(duration)  # Adjust Cast Strength
         mouse_controller.release(Button.left)
         time.sleep(delay)  # Wait For Cast To Register In Fisch
-    @staticmethod
-    def _calculate_speed_and_predict(white_positions, timestamps):
-        """
-        Calculate white pixel movement speed using linear regression on recent
-        positions for smooth, stable velocity estimation.
-        Returns velocity in pixels/second (positive = moving down, negative = up),
-        or None if insufficient data.
-        """
-        if len(white_positions) < 2:
-            return None
-        n = len(white_positions)
-        y_values = [pos[1] for pos in white_positions]
-        time_values = [t - timestamps[0] for t in timestamps]
-        mean_t = sum(time_values) / n
-        mean_y = sum(y_values) / n
-        numerator = sum(t * y for t, y in zip(time_values, y_values)) - n * mean_t * mean_y
-        denominator = sum(t * t for t in time_values) - n * mean_t * mean_t
-        if abs(denominator) < 0.0001:
-            return None
-        return numerator / denominator
-
     def _execute_cast_perfect(self):
         """
         Scans for green and white Y coordinates and releases left click when
@@ -4801,26 +4446,30 @@ class App(CTk):
 
         max_time = float(self.vars["perfect_max_time"].get())
         scan_delay = float(self.vars["cast_scan_delay"].get())
+        release_delay = float(self.vars["perfect_release_delay"].get())
+        perfect_threshold = float(self.vars["perfect_threshold"].get())
+
         delay_before_casting = float(self.vars["delay_before_casting"].get())
         cast_delay = float(self.vars["cast_delay"].get())
 
+        # Idiotproof-Style Release Timing:
+        # Negative Values Release Earlier Via Prediction Multiplier, Positive Values
+        # Push The Release Threshold Closer To 100%.
+        release_timing = max(-50.0, min(50.0, release_delay))
+
         target_green = np.array(self._hex_to_bgr(green_color), dtype=np.int32)
         target_white = np.array(self._hex_to_bgr(white_color), dtype=np.int32)
-
-        # Resolution scaling: velocity bands are tuned at 1440p height
-        scaling_factor = self.SCREEN_HEIGHT / 1440.0
 
         tracking_mode = False
         green_left_x = None
         green_right_x = None
         green_y = None
         green_padding = 50
-
-        # Velocity tracking — up to 5 samples for linear regression
-        white_positions = []    # (x, y) in region-relative coords
-        white_timestamps = []   # parallel perf_counter values
-        MAX_VELOCITY_SAMPLES = 5
-        last_time_to_impact = None
+        reached_bottom_5_percent = True  # Always Allow Release; The "Bottom 5%" Gate Was Preventing Release When Xs Start Already Close Together
+        last_fill_percentage = None
+        last_frame_time = None
+        speed_samples = []
+        max_speed_samples = 20
 
         if sys.platform == "darwin":
             white_tol += 15
@@ -4833,16 +4482,17 @@ class App(CTk):
 
         def reset_tracking():
             nonlocal tracking_mode, green_left_x, green_right_x, green_y
-            nonlocal last_time_to_impact
+            nonlocal reached_bottom_5_percent, last_fill_percentage, last_frame_time
             tracking_mode = False
             green_left_x = None
             green_right_x = None
             green_y = None
-            last_time_to_impact = None
-            white_positions.clear()
-            white_timestamps.clear()
+            reached_bottom_5_percent = True  # Keep Release Always Enabled On Re-Track
+            last_fill_percentage = None
+            last_frame_time = None
+            speed_samples.clear()
 
-        # Start Capture Thread; This Remains The Existing V3.42 Capture Path.
+        # Start Capture Thread; This Remains The Existing V3.41 Capture Path.
         stop_event = self._start_capture(scan_delay)
         start_time = time.time()
         if self.vars["fish_overlay"].get() == "Enabled":
@@ -4941,118 +4591,86 @@ class App(CTk):
                 self._fish_overlay_cast_bounds = (cast_left, cast_top, cast_right, cast_bottom)
                 self.after(0, self._apply_fish_overlay_state)
 
-            # --- Overlay ---
+            current_time = time.time()
+            actual_fill_percentage = (1 - (current_distance / total_distance)) * 100
+            fill_speed = 0.0
+            position_offset_percent = 0.0
+
+            if last_fill_percentage is not None and last_frame_time is not None:
+                time_delta = current_time - last_frame_time
+                if time_delta > 0:
+                    fill_change = actual_fill_percentage - last_fill_percentage
+
+                    if fill_change < -50:
+                        last_fill_percentage = None
+                        last_frame_time = None
+                        reached_bottom_5_percent = False
+                        speed_samples.clear()
+                    elif fill_change > 0:
+                        instant_fill_speed = fill_change / time_delta
+                        speed_samples.append(instant_fill_speed)
+                        if len(speed_samples) > max_speed_samples:
+                            speed_samples.pop(0)
+
+            if speed_samples:
+                fill_speed = sum(speed_samples) / len(speed_samples)
+                base_offset = 1.5 * math.log(1 + fill_speed / 25.0) # Find
+
+                if release_timing < 0:
+                    base_multiplier = 1.0 - (release_timing / 5.0)
+                    speed_scale = min(6.0, (fill_speed / 100.0) ** 2)
+                    timing_multiplier = 1.0 + (base_multiplier - 1.0) * speed_scale
+                    position_offset_percent = max(0.0, min(50.0, base_offset * timing_multiplier))
+                else:
+                    position_offset_percent = max(0.0, min(50.0, base_offset))
+
+            predicted_fill_percentage = actual_fill_percentage + position_offset_percent
+            offset_pixels = int((position_offset_percent / 100.0) * total_distance)
+            predicted_white_y_top = white_y_top - offset_pixels
+            self.status_overlay.set_line(f"White Y: {predicted_white_y_top}", row=4)
+
+            bottom_threshold = 5.0 + position_offset_percent
+            if predicted_fill_percentage <= bottom_threshold and not reached_bottom_5_percent:
+                reached_bottom_5_percent = True
+                last_fill_percentage = None
+                last_frame_time = None
+                speed_samples.clear()
+
             if self._is_fish_overlay_enabled():
                 cast_height = max(1, white_y_bottom - green_y)
                 green_ratio = 0.0
-                white_ratio = current_distance / cast_height
+                white_ratio = (predicted_white_y_top - green_y) / cast_height
                 white_ratio = max(0.0, min(1.0, white_ratio))
                 draw_x = self.fish_overlay.width / 2
                 bar_height = 0.08
+                # Green marker
                 self.after(0, lambda: self.fish_overlay.draw(
-                    bar_center=draw_x, box_size=15, color="green", canvas_offset=0,
+                    bar_center=draw_x,
+                    box_size=15,
+                    color="green",
+                    canvas_offset=0,
                     bar_y1=max(0.0, green_ratio - bar_height / 2),
                     bar_y2=min(1.0, green_ratio + bar_height / 2)
                 ))
+                # White marker
                 self.after(0, lambda: self.fish_overlay.draw(
-                    bar_center=draw_x, box_size=30, color="white", canvas_offset=0,
+                    bar_center=draw_x,
+                    box_size=30,
+                    color="white",
+                    canvas_offset=0,
                     bar_y1=max(0.0, white_ratio - bar_height / 2),
                     bar_y2=min(1.0, white_ratio + bar_height / 2)
                 ))
+            if release_timing <= 0:
+                release_threshold = perfect_threshold
+            else:
+                release_threshold = perfect_threshold + (release_timing / 50.0) * 4.5
 
-            # --- Velocity tracking ---
-            now_pc = time.perf_counter()
-            white_positions.append((0, white_y_top))   # x is irrelevant; track Y only
-            white_timestamps.append(now_pc)
-            if len(white_positions) > MAX_VELOCITY_SAMPLES:
-                white_positions.pop(0)
-                white_timestamps.pop(0)
-
-            self.status_overlay.set_line(f"White Y: {white_y_top}", row=4)
-
-            # local_distance: pixels remaining until white reaches green
-            local_distance = current_distance  # white_y_top - green_y; positive = white below green
-
-            # --- Velocity-band predictive release ---
-            released = False
-            if len(white_positions) >= 3:
-                velocity_y = self._calculate_speed_and_predict(white_positions, white_timestamps)
-                min_speed = 5 * scaling_factor
-                if velocity_y is not None and abs(velocity_y) > min_speed:
-                    white_above_green = white_y_top < green_y
-                    moving_toward_green = (white_above_green and velocity_y > 0) or (not white_above_green and velocity_y < 0)
-                    if moving_toward_green and local_distance > 0:
-                        time_to_impact = local_distance / abs(velocity_y)
-
-                        # Bounce/miss detection: if TtI suddenly grows when very close, we passed green
-                        bounce_threshold = 40 * scaling_factor
-                        if last_time_to_impact is not None and local_distance < bounce_threshold:
-                            if time_to_impact > last_time_to_impact * 1.3:
-                                mouse_controller.release(Button.left)
-                                released = True
-
-                        if not released:
-                            # Velocity-band reaction delays (tuned at 1440p)
-                            v = abs(velocity_y)
-                            if v < 700 * scaling_factor:
-                                reaction_delay = 0.060
-                                timing_key = "perfect_cast_timing_700"
-                            elif v < 800 * scaling_factor:
-                                reaction_delay = 0.058
-                                timing_key = "perfect_cast_timing_800"
-                            elif v < 900 * scaling_factor:
-                                reaction_delay = 0.057
-                                timing_key = "perfect_cast_timing_900"
-                            elif v < 1000 * scaling_factor:
-                                reaction_delay = 0.056
-                                timing_key = "perfect_cast_timing_1000"
-                            elif v < 1100 * scaling_factor:
-                                reaction_delay = 0.055
-                                timing_key = "perfect_cast_timing_1100"
-                            elif v < 1200 * scaling_factor:
-                                reaction_delay = 0.050
-                                timing_key = "perfect_cast_timing_1200"
-                            elif v < 1300 * scaling_factor:
-                                reaction_delay = 0.048
-                                timing_key = "perfect_cast_timing_1300"
-                            elif v < 1400 * scaling_factor:
-                                reaction_delay = 0.047
-                                timing_key = "perfect_cast_timing_1400"
-                            elif v < 1500 * scaling_factor:
-                                reaction_delay = 0.046
-                                timing_key = "perfect_cast_timing_1500"
-                            elif v < 1600 * scaling_factor:
-                                reaction_delay = 0.050
-                                timing_key = "perfect_cast_timing_1600"
-                            else:
-                                reaction_delay = 0.049
-                                timing_key = "perfect_cast_timing_1600plus"
-
-                            timing_adjustment_ms = self._get_var_number(timing_key, 0, int)
-                            reaction_delay += timing_adjustment_ms * 0.001
-
-                            if time_to_impact <= reaction_delay:
-                                mouse_controller.release(Button.left)
-                                released = True
-
-                        last_time_to_impact = time_to_impact
-
-            # Slow-speed / emergency distance fallbacks
-            if not released:
-                slow_threshold = total_distance * 0.05  # within 5% of green
-                emergency_threshold = total_distance * 0.025
-                if local_distance <= emergency_threshold:
-                    mouse_controller.release(Button.left)
-                    released = True
-                elif local_distance <= slow_threshold and len(white_positions) >= 3:
-                    # Confirm approach: latest distance < oldest distance
-                    recent_dists = [p[1] - green_y for p in white_positions[-3:]]
-                    if recent_dists[-1] < recent_dists[0]:
-                        mouse_controller.release(Button.left)
-                        released = True
-
-            if released:
+            if reached_bottom_5_percent and predicted_fill_percentage >= release_threshold:
                 break
+
+            last_fill_percentage = actual_fill_percentage
+            last_frame_time = current_time
 
             if time.time() - start_time > max_time:
                 break
@@ -5267,19 +4885,6 @@ class App(CTk):
         scan_delay = float(self.vars["minigame_scan_delay"].get() or 0.05)
         lock_cursor = (self.vars["lock_cursor"].get())
         fishing_mode = (self.vars["fishing_mode"].get())
-        if fishing_mode == "Line":
-            bar_ratio = self._get_var_number("fish_line_bar_ratio", 0.45)
-            line_lost_timeout = restart_delay
-            self._line_state = {
-                'initial_target_gap': None,
-                'last_target_left_x': None,
-                'last_target_right_x': None,
-                'last_left_bar_x': None,
-                'last_right_bar_x': None,
-                'is_initial_run': True
-            }
-        else:
-            line_lost_timeout = 0.0
         try:
             note_box_tol = int(self.vars["note_box_tolerance"].get() or 8)
             arrow_tol = int(self.vars["arrow_tolerance"].get() or 8)
@@ -5293,7 +4898,6 @@ class App(CTk):
         self.scan_height_ratio = None
         self._last_should_hold = False
         self._last_input_time = 0
-        last_line_seen_time = time.perf_counter()
         # Hold And Release Mouse
         def hold_mouse():
             nonlocal mouse_down
@@ -5345,16 +4949,6 @@ class App(CTk):
                 fish_x = fish_x[0] + fish_left
             else:
                 fish_x = fish_x + fish_left
-            if fishing_mode == "Line":
-                line_has_full_detection = fish_x is not None and left_x is not None and right_x is not None
-                if line_has_full_detection:
-                    last_line_seen_time = time.perf_counter()
-                elif time.perf_counter() - last_line_seen_time <= line_lost_timeout:
-                    if fish_x is None and self.last_fish_x is not None:
-                        fish_x = self.last_fish_x
-                    if (left_x is None or right_x is None) and self.last_left_x is not None and self.last_right_x is not None:
-                        left_x = self.last_left_x
-                        right_x = self.last_right_x
             # Step 3: Calculations
             bars_found = left_x is not None and right_x is not None # Check 1
             if bars_found:
@@ -5415,9 +5009,8 @@ class App(CTk):
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size
                         self._last_bar_center_x = (left_x + right_x) / 2.0
-            # Tracking threshold and Stabilize Threshold is auto calculated
-            tracking_threshold = (0 - round(((bar_size / fish_width) - 0.5), 2)) * 33 
-            thresh = (0 - round((bar_size / fish_width), 2)) * 15
+            tracking_threshold = (0.5 - round(((bar_size / fish_width)), 2)) * 35  # Used for PD padding
+            thresh = (0 - round((bar_size / fish_width), 2)) * 15 # Used for stabilize threshold
             # Fish Direction-Jump Rejection
             if fish_x is not None:
                 if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:
@@ -5497,7 +5090,7 @@ class App(CTk):
                 self.after(0, lambda: self.fish_overlay.draw(bar_center=fish_x, box_size=10, color="red", canvas_offset=fish_left))
             # Step 7: Controller
             mode_changed = controller_mode != previous_controller_mode
-            error = round(fish_x - bar_center) if bar_center is not None and fish_x is not None else 0
+            error = round(fish_x - bar_center)
             self.status_overlay.set_line(f"Distance: {error}", row=5)
             if controller_mode == 0 and bar_center is not None:
                 if source_changed or mode_changed:

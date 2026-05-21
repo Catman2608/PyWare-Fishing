@@ -1,9 +1,9 @@
 {
-    "version": null,
+    "version": "2.0",
+    "tos_accepted": true,
     "last_profile": "default",
     "last_macro_name": null,
     "settings": {},
-    "tos_accepted": false,
     "last_rod": "Basic Rod",
     "bar_areas": {
         "shake": {
