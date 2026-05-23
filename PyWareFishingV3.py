@@ -1183,6 +1183,10 @@ class App(CTk):
         self.SCREEN_SCALE = ((self.SCREEN_WIDTH / 1920) + (self.SCREEN_HEIGHT / 1080)) / 2
         self.BASE_PATH = BASE_PATH
 
+        # Calculate scaling factors
+        self.scale_x_1440 = self.SCREEN_WIDTH / 2560
+        self.scale_y_1440 = self.SCREEN_HEIGHT / 1440
+
         # Detection Variables
         self.last_fish_x = None
         self.last_bar_left = None
@@ -1201,7 +1205,7 @@ class App(CTk):
         self.pid_last_error = 0.0
         self._pid_filtered_d = 0.0  # Used For Derivative Smoothing
 
-        # Arrow-Based Box Estimation Variables (COMET-style from comet.py)
+        # Arrow-Based Box Estimation Variables
         self.last_indicator_x = None
         self.last_holding_state = None
         self.pending_holding_state = None
@@ -1211,7 +1215,7 @@ class App(CTk):
         self.last_right_x = None
         self.last_known_box_center_x = None
         
-        # Arrow estimation tracking (new: from comet.py)
+        # Arrow estimation tracking
         self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
@@ -1907,13 +1911,13 @@ class App(CTk):
         self.comboboxes["logging_mode"] = logging_cb
 
         CTkLabel(logging, text="Logging Type:").grid(row=1, column=2, padx=12, pady=10, sticky="w" )
-        logging_cd_var = StringVar(value="Cycles")
-        self.vars["logging_cd"] = logging_cd_var
+        logging_trigger_var = StringVar(value="Cycles")
+        self.vars["logging_trigger"] = logging_trigger_var
         logging_cb = CTkComboBox(logging, values=["Time", "Cycles", "Disabled"], 
-                               variable=logging_cd_var, command=lambda v: self.set_status(f"Logging Type: {v}")
+                               variable=logging_trigger_var, command=lambda v: self.set_status(f"Logging Type: {v}")
                                )
         logging_cb.grid(row=1, column=3, padx=12, pady=10, sticky="w")
-        self.comboboxes["logging_cd"] = logging_cb
+        self.comboboxes["logging_trigger"] = logging_cb
 
         CTkLabel(logging, text="Webhook URL:").grid(row=2, column=0, padx=12, pady=10, sticky="w")
         logging_url_var = StringVar(value="")
@@ -1983,9 +1987,9 @@ class App(CTk):
         self.switches["auto_reconnect"] = sw
         # Reconnect Pixels
         CTkLabel(auto_reconnect, text="Threshold:").grid(row=1, column=0, padx=12, pady=10, sticky="w")
-        reconnect_pixels_var = StringVar(value="140")
-        self.vars["reconnect_pixels"] = reconnect_pixels_var
-        CTkEntry(auto_reconnect, width=120, textvariable=reconnect_pixels_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
+        reconnect_threshold_var = StringVar(value="140")
+        self.vars["reconnect_threshold"] = reconnect_threshold_var
+        CTkEntry(auto_reconnect, width=120, textvariable=reconnect_threshold_var).grid(row=1, column=1, padx=12, pady=10, sticky="w")
         # reconnect_wait_time
         CTkLabel(auto_reconnect, text="Wait Time:").grid(row=1, column=2, padx=12, pady=10, sticky="w")
         reconnect_wait_time_var = StringVar(value="20")
@@ -2027,7 +2031,7 @@ class App(CTk):
         except Exception:
             return default
     def _get_rod_specific_setting(self, key, default):
-        """Compatibility shim for comet.py-derived settings now stored in self.vars."""
+        """Compatibility shim for Hydra.py-derived settings now stored in self.vars."""
         return self._get_var_number(key, default, float)
     # Get Config List To Save
     def get_config_list(self):
@@ -4016,7 +4020,7 @@ class App(CTk):
     def _do_line_search(self, frame, original_width=None):
         """
         Detect vertical lines in frame and identify fish and bar positions.
-        Based on comet.py line detection pipeline with brightness and density filtering.
+        Based on Hydra.py line detection pipeline with brightness and density filtering.
         Uses line identification logic similar to _execute_fish_stage_line.
         
         Frame is normalized to reference fish box dimensions (517x22 at 720p)
@@ -4216,7 +4220,7 @@ class App(CTk):
 
     def _pid_control(self, error, bar_center_x=None):
         """
-        Compute PD output using proportional gain system from comet reference.
+        Compute PD output using proportional gain system from Hydra reference.
         Uses velocity-based derivative with asymmetric damping.
         """
 
@@ -4565,12 +4569,12 @@ class App(CTk):
     def _check_logging_trigger(self):
         """Check whether the Logging should fire based on the selected mode.
 
-        Modes (logging_cd):
+        Modes (logging_trigger):
           Cycles  – fire every N completed cycles (configurable via logging_cycle)
           Time    – fire every N seconds elapsed  (configurable via logging_time)
           Disabled – never fire
         """
-        cd_mode = self.vars["logging_cd"].get()
+        cd_mode = self.vars["logging_trigger"].get()
 
         if cd_mode == "Disabled":
             return  # webhook type is disabled; do nothing
@@ -4715,7 +4719,7 @@ class App(CTk):
                 show_status=False
             )
     def _auto_reconnect(self, center_x, center_y):
-        reconnect_pixels = int(self.vars["reconnect_pixels"].get())
+        reconnect_threshold = int(self.vars["reconnect_threshold"].get())
         reconnect_wait_time = int(self.vars["reconnect_wait_time"].get())
         mirror_ratio = float(self.vars["mirror_ratio"].get())
         mirror_ratio2 = float(self.vars["mirror_ratio2"].get())
@@ -4725,12 +4729,12 @@ class App(CTk):
         # 0.59
         mirror_click_y = int(shake_height * mirror_ratio2) + shake_top_s
         # 1520
-        reconnect_pixels = int((reconnect_pixels / 1500) * shake_width)
+        reconnect_threshold = int((reconnect_threshold / 1500) * shake_width)
         img = self._grab_screen_region(shake_left_s, shake_top_s, shake_right_s, shake_bottom_s)
-        disconnect_area = self._find_color_cluster(img, "#393b3d", 5, reconnect_pixels)
+        disconnect_area = self._find_color_cluster(img, "#393b3d", 5, reconnect_threshold)
         while self.macro_running:
             if not disconnect_area == None:
-                reconnect = self._find_color_cluster(img, "#FFFFFF", 8, int(reconnect_pixels / 2))
+                reconnect = self._find_color_cluster(img, "#FFFFFF", 8, int(reconnect_threshold / 2))
                 time.sleep(1)
                 reconnect_x = reconnect[0] + shake_left_s if not reconnect == None else shake_left_s
                 reconnect_y = reconnect[1] + shake_top_s if not reconnect == None else shake_top_s
@@ -5410,7 +5414,7 @@ class App(CTk):
                         # Sync Arrow Estimation Immediately
                         self.estimated_box_length = bar_size
                         
-                        # Completed: Sync comet-style tracking variables for improved arrow estimation
+                        # Completed: Sync Hydra-style tracking variables for improved arrow estimation
                         self._last_bar_left_x = left_x
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size

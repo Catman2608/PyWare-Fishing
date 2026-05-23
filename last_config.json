@@ -1,38 +1,33 @@
 {
-    "version": "2.0",
-    "tos_accepted": true,
-    "last_profile": "default",
-    "last_macro_name": null,
-    "settings": {},
+    "last_config": "Default",
     "last_rod": "Basic Rod",
     "bar_areas": {
         "shake": {
-            "x": 199,
-            "y": 99,
-            "width": 1520,
-            "height": 752
+            "x": 157,
+            "y": 90,
+            "width": 1197,
+            "height": 684
         },
         "fish": {
-            "x": 567,
-            "y": 910,
-            "width": 778,
-            "height": 42
+            "x": 430,
+            "y": 794,
+            "width": 649,
+            "height": 38
         },
         "friend": {
-            "x": 7,
-            "y": 975,
-            "width": 68,
-            "height": 89
+            "x": 6,
+            "y": 852,
+            "width": 54,
+            "height": 81
         },
         "totem": {
-            "x": 1827,
-            "y": 940,
-            "width": 40,
-            "height": 50
+            "x": 1441,
+            "y": 818,
+            "width": 31,
+            "height": 45
         }
     },
-    "start_key": "F5 ",
+    "start_key": "F5",
     "change_bar_areas_key": "F6",
-    "stop_key": "F7",
-    "last_config": "Default"
+    "stop_key": "F7"
 }
