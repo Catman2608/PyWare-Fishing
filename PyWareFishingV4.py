@@ -301,6 +301,7 @@ class Api:
         self._last_bar_right_x = None
         self._last_bar_box_size = None
         self._last_bar_center_x = None
+        self.last_arrow_delta = None
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         self.current_rod_name = "Basic Rod"
@@ -1566,8 +1567,36 @@ class Api:
                 self.estimated_box_length = self.last_cached_box_length
             else:
                 return None, None, None  # Hard Fail Instead Of Bad Estimation
-        effective_holding_state = 0 # Unused
+        # Detect Arrow Direction Swap
+        state_swapped = False
 
+        if (
+            self.last_indicator_x is not None and
+            arrow_centroid_x is not None
+        ):
+            # Current movement direction
+            delta = arrow_centroid_x - self.last_indicator_x
+
+            # Check if movement direction flipped
+            if (
+                hasattr(self, "last_arrow_delta") and
+                self.last_arrow_delta is not None
+            ):
+                state_swapped = (
+                    (self.last_arrow_delta > 0 and delta < 0) or
+                    (self.last_arrow_delta < 0 and delta > 0)
+                )
+
+            # Save for next frame
+            self.last_arrow_delta = delta
+
+        # Use actual hold state normally
+        effective_holding_state = is_holding
+
+        # If arrow suddenly reversed direction,
+        # edge ownership likely swapped
+        if state_swapped:
+            effective_holding_state = not effective_holding_state
         # Position The Box Based On Current Hold State
         if effective_holding_state:
             # Holding: Arrow Is On Right, Extend Left
@@ -1606,13 +1635,13 @@ class Api:
         key = self.normalize_key(key)
         if key == "f5":
             if self.macro_running == False:
-                self.save_config()
-                self.save_misc_settings()
                 threading.Thread(target=self.start_macro, daemon=True).start()
             else:
                 self.stop_macro()
         elif key == "f6":
             self.open_area_selector()
+        elif key == "f7":
+            self.set_status("Not implemented yet")
     def _string_to_key(self, key_string):
         key_string = key_string.strip().lower()
         # Try Special Keys
