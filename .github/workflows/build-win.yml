@@ -19,23 +19,23 @@ jobs:
             - name: Install dependencies
               run: |
                   python -m pip install --upgrade pip
-                  pip install pyinstaller opencv-python numpy pillow customtkinter pynput mss
+                  pip install customtkinter pynput opencv-python numpy mss requests gdown PyObjC
 
             - name: Build EXE with PyInstaller
               shell: cmd
               run: |
-                  pyinstaller --onefile --windowed PyWareFishingV3.py --hidden-import=cv2 --hidden-import=numpy --hidden-import=PIL --hidden-import=PIL._tkinter_finder --hidden-import=customtkinter --hidden-import=pynput --hidden-import=pynput.keyboard --hidden-import=pynput.mouse --hidden-import=mss --hidden-import=mss.windows --hidden-import=threading --hidden-import=time --hidden-import=json --hidden-import=os --hidden-import=subprocess --hidden-import=webbrowser --hidden-import=ctypes --collect-all customtkinter --collect-all pynput --add-data "configs;configs" --name PyWare
+                  pyinstaller --onedir --windowed PyWareFishingV4.py --name PyWareFishingV4 --icon="icon.ico" --add-data "ui;ui"
 
             - name: List dist contents
               run: |
                   echo "Files in dist folder:"
                   dir dist
                   echo "Size of executable:"
-                  dir dist\PyWare.exe
+                  dir dist\PyWareFishingV4.exe
 
             - name: Upload EXE artifact
               uses: actions/upload-artifact@v4
               with:
                   name: Windows-EXE
-                  path: dist/PyWare.exe
+                  path: dist/PyWareFishingV4.exe
                   if-no-files-found: error

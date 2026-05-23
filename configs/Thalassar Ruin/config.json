@@ -75,7 +75,7 @@
     "totem_delay": "900",
     "totem_cycles": "70",
     "auto_reconnect": "off",
-    "reconnect_pixels": "67",
+    "reconnect_threshold": "67",
     "reconnect_wait_time": "67",
     "checkbox_auto_reconnect": "off",
     "combobox_casting_mode": "2",
