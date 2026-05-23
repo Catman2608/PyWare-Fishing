@@ -21,7 +21,7 @@ jobs:
             - name: Install dependencies
               run: |
                   python -m pip install --upgrade pip
-                  pip install pyinstaller opencv-python numpy customtkinter pynput mss requests PyObjC
+                  pip install pyinstaller customtkinter pynput opencv-python numpy mss requests gdown
 
             - name: Build with PyInstaller
               run: |
@@ -32,6 +32,7 @@ jobs:
                   ls -lh dist
                   echo "Contents of dist:"
                   ls -la dist/
+                  dir dist\PyWareFishingV4
 
             - name: Create DMG from .app bundle
               run: |

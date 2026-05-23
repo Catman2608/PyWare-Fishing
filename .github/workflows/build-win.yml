@@ -20,7 +20,7 @@ jobs:
             - name: Install dependencies
               run: |
                   python -m pip install --upgrade pip
-                  pip install customtkinter pynput opencv-python numpy mss requests gdown
+                  pip install pyinstaller customtkinter pynput opencv-python numpy mss requests gdown
 
             - name: Build EXE with PyInstaller
               shell: cmd
@@ -32,11 +32,11 @@ jobs:
                   echo "Files in dist folder:"
                   dir dist
                   echo "Size of executable:"
-                  dir dist\PyWareFishingV4.exe
+                  dir dist\PyWareFishingV4
 
             - name: Upload EXE artifact
               uses: actions/upload-artifact@v4
               with:
                   name: Windows-EXE
-                  path: dist/PyWareFishingV4.exe
+                  path: dist/PyWareFishingV4/
                   if-no-files-found: error
