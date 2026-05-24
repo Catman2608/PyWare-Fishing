@@ -25,7 +25,7 @@ jobs:
             - name: Build EXE with PyInstaller
               shell: cmd
               run: |
-                  pyinstaller --onedir --windowed PyWareFishingV4.py --name PyWareFishingV4 --icon="icon.ico" --add-data "ui;ui"
+                  pyinstaller --onedir --windowed PyWareFishingV4.py --name PyWareFishingV4 --icon="icon.ico" --add-data "ui;ui" --add-data "C:\Users\NC\AppData\Local\Programs\Python\Python313\Lib\site-packages\pythonnet\runtime"
 
             - name: List dist contents
               run: |

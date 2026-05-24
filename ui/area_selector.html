@@ -9,8 +9,6 @@
       height: 100%;
       position: fixed;
       inset: 0;
-
-      background: rgba(0, 0, 0, 0.40);
       overflow: hidden;
       user-select: none;
   }
@@ -19,6 +17,7 @@
     width: 100%; height: 100%;
     cursor: default;
   }
+
 </style>
 </head>
 <body>
@@ -72,8 +71,9 @@ window.addEventListener("pywebviewready", () => {
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Dark translucent overlay
-  ctx.fillStyle = "rgba(0,0,0,0.40)";
+  // Use canvas to draw semi-transparent overlay for consistent cross-platform rendering
+  // This avoids CSS opacity issues on Windows where rgba() may appear opaque
+  ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (const name of AREA_ORDER) {

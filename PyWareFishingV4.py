@@ -18,7 +18,9 @@ from pynput.keyboard import Listener as KeyListener, Key
 import cv2
 import numpy as np
 import mss
-import ctypes
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
 import Quartz
 import math
 # Logging
@@ -29,12 +31,78 @@ keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-# Ctypes/Quartz For Special Click Types
+# Ctypes & Quartz for Mouse Clicks and Special Window Properties
 if sys.platform == "win32":
     windll = ctypes.windll.user32
     MOUSEEVENTF_MOVE = 0x0001
     MOUSEEVENTF_LEFTDOWN = 0x0002
     MOUSEEVENTF_LEFTUP = 0x0004
+    # Ctypes windows
+    GWL_EXSTYLE = -20
+    WS_EX_LAYERED = 0x00080000
+    LWA_ALPHA = 0x00000002
+
+    user32 = ctypes.windll.user32
+
+    user32.GetWindowLongW.restype = wintypes.LONG
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+
+    user32.SetWindowLongW.restype = wintypes.LONG
+    user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
+
+    user32.SetLayeredWindowAttributes.restype = wintypes.BOOL
+    user32.SetLayeredWindowAttributes.argtypes = [wintypes.HWND, wintypes.COLORREF, ctypes.c_byte, wintypes.DWORD]
+    def _get_hwnd(window):
+        """Return a Windows HWND int from a pywebview window/native object."""
+        native = getattr(window, "native", window)
+        candidates = (
+            native,
+            getattr(native, "Handle", None),  # WinForms BrowserForm -> System.IntPtr
+            getattr(window, "Handle", None),
+            getattr(window, "hwnd", None),
+        )
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            if isinstance(candidate, int):
+                return candidate
+            if hasattr(candidate, "value") and candidate.value:
+                return int(candidate.value)
+            if hasattr(candidate, "ToInt64"):
+                value = int(candidate.ToInt64())
+                if value:
+                    return value
+            if hasattr(candidate, "ToInt32"):
+                value = int(candidate.ToInt32())
+                if value:
+                    return value
+            try:
+                value = int(candidate)
+            except (TypeError, ValueError):
+                continue
+            if value:
+                return value
+        return None
+
+    def make_window_translucent(window, transparency):
+        """Make a pywebview Windows window translucent once its HWND exists."""
+        hwnd = None
+        for _ in range(10):
+            hwnd = _get_hwnd(window)
+            if hwnd:
+                break
+            time.sleep(0.05)
+
+        if not hwnd:
+            return False
+
+        current_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, current_style | WS_EX_LAYERED)
+
+        # Range is 0 (fully transparent) to 255 (fully opaque).
+        opacity_alpha = int(255 * transparency)
+        return bool(user32.SetLayeredWindowAttributes(hwnd, 0, opacity_alpha, LWA_ALPHA))
 elif sys.platform == "darwin":
     def _move_mouse(x, y):
         point = Quartz.CGPointMake(float(x), float(y))
@@ -49,6 +117,8 @@ elif sys.platform == "darwin":
             Quartz.kCGMouseButtonLeft
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+    def make_window_translucent(window, transparency):
+        pass # stub class and does nothing
 def get_base_path():
     """Unified base directory for app data."""
 
@@ -163,6 +233,8 @@ class AreaSelector:
             background_color="#000000",
         )
         self._win.events.closed += self._on_closed
+        time.sleep(0.05)
+        make_window_translucent(self._win, 0.35)
 
     # ── JS API methods (called from area_selector.html) ───────────────────────
 
@@ -252,6 +324,115 @@ class AreaSelector:
                        "h": b.get("h", b.get("height",0))}
                 for name, b in self._areas.items()
             })
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Eyedropper class
+# ─────────────────────────────────────────────────────────────────────────────
+class Eyedropper:
+    """
+    Fullscreen transparent overlay for color picking using pywebview.
+    The HTML canvas handles UI rendering and mouse interaction.
+    Python handles pixel capture and color conversion.
+    """
+
+    HTML_FILE = "ui/eyedropper.html"
+
+    def __init__(self, parent):
+        self.parent = parent
+        self._open = True
+        self.last_picked_color = None
+
+        # Create fullscreen transparent pywebview window
+        self._win = webview.create_window(
+            "Eyedropper",
+            self.HTML_FILE,
+            js_api=self,
+            transparent=True,
+            frameless=True,
+            easy_drag=False,
+            on_top=True,
+            resizable=False,
+            width=SCREEN_WIDTH,
+            height=SCREEN_HEIGHT,
+            x=0,
+            y=0,
+            background_color="#000000",
+        )
+        self._win.events.closed += self._on_closed
+        time.sleep(0.05)
+        make_window_translucent(self._win, 0.05)
+    # ── JS API methods (called from eyedropper.html) ──────────────────────────
+
+    def get_pixel_at(self, x, y):
+        """
+        Called by JS on mousemove to get the hex color at (x, y).
+        Returns immediately to update UI in real-time.
+        """
+        if not self._open:
+            return "#000000"
+
+        frame = self.parent._grab_screen_region(x, y, x + 1, y + 1)
+        if frame is None or frame.size == 0:
+            return "#000000"
+
+        # MSS returns BGRA, we have BGR after processing
+        b = int(frame[0, 0, 0])
+        g = int(frame[0, 0, 1])
+        r = int(frame[0, 0, 2])
+
+        hex_color = f"#{r:02X}{g:02X}{b:02X}"
+        self.parent.set_status(f"Picked color: {hex_color}")
+        return hex_color
+
+    def pick_color(self, hex_color):
+        """
+        Called by JS when user clicks to pick a color.
+        Stores the color and closes the window.
+        """
+        if not self._open:
+            return
+
+        self.last_picked_color = hex_color
+        self.parent.set_status(f"Picked color: {hex_color}")
+        self._open = False
+
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+
+    def close_eyedropper(self):
+        """
+        Called by JS when user presses Escape.
+        Closes the window without picking.
+        """
+        if not self._open:
+            return
+
+        self._open = False
+        self.parent.set_status("Eyedropper cancelled")
+
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+
+    # ── Internal ──────────────────────────────────────────────────────────────
+
+    def _on_closed(self):
+        """Fires when the webview window is destroyed."""
+        if self._open:
+            self._open = False
+            self.parent.set_status("Eyedropper closed")
+
+    def is_open(self):
+        return self._open
+
+    def close(self):
+        """Force-close from Python."""
+        if self._open:
+            self.close_eyedropper()
+
 class Api:
     def __init__(self):
         self.vars = {} # Save Entry Variables Here
@@ -328,10 +509,19 @@ class Api:
 
         self.webhook_cycle_counter = 0
         self.totem_cycle_counter = 0
+        self.webhook_start_time = 0
+        self.totem_start_time = 0
 
         self.load_misc_settings()
     def start_eyedropper(self):
-        pass
+        # Toggle Off If Already Open
+        if hasattr(self, "eyedropper") and self.eyedropper and self.eyedropper.is_open():
+            self.eyedropper.close()
+            return
+        
+        # Create and show eyedropper
+        self.eyedropper = Eyedropper(parent=self)
+        self.set_status("Eyedropper opened • Hover to preview • Click to pick • Esc to cancel")
     # ---------------------
     # Save Config
     # ---------------------
@@ -1990,13 +2180,11 @@ class Api:
     # Start macro
     def start_macro(self):
         self.macro_running = True
-        # rod_slot = str(self.vars["rod_slot"])
-        # bag_slot = str(self.vars["bag_slot"])
+        rod_slot = str(self.vars["rod_slot"])
+        bag_slot = str(self.vars["bag_slot"])
         shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self._get_areas("shake")
         shake_x = shake_left + int(shake_width / 2)
         shake_y = shake_top + int(shake_height / 2)
-        rod_slot = str(1)
-        bag_slot = str(2)
         auto_zoom = self.vars.get("auto_zoom", "off")
         auto_refresh = self.vars.get("auto_refresh", "off")
         casting_mode = self.vars.get("casting_mode", "Normal")
@@ -2133,6 +2321,7 @@ class Api:
 
         sundial_slot = str(self.vars["sundial_slot"])
         target_slot  = str(self.vars["target_slot"])
+        rod_slot  = str(self.vars["rod_slot"])
         sundial_delay  = int(self.vars["sundial_delay"])
         desired_time = self.vars["use_sundial_mode_when"]  # "Day", "Night", Or Maybe "Disabled"
 
@@ -2185,7 +2374,9 @@ class Api:
         self._click_at(shake_x, shake_y)
 
         time.sleep(1)
-
+        keyboard_controller.press(rod_slot)
+        time.sleep(0.05)
+        keyboard_controller.release(rod_slot)
         totem_success = True
 
         # Webhook
@@ -2498,6 +2689,8 @@ class Api:
         # Misc variables
         shake_hex = self.vars["shake_color"]
         scan_delay = float(self.vars["shake_scan_delay"])
+        friend_color = self.vars["friends_color"]
+        friend_tol = int(self.vars["friends_tolerance"])
         try:
             tolerance = int(self.vars["shake_tolerance"])
             failsafe = int(self.vars["shake_failsafe"] or 80)
@@ -2540,7 +2733,7 @@ class Api:
                 detection_area = frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
                 if detection_area is None or detection_area.size == 0:
                     break
-                friend_x = self._find_color_center(detection_area, "#9BFF9B", tolerance)
+                friend_x = self._find_color_center(detection_area, friend_color, friend_tol)
                 if not friend_x:
                     detected = True
                     time.sleep(0.005)
@@ -2564,6 +2757,8 @@ class Api:
 
         # Misc variables
         scan_delay = float(self.vars["shake_scan_delay"])
+        friend_color = self.vars["friends_color"]
+        friend_tol = int(self.vars["friends_tolerance"])
         try:
             tolerance = int(self.vars["shake_tolerance"])
             failsafe = int(self.vars["shake_failsafe"] or 80)
@@ -2596,7 +2791,7 @@ class Api:
                 detection_area = frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
                 if detection_area is None or detection_area.size == 0:
                     break
-                friend_x = self._find_color_center(detection_area, "#9BFF9B", tolerance)
+                friend_x = self._find_color_center(detection_area, friend_color, friend_tol)
                 if not friend_x:
                     detected = True
                     time.sleep(0.005)
@@ -2636,6 +2831,8 @@ class Api:
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
         lock_cursor = (self.vars["lock_cursor"])
         fishing_mode = (self.vars["fishing_mode"])
+        friend_color = self.vars["friends_color"]
+        friend_tol = int(self.vars["friends_tolerance"])
         if fishing_mode == "Line":
             line_lost_timeout = restart_delay
             self._line_state = {
@@ -2693,6 +2890,7 @@ class Api:
             img = frame[fish_top:fish_bottom, fish_left:fish_right]
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
+            cv2.imwrite("screenshot.png", frame)
             if lock_cursor == "on": # Lock cursor if enabled
                 mouse_controller.position = (shake_x, shake_y)
             # Step 2: Detection
@@ -2781,7 +2979,7 @@ class Api:
                     self.last_fish_x = fish_x
                 self.last_fish_x = fish_x
             # Step 4: Restart Method — Friend Area (green present = minigame ended)
-            friend_x = self._find_color_center(friend_img, "#9BFF9B", 5)
+            friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
             if friend_x is not None:
                 release_mouse()
                 time.sleep(restart_delay)

@@ -1,5 +1,5 @@
 {
-    "last_config": "Castbound",
+    "last_config": "Default",
     "last_rod": "Basic Rod",
     "bar_areas": {
         "shake": {
@@ -9,20 +9,20 @@
             "height": 752
         },
         "fish": {
-            "x": 546,
-            "y": 861,
+            "x": 549,
+            "y": 878,
             "width": 825,
             "height": 42
         },
         "friend": {
             "x": 8,
-            "y": 926,
+            "y": 945,
             "width": 68,
             "height": 89
         },
         "totem": {
-            "x": 1829,
-            "y": 899,
+            "x": 1830,
+            "y": 909,
             "width": 40,
             "height": 50
         }
