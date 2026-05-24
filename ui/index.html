@@ -351,8 +351,8 @@
                     <div class="dropdown">
                         <label for="auto_totem_mode">Totem Mode:</label>
                         <select name="auto_totem_mode" id="auto_totem_mode">
-                        <option value="Time">Screenshot</option>
-                        <option value="Cycles">Text</option>
+                        <option value="Time">Time</option>
+                        <option value="Cycles">Cycles</option>
                         <option value="Disabled">Disabled</option>
                         </select>
                     </div>
@@ -372,6 +372,10 @@
                         <label>Time (seconds)</label>
                         <input id=totem_delay type="text" placeholder="60">
                     </div>
+                    <div class="text">
+                        <label>Sundial Delay (seconds)</label>
+                        <input id=sundial_delay type="text" placeholder="15">
+                    </div>
                 </div>
                 <div class="card">
                     <h3>Auto Reconnect</h3>
@@ -386,10 +390,12 @@
                         <label>Threshold</label>
                         <input id=reconnect_threshold type="text" placeholder="3">
                     </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
                     <div class="text">
                         <label>Wait Time (Seconds)</label>
                         <input id=reconnect_wait_time type="text" placeholder="60">
                     </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
                     <div class="text">
                         <label>Mirror X (Ratio)</label>
                         <input id=mirror_ratio type="text" placeholder="60">
