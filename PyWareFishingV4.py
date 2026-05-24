@@ -256,7 +256,7 @@ class Api:
         self.load_settings_into_vars(self.current_config)
         # Start Hotkey Listener
         try:
-            self.key_listener = KeyListener(on_press=self.on_key_press)
+            self.key_listener = KeyListener(on_press=self.on_key_press, on_release=self.on_key_release)
             self.key_listener.daemon = True
             self.key_listener.start()
         except Exception as e:
@@ -268,12 +268,15 @@ class Api:
         # Macro State
         self.macro_running = False
         self.macro_thread = None
+        # Key hit detection (press + release = one hit, prevents repeat-key misfires)
+        self._keys_held = set()
         # Detection Variables
         self.last_fish_x = None
         self.last_bar_left = None
         self.last_bar_right = None
         self.last_cached_box_length = None  # Cached Bar Size From Minigame For Arrow Estimation
-
+        self.last_input_time = 0.0
+        self.cooldown_duration = 1.0  # 1 second cooldown
         # P/D State Variables
         self.prev_error = 0.0      # Previous Error Term
         self.last_time = None      # Timestamp Of Last Pd Sample
@@ -625,7 +628,6 @@ class Api:
 
         else:
             self._scale_cache = 1.0
-
         return self._scale_cache
     def open_area_selector(self):
         # Toggle Off If Already Open
@@ -1632,16 +1634,26 @@ class Api:
         except AttributeError:
             return str(key).replace("Key.", "").lower()
     def on_key_press(self, key):
+        # Track which keys are currently held so on_key_release can confirm a
+        # full press+release cycle (a "hit") before acting. This prevents OS
+        # key-repeat events from firing the action multiple times.
+        self._keys_held.add(self.normalize_key(key))
+
+    def on_key_release(self, key):
         key = self.normalize_key(key)
+        # Only act if this release follows a genuine press (i.e. a real "hit")
+        if key not in self._keys_held:
+            return
+        self._keys_held.discard(key)
         if key == "f5":
             if self.macro_running == False:
                 threading.Thread(target=self.start_macro, daemon=True).start()
             else:
-                self.stop_macro()
+                return
         elif key == "f6":
             self.open_area_selector()
         elif key == "f7":
-            self.set_status("Not implemented yet")
+            self.stop_macro()
     def _string_to_key(self, key_string):
         key_string = key_string.strip().lower()
         # Try Special Keys
@@ -1690,18 +1702,16 @@ class Api:
             left_tol = int(self.vars["left_tolerance"] or 8)
             right_tol = int(self.vars["right_tolerance"] or 8)
             fish_tol = int(self.vars["fish_tolerance"] or 1)
-            required_fish_pixels = int(self.vars["required_fish_pixels"] or 10)
         except:
             left_tol = 8
             right_tol = 8
             fish_tol = 1
-            required_fish_pixels = 10
         # macOS Tolerance Buffer To Make Configs Cross-Compatible
         if sys.platform == "darwin":
             left_tol += 2
             right_tol += 2
             fish_tol += 2
-        fish_center = self._find_color_cluster(frame, fish_hex, fish_tol, required_fish_pixels)
+        fish_center = self._find_color_cluster(frame, fish_hex, fish_tol, 5)
         try:
             fish_center = fish_center[0]
         except:
@@ -1972,55 +1982,43 @@ class Api:
     # Start macro
     def start_macro(self):
         self.macro_running = True
-        try:
-            window.hide()
-        except Exception:
-            pass
-        try:
-            # rod_slot = str(self.vars["rod_slot"])
-            # bag_slot = str(self.vars["bag_slot"])
-            rod_slot = 1
-            bag_slot = 2
-            auto_zoom = self.vars.get("auto_zoom", "off")
-            auto_refresh = self.vars.get("auto_refresh", "off")
-            casting_mode = self.vars.get("casting_mode", "Normal")
-            shake_mode = self.vars.get("shake_mode", "Navigation")
-            if auto_zoom == "on":
-                for _ in range(20):
-                    mouse_controller.scroll(0, 1)
-                    time.sleep(0.05)
-                mouse_controller.scroll(0, -1)
-                time.sleep(0.1)
-            while self.macro_running:
-                if auto_refresh == "on":
-                    bag_delay = self._get_var_number("select_rod_duration", self._get_var_number("bag_delay", 0.36, float), float)
-                    self.set_status("Selecting rod")
-                    # Sequence
-                    time.sleep(bag_delay * 1.5)
-                    keyboard_controller.press(bag_slot)
-                    time.sleep(0.05)
-                    keyboard_controller.release(bag_slot)
-                    time.sleep(bag_delay)
-                    keyboard_controller.press(rod_slot)
-                    time.sleep(0.05)
-                    keyboard_controller.release(rod_slot)
-                    time.sleep(0.2)
-                if casting_mode == "Perfect":
-                    self._execute_cast_perfect()
-                else:
-                    self.execute_cast_normal()
-                if shake_mode == "Navigation":
-                    self._execute_shake_navigation()
-                else:
-                    self._execute_shake_click(shake_mode)
-                self._enter_minigame()
-        finally:
-            self.macro_running = False
-            try:
-                window.show()
-            except Exception:
-                pass
-            
+        # rod_slot = str(self.vars["rod_slot"])
+        # bag_slot = str(self.vars["bag_slot"])
+        rod_slot = str(1)
+        bag_slot = str(2)
+        auto_zoom = self.vars.get("auto_zoom", "off")
+        auto_refresh = self.vars.get("auto_refresh", "off")
+        casting_mode = self.vars.get("casting_mode", "Normal")
+        shake_mode = self.vars.get("shake_mode", "Navigation")
+        if auto_zoom == "on":
+            for _ in range(20):
+                mouse_controller.scroll(0, 1)
+                time.sleep(0.05)
+            mouse_controller.scroll(0, -1)
+            time.sleep(0.1)
+        while self.macro_running:
+            if auto_refresh == "on":
+                bag_delay = self._get_var_number("select_rod_duration", self._get_var_number("bag_delay", 0.36, float), float)
+                self.set_status("Selecting rod")
+                # Sequence
+                time.sleep(bag_delay * 1.5)
+                keyboard_controller.press(bag_slot)
+                time.sleep(0.05)
+                keyboard_controller.release(bag_slot)
+                time.sleep(bag_delay)
+                keyboard_controller.press(rod_slot)
+                time.sleep(0.05)
+                keyboard_controller.release(rod_slot)
+                time.sleep(0.2)
+            if casting_mode == "Perfect":
+                self._execute_cast_perfect()
+            else:
+                self.execute_cast_normal()
+            if shake_mode == "Navigation":
+                self._execute_shake_navigation()
+            else:
+                self._execute_shake_click(shake_mode)
+            self._enter_minigame()
     def _execute_cast_perfect(self):
         """
         Scans for green and white Y coordinates and releases left click when
@@ -2266,6 +2264,7 @@ class Api:
         stop_event.set()
         mouse_controller.release(Button.left)
         time.sleep(cast_delay)
+        return
     def execute_cast_normal(self):
         delay_before_casting = float(self._get_var_number("delay_before_casting", 0.5, float))
         cast_duration = float(self._get_var_number("cast_duration", 0.5, float))
@@ -2275,6 +2274,7 @@ class Api:
         time.sleep(cast_duration)
         mouse_controller.release(Button.left)
         time.sleep(delay_after_casting)
+        return
     def _execute_shake_click(self, shake_mode):
         """
         IF shake_mode = pixel: Search for pixel
@@ -2383,6 +2383,7 @@ class Api:
                     self._cap_event.clear()
                 if frame is None:
                     stop_event.set()
+                    print("Finished (no frame)")
                     return
                 detection_area = frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
                 if detection_area is None or detection_area.size == 0:
@@ -2399,6 +2400,7 @@ class Api:
                 mouse_controller.press(Button.left)
                 time.sleep(0.003)
                 mouse_controller.release(Button.left)
+                print("Finished (fish detected)")
                 return  # exit shake cleanly
             attempts += 1
             time.sleep(scan_delay)
@@ -2571,7 +2573,7 @@ class Api:
                     self.last_fish_x = fish_x
                 self.last_fish_x = fish_x
             # Step 4: Restart Method — Friend Area (green present = minigame ended)
-            friend_x = self._find_color_center(friend_img, "#9BFF9B", 2)
+            friend_x = self._find_color_center(friend_img, "#9BFF9B", 25)
             if friend_x is not None:
                 release_mouse()
                 time.sleep(restart_delay)
