@@ -258,3 +258,6 @@ async function deleteConfig() {
 async function testLogging() {
     await pywebview.api.test_logging();
 }
+async function startEyedropper() {
+    await pywebview.api.start_eyedropper();
+}

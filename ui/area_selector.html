@@ -10,7 +10,7 @@
       position: fixed;
       inset: 0;
 
-      background: transparent;
+      background: rgba(0, 0, 0, 0.40);
       overflow: hidden;
       user-select: none;
   }
@@ -50,6 +50,7 @@ function resize() {
   draw();
 }
 window.addEventListener("resize", resize);
+resize();
 
 // ─── Init: wait for pywebview then load areas from Python ────────────────────
 window.addEventListener("pywebviewready", () => {
@@ -72,7 +73,7 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Dark translucent overlay
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.fillStyle = "rgba(0,0,0,0.40)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (const name of AREA_ORDER) {

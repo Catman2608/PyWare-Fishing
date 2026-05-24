@@ -18,6 +18,7 @@ from pynput.keyboard import Listener as KeyListener, Key
 import cv2
 import numpy as np
 import mss
+import ctypes
 import Quartz
 import math
 # Logging
@@ -218,6 +219,8 @@ class AreaSelector:
                 "height": b.get("h", b.get("height", 0)),
             }
         self.callback(out["shake"], out["fish"], out["friend"], out["totem"])
+        if hasattr(self.parent, "_keys_held"):
+            self.parent._keys_held.discard("f6")
         self.parent.set_status("Area selector closed")
         try:
             self._win.destroy()
@@ -254,6 +257,8 @@ class Api:
         self.vars = {} # Save Entry Variables Here
         self.current_config = self.get_last_config()
         self.load_settings_into_vars(self.current_config)
+        # Key hit detection (press + release = one hit, prevents repeat-key misfires)
+        self._keys_held = set()
         # Start Hotkey Listener
         try:
             self.key_listener = KeyListener(on_press=self.on_key_press, on_release=self.on_key_release)
@@ -268,8 +273,6 @@ class Api:
         # Macro State
         self.macro_running = False
         self.macro_thread = None
-        # Key hit detection (press + release = one hit, prevents repeat-key misfires)
-        self._keys_held = set()
         # Detection Variables
         self.last_fish_x = None
         self.last_bar_left = None
@@ -323,7 +326,12 @@ class Api:
         self._active_capture_stop = None  # Stop Event For The Currently Running Capture Thread
         self._active_capture_thread = None  # Thread Object For The Currently Running Capture Thread
 
+        self.webhook_cycle_counter = 0
+        self.totem_cycle_counter = 0
+
         self.load_misc_settings()
+    def start_eyedropper(self):
+        pass
     # ---------------------
     # Save Config
     # ---------------------
@@ -685,7 +693,7 @@ class Api:
             friend_area=friend_area, totem_area=totem_area,
             callback=on_done,
         )
-        self.set_status("Area selector opened (press Escape or F6 to save & close)")
+        self.set_status("Area selector opened")
     # Macro helper functions
     # Click At X/Y Position
     def _click_at(self, x, y, click_count=1):
@@ -2019,7 +2027,7 @@ class Api:
             self._check_logging_trigger()
             # Totem
             self._check_totem_trigger(shake_x, shake_y)
-            if self.vars["auto_reconnect"].get() == "on":
+            if self.vars["auto_reconnect"] == "on":
                 self._auto_reconnect(shake_x, shake_y)
             # Cast
             if casting_mode == "Perfect":
@@ -2042,18 +2050,18 @@ class Api:
           Time    – fire every N seconds elapsed  (configurable via logging_time)
           Disabled – never fire
         """
-        cd_mode = self.vars["logging_trigger"].get()
+        cd_mode = self.vars["logging_trigger"]
 
         if cd_mode == "Disabled":
             return  # webhook type is disabled; do nothing
 
         try:
-            trigger_every = int(self.vars["logging_cycle"].get())
+            trigger_every = int(self.vars["logging_cycle"])
         except (ValueError, KeyError):
             trigger_every = 3  # safe fallback
         
         try:
-            trigger_secs = float(self.vars["logging_time"].get())
+            trigger_secs = float(self.vars["logging_time"])
         except (ValueError, KeyError):
             trigger_secs = 60.0  # safe fallback
 
@@ -2081,7 +2089,7 @@ class Api:
           Time    – trigger every N seconds elapsed
           Disabled – never trigger
         """
-        mode = self.vars["auto_totem_mode"].get()
+        mode = self.vars["auto_totem_mode"]
         # self.SCREEN_SCALE
 
         if mode == "Disabled":
@@ -2091,12 +2099,12 @@ class Api:
             return
         
         try:
-            trigger_every = int(self.vars["totem_cycles"].get())
+            trigger_every = int(self.vars["totem_cycles"])
         except (ValueError, KeyError):
             trigger_every = 3  # Safe Fallback
         
         try:
-            trigger_secs = float(self.vars["totem_delay"].get())
+            trigger_secs = float(self.vars["totem_delay"])
         except (ValueError, KeyError):
             trigger_secs = 60.0  # Safe Fallback
 
@@ -2123,10 +2131,10 @@ class Api:
         # Execute Totem
         self.set_status("Using Totem")
 
-        sundial_slot = str(self.vars["sundial_slot"].get())
-        target_slot  = str(self.vars["target_slot"].get())
-        sundial_delay  = int(self.vars["sundial_delay"].get())
-        desired_time = self.vars["use_sundial_mode_when"].get()  # "Day", "Night", Or Maybe "Disabled"
+        sundial_slot = str(self.vars["sundial_slot"])
+        target_slot  = str(self.vars["target_slot"])
+        sundial_delay  = int(self.vars["sundial_delay"])
+        desired_time = self.vars["use_sundial_mode_when"]  # "Day", "Night", Or Maybe "Disabled"
 
         totem_success = False
 
@@ -2188,11 +2196,11 @@ class Api:
                 show_status=False
             )
     def _auto_reconnect(self, center_x, center_y):
-        reconnect_threshold = int(self.vars["reconnect_threshold"].get())
-        reconnect_wait_time = int(self.vars["reconnect_wait_time"].get())
-        mirror_ratio = float(self.vars["mirror_ratio"].get())
-        mirror_ratio2 = float(self.vars["mirror_ratio2"].get())
-        mirror_slot = str(self.vars["mirror_slot"].get())
+        reconnect_threshold = int(self.vars["reconnect_threshold"])
+        reconnect_wait_time = int(self.vars["reconnect_wait_time"])
+        mirror_ratio = float(self.vars["mirror_ratio"])
+        mirror_ratio2 = float(self.vars["mirror_ratio2"])
+        mirror_slot = str(self.vars["mirror_slot"])
         shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, shake_width, shake_height = self._get_areas("shake")
         mirror_click_x = int(shake_width * mirror_ratio) + shake_left_s
         # 0.59
