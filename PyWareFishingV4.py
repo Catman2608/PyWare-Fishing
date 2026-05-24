@@ -1984,6 +1984,9 @@ class Api:
         self.macro_running = True
         # rod_slot = str(self.vars["rod_slot"])
         # bag_slot = str(self.vars["bag_slot"])
+        shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self._get_areas("shake")
+        shake_x = shake_left + int(shake_width / 2)
+        shake_y = shake_top + int(shake_height / 2)
         rod_slot = str(1)
         bag_slot = str(2)
         auto_zoom = self.vars.get("auto_zoom", "off")
@@ -1997,6 +2000,8 @@ class Api:
             mouse_controller.scroll(0, -1)
             time.sleep(0.1)
         while self.macro_running:
+            # Misc / Utilities
+            # Select Rod
             if auto_refresh == "on":
                 bag_delay = self._get_var_number("select_rod_duration", self._get_var_number("bag_delay", 0.36, float), float)
                 self.set_status("Selecting rod")
@@ -2010,15 +2015,210 @@ class Api:
                 time.sleep(0.05)
                 keyboard_controller.release(rod_slot)
                 time.sleep(0.2)
+            # Logging
+            self._check_logging_trigger()
+            # Totem
+            self._check_totem_trigger(shake_x, shake_y)
+            if self.vars["auto_reconnect"].get() == "on":
+                self._auto_reconnect(shake_x, shake_y)
+            # Cast
             if casting_mode == "Perfect":
                 self._execute_cast_perfect()
             else:
                 self.execute_cast_normal()
+            # Shake
             if shake_mode == "Navigation":
                 self._execute_shake_navigation()
             else:
                 self._execute_shake_click(shake_mode)
+            # Minigame
             self._enter_minigame()
+    # Utilities
+    def _check_logging_trigger(self):
+        """Check whether the Logging should fire based on the selected mode.
+
+        Modes (logging_trigger):
+          Cycles  – fire every N completed cycles (configurable via logging_cycle)
+          Time    – fire every N seconds elapsed  (configurable via logging_time)
+          Disabled – never fire
+        """
+        cd_mode = self.vars["logging_trigger"].get()
+
+        if cd_mode == "Disabled":
+            return  # webhook type is disabled; do nothing
+
+        try:
+            trigger_every = int(self.vars["logging_cycle"].get())
+        except (ValueError, KeyError):
+            trigger_every = 3  # safe fallback
+        
+        try:
+            trigger_secs = float(self.vars["logging_time"].get())
+        except (ValueError, KeyError):
+            trigger_secs = 60.0  # safe fallback
+
+        if cd_mode == "Cycles":
+            self.webhook_cycle_counter += 1
+
+            if trigger_every > 0 and self.webhook_cycle_counter % trigger_every == 0:
+                label = f"Cycle #{self.webhook_cycle_counter}"
+                self.send_logging("**Cycle Checkpoint**", label, show_status=False)
+
+        elif cd_mode == "Time":
+            self.webhook_cycle_counter += 1  # still count cycles for the message label
+            elapsed = time.time() - self.webhook_start_time
+
+            if trigger_secs > 0 and elapsed >= trigger_secs:
+                label = f"Cycle #{self.webhook_cycle_counter} | {int(elapsed)}s elapsed"
+                self.send_logging("**Time Checkpoint**", label, show_status=False)
+                # Reset the timer so it fires again after another trigger_secs seconds
+                self.webhook_start_time = time.time()
+    def _check_totem_trigger(self, shake_x, shake_y):
+        """Check whether auto totem should trigger based on mode.
+        
+        Uses shared trigger settings with Logging:
+          Cycles  – trigger every N completed cycles
+          Time    – trigger every N seconds elapsed
+          Disabled – never trigger
+        """
+        mode = self.vars["auto_totem_mode"].get()
+        # self.SCREEN_SCALE
+
+        if mode == "Disabled":
+            return
+        
+        if not self.macro_running == True:
+            return
+        
+        try:
+            trigger_every = int(self.vars["totem_cycles"].get())
+        except (ValueError, KeyError):
+            trigger_every = 3  # Safe Fallback
+        
+        try:
+            trigger_secs = float(self.vars["totem_delay"].get())
+        except (ValueError, KeyError):
+            trigger_secs = 60.0  # Safe Fallback
+
+        # Cycles Mode
+        if mode == "Cycles":
+            self.totem_cycle_counter += 1
+
+            if not (trigger_every > 0 and self.totem_cycle_counter % trigger_every == 0):
+                return
+
+        # Time Mode
+        elif mode == "Time":
+            elapsed = time.time() - self.totem_start_time
+
+            if not (trigger_secs > 0 and elapsed >= trigger_secs):
+                return
+
+            # Reset Timer Before Execution So It Starts Fresh Regardless Of Success/Failure
+            self.totem_start_time = time.time()
+            self.totem_cycle_counter += 1
+
+        else:
+            return
+        # Execute Totem
+        self.set_status("Using Totem")
+
+        sundial_slot = str(self.vars["sundial_slot"].get())
+        target_slot  = str(self.vars["target_slot"].get())
+        sundial_delay  = int(self.vars["sundial_delay"].get())
+        desired_time = self.vars["use_sundial_mode_when"].get()  # "Day", "Night", Or Maybe "Disabled"
+
+        totem_success = False
+
+        confidence_threshold = 0.6
+
+        # Detect Day / Night
+        current_time, best_conf = self._detect_day_or_night(confidence_threshold)
+        if current_time is None:
+            return  # Below confidence threshold — skip this cycle
+
+
+        # Decide Whether To Use Sundial
+        use_sundial = (
+            desired_time in ["Day", "Night"] and
+            current_time != desired_time
+        )
+
+
+        # Use Sundial (If Needed)
+        if use_sundial:
+            time.sleep(0.2)
+
+            keyboard_controller.press(sundial_slot)
+            time.sleep(0.05)
+            keyboard_controller.release(sundial_slot)
+
+            time.sleep(0.2)
+
+            mouse_controller.position = (shake_x, shake_y)
+            time.sleep(0.05)
+            self._click_at(shake_x, shake_y)
+
+            # Wait For Time Transition
+            time.sleep(sundial_delay)
+
+
+        # Use Target Totem
+        time.sleep(0.2)
+
+        keyboard_controller.press(target_slot)
+        time.sleep(0.05)
+        keyboard_controller.release(target_slot)
+
+        time.sleep(0.4)
+
+        mouse_controller.position = (shake_x, shake_y)
+        time.sleep(0.05)
+        self._click_at(shake_x, shake_y)
+
+        time.sleep(1)
+
+        totem_success = True
+
+        # Webhook
+        if totem_success:
+            self.send_logging(
+                "Totem used successfully",
+                self.totem_cycle_counter,
+                show_status=False
+            )
+    def _auto_reconnect(self, center_x, center_y):
+        reconnect_threshold = int(self.vars["reconnect_threshold"].get())
+        reconnect_wait_time = int(self.vars["reconnect_wait_time"].get())
+        mirror_ratio = float(self.vars["mirror_ratio"].get())
+        mirror_ratio2 = float(self.vars["mirror_ratio2"].get())
+        mirror_slot = str(self.vars["mirror_slot"].get())
+        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, shake_width, shake_height = self._get_areas("shake")
+        mirror_click_x = int(shake_width * mirror_ratio) + shake_left_s
+        # 0.59
+        mirror_click_y = int(shake_height * mirror_ratio2) + shake_top_s
+        # 1520
+        reconnect_threshold = int((reconnect_threshold / 1500) * shake_width)
+        img = self._grab_screen_region(shake_left_s, shake_top_s, shake_right_s, shake_bottom_s)
+        disconnect_area = self._find_color_cluster(img, "#393b3d", 5, reconnect_threshold)
+        while self.macro_running:
+            if not disconnect_area == None:
+                reconnect = self._find_color_cluster(img, "#FFFFFF", 8, int(reconnect_threshold / 2))
+                time.sleep(1)
+                reconnect_x = reconnect[0] + shake_left_s if not reconnect == None else shake_left_s
+                reconnect_y = reconnect[1] + shake_top_s if not reconnect == None else shake_top_s
+                self._click_at(reconnect_x, reconnect_y)
+                time.sleep(reconnect_wait_time)
+                self._click_at(center_x, center_y)
+                time.sleep(2.5)
+                keyboard_controller.press(mirror_slot)
+                time.sleep(0.05)
+                keyboard_controller.release(mirror_slot)
+                self._click_at(center_x, center_y)
+                time.sleep(0.2)
+                self._click_at(mirror_click_x, mirror_click_y)
+            return
+    # Casting
     def _execute_cast_perfect(self):
         """
         Scans for green and white Y coordinates and releases left click when
@@ -2573,7 +2773,7 @@ class Api:
                     self.last_fish_x = fish_x
                 self.last_fish_x = fish_x
             # Step 4: Restart Method — Friend Area (green present = minigame ended)
-            friend_x = self._find_color_center(friend_img, "#9BFF9B", 25)
+            friend_x = self._find_color_center(friend_img, "#9BFF9B", 5)
             if friend_x is not None:
                 release_mouse()
                 time.sleep(restart_delay)
