@@ -1,5 +1,5 @@
 {
-    "config-select": "Default",
+    "config-select": "Onirifalx",
     "start_stop": "",
     "change_areas": "",
     "force_stop": "",
@@ -24,8 +24,8 @@
     "white_cast_tolerance": "",
     "tracking_color": "",
     "tracking_tolerance": "",
-    "friends_color": "#74ff8e",
-    "friends_tolerance": "5",
+    "friends_color": "#a1ff9e",
+    "friends_tolerance": "30",
     "auto_zoom": "off",
     "auto_refresh": "on",
     "efficiency_mode": "off",

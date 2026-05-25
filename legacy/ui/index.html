@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PyWare Fishing V4</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                PyWare Fishing V4.0
+            </div>
+            <div class="status-container">
+                <span class="status-dot"></span>
+                <span id="status-label" class="status-text">Ready</span>
+            </div>
+            <button class="tab-button active" onclick="switchTab('basic')">
+                Basic
+            </button>
+            <button class="tab-button" onclick="switchTab('automation')">
+                Automation
+            </button>
+            <button class="tab-button" onclick="switchTab('utilities')">
+                Utilities
+            </button>
+            <div class="config-section">
+
+                <select id="config-select"></select>
+
+                <button onclick="saveConfig()">Save</button>
+                <button onclick="loadConfig()">Load</button>
+                <button onclick="newConfig()">New</button>
+
+            </div>
+        </div>
+        <!-- Main Content -->
+        <div class="content">
+            <!-- Basic Tab -->
+            <div id="basic" class="tab-content active">
+                <h1>Basic</h1>
+                <div class="card">
+                    <h3>Hotkeys</h3>
+                    <div class="text">
+                        <label>Start Key</label>
+                        <input id=start_stop type="text" placeholder="F5">
+                    </div>
+                    <div class="text">
+                        <label>Area Selector Key</label>
+                        <input id=change_areas type="text" placeholder="F6">
+                    </div>
+                    <div class="text">
+                        <label>Stop Key</label>
+                        <input id=force_stop type="text" placeholder="F7">
+                    </div>
+                    <hr>
+                    <div class="text">
+                        <label>Fishing Rod Slot</label>
+                        <input id=rod_slot type="text" placeholder="F7">
+                    </div>
+                    <div class="text">
+                        <label>Equipment Bag Slot</label>
+                        <input id=bag_slot type="text" placeholder="F7">
+                    </div>
+                    <div class="text">
+                        <label>Sundial Slot</label>
+                        <input id=sundial_slot type="text" placeholder="F7">
+                    </div>
+                    <div class="text">
+                        <label>Totem Slot</label>
+                        <input id=target_slot type="text" placeholder="F7">
+                    </div>
+                    <div class="text">
+                        <label>Mystic Mirror Slot</label>
+                        <input id=mirror_slot type="text" placeholder="F7">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Color Options</h3>
+                    <button onclick="startEyedropper()"> Pick Colors </button>
+                    <div class="color-grid">
+
+                        <div class="color-box">
+                            <h4>Left Bar</h4>
+                            <input id="left_color" type="text" placeholder="#FFFFFF">
+                            <input id="left_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                        <div class="color-box">
+                            <h4>Right Bar</h4>
+                            <input id="right_color" type="text" placeholder="#FFFFFF">
+                            <input id="right_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                        <div class="color-box">
+                            <h4>Arrows</h4>
+                            <input id="arrow_color" type="text" placeholder="#848587">
+                            <input id="arrow_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                        <div class="color-box">
+                            <h4>Fish</h4>
+                            <input id="fish_color" type="text" placeholder="#5B4B43">
+                            <input id="fish_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                        <div class="color-box">
+                            <h4>Shake</h4>
+                            <input id="shake_color" type="text" placeholder="#FFFFFF">
+                            <input id="shake_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                        <div class="color-box">
+                            <h4>Green Cast</h4>
+                            <input id="green_cast_color" type="text" placeholder="#FFFFFF">
+                            <input id="green_cast_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                        <div class="color-box">
+                            <h4>White Cast</h4>
+                            <input id="white_cast_color" type="text" placeholder="#848587">
+                            <input id="white_cast_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                        <div class="color-box">
+                            <h4>Tracking</h4>
+                            <input id="tracking_color" type="text" placeholder="#5B4B43">
+                            <input id="tracking_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                        <div class="color-box">
+                            <h4>Friends Area</h4>
+                            <input id="friends_color" type="text" placeholder="#9BFF9B">
+                            <input id="friends_tolerance" type="number" placeholder="Tolerance">
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+            <!-- Automation Tab -->
+            <div id="automation" class="tab-content">
+                <h1>Automation</h1>
+                <div class="card">
+                    <h3>Basic Options</h3>
+                    <div class="switch2">
+                        <p>Auto Zoom</p>
+                        <label class="switch">
+                            <input id=auto_zoom type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Auto Refresh</p>
+                        <label class="switch">
+                            <input id=auto_refresh type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Efficiency Mode</p>
+                        <label class="switch">
+                            <input id=efficiency_mode type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Fish Overlay</p>
+                        <label class="switch">
+                            <input id=fish_overlay type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Status Overlay</p>
+                        <label class="switch">
+                            <input id=status_overlay type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Track Notes</p>
+                        <label class="switch">
+                            <input id=track_notes type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>HDR</p>
+                        <label class="switch">
+                            <input id=hdr type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Lock Cursor</p>
+                        <label class="switch">
+                            <input id=lock_cursor type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="text">
+                        <label>Select Rod Duration</label>
+                        <input id=select_rod_duration type="text" placeholder="0.35">
+                    </div>
+                    <div class="dropdown">
+                        <label for="casting_mode">Casting Mode:</label>
+                        <select name="casting_mode" id="casting_mode" onchange="updateCastingMode()">
+                        <option value="normal">Normal</option>
+                        <option value="perfect">Perfect</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="shake_mode">Shake Mode:</label>
+                        <select name="shake_mode" id="shake_mode">
+                        <option value="pixel">Pixel</option>
+                        <option value="circle">Circle</option>
+                        <option value="navigation">Navigation</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="fishing_mode">Fishing Mode:</label>
+                        <select name="fishing_mode" id="fishing_mode">
+                        <option value="line">Line</option>
+                        <option value="color">Color</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card" id="perfect-cast-card">
+                    <h3>Perfect Cast Settings</h3>
+                    <div class="text">
+                        <label>Fall Scan Timeout</label>
+                        <input id=fall_scan_timeout type="text" placeholder="5">
+                    </div>
+                    <div class="text">
+                        <label>Cast Scan Delay</label>
+                        <input id=cast_scan_delay type="text" placeholder="0.01">
+                    </div>
+                    <div class="text">
+                        <label>Under 700px/s</label>
+                        <input id=perfect_cast_timing_700 type="text" placeholder="0.05">
+                    </div>
+                    <div class="text">
+                        <label>700-800 px/s</label>
+                        <input id=perfect_cast_timing_800 type="text" placeholder="0.0">
+                    </div>
+                    <div class="text">
+                        <label>800-900 px/s</label>
+                        <input id=perfect_cast_timing_900 type="text" placeholder="-0.05">
+                    </div>
+                    <div class="text">
+                        <label>900-1000 px/s</label>
+                        <input id=perfect_cast_timing_1000 type="text" placeholder="0.05">
+                    </div>
+                    <div class="text">
+                        <label>1000-1100 px/s</label>
+                        <input id=perfect_cast_timing_1100 type="text" placeholder="0.0">
+                    </div>
+                    <div class="text">
+                        <label>1100-1200 px/s</label>
+                        <input id=perfect_cast_timing_1200 type="text" placeholder="-0.05">
+                    </div>
+                    <div class="text">
+                        <label>1200-1300 px/s</label>
+                        <input id=perfect_cast_timing_1300 type="text" placeholder="0.0">
+                    </div>
+                    <div class="text">
+                        <label>1300-1400 px/s</label>
+                        <input id=perfect_cast_timing_1400 type="text" placeholder="-0.05">
+                    </div>
+                    <div class="text">
+                        <label>1400-1500 px/s</label>
+                        <input id=perfect_cast_timing_1500 type="text" placeholder="0.05">
+                    </div>
+                    <div class="text">
+                        <label>1500-1600 px/s</label>
+                        <input id=perfect_cast_timing_1600 type="text" placeholder="0.0">
+                    </div>
+                    <div class="text">
+                        <label>1600+ px/s</label>
+                        <input id=perfect_cast_timing_1600_plus type="text" placeholder="-0.05">
+                    </div>
+                </div>   
+                <div class="card">
+                    <h3>Casting</h3>
+                    <div class="text">
+                        <label>Delay</label>
+                        <input id=delay_before_cating type="text" placeholder="0.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Duration</label>
+                        <input id=cast_duration type="text" placeholder="0.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Delay</label>
+                        <input id=delay_after_casting type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Shaking</h3>
+                    <div class="text">
+                        <label>Shake Delay</label>
+                        <input id=shake_scan_delay type="text" placeholder="0.08">
+                    </div>
+                    <div class="text">
+                        <label>Shake Failsafe (attempts)</label>
+                        <input id=shake_failsafe type="text" placeholder="80">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Minigame</h3>
+                    <div class="text">
+                        <label>Minigame Scan Delay (seconds)</label>
+                        <input id=minigame_scan_delay type="text" placeholder="0.01">
+                    </div>
+                    <div class="text">
+                        <label>Restart Delay</label>
+                        <input id=restart_delay type="text" placeholder="3">
+                    </div>
+                    <div class="text">
+                        <label>Bar Ratio From Side</label>
+                        <input id=bar_ratio_from_side type="text" placeholder="80">
+                    </div>
+                    <div class="text">
+                        <label>Note Tracking Ratio</label>
+                        <input id=note_tracking_ratio type="text" placeholder="0.3">
+                    </div>
+                    <div class="text">
+                        <label>KP (Proportional)</label>
+                        <input id=kp type="text" placeholder="0.93">
+                    </div>
+                    <div class="text">
+                        <label>KD (Derivative)</label>
+                        <input id=kd type="text" placeholder="0.07">
+                    </div>
+                </div>
+            </div>
+            <!-- Utilities Tab -->
+            <div id="utilities" class="tab-content">
+                <h1>Utilities</h1>
+                <div class="card">
+                    <h3>Logging</h3>
+                    <div class="dropdown">
+                        <label for="logging_mode">Logging Mode:</label>
+                        <select name="logging_mode" id="logging_mode">
+                        <option value="Screenshot">Screenshot</option>
+                        <option value="Text">Text</option>
+                        <option value="Disabled">Disabled</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="logging_trigger">Logging Trigger:</label>
+                        <select name="logging_trigger" id="logging_trigger">
+                        <option value="Time">Time</option>
+                        <option value="Cycles">Cycles</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Webhook URL</label>
+                        <input id=logging_url type="text" placeholder="[___]">
+                    </div>
+                    <div class="text">
+                        <label>Webhook Name</label>
+                        <input id=logging_name type="text" placeholder="PyWare Fishing V4">
+                    </div>
+                    <div class="text">
+                        <label>Cycles</label>
+                        <input id=logging_cycle type="text" placeholder="3">
+                    </div>
+                    <div class="text">
+                        <label>Time (seconds)</label>
+                        <input id=logging_time type="text" placeholder="60">
+                    </div>
+                    <button onclick="testLogging()">Test Webhook</button>
+                </div>
+                <div class="card">
+                    <h3>Auto Totem</h3>
+                    <div class="dropdown">
+                        <label for="auto_totem_mode">Totem Mode:</label>
+                        <select name="auto_totem_mode" id="auto_totem_mode">
+                        <option value="Time">Time</option>
+                        <option value="Cycles">Cycles</option>
+                        <option value="Disabled">Disabled</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="use_sundial_mode_when">Totem Trigger:</label>
+                        <select name="use_sundial_mode_when" id="use_sundial_mode_when">
+                        <option value="Day">Day</option>
+                        <option value="Night">Night</option>
+                        <option value="Disabled">Disabled</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Cycles</label>
+                        <input id=totem_cycles type="text" placeholder="3">
+                    </div>
+                    <div class="text">
+                        <label>Time (seconds)</label>
+                        <input id=totem_delay type="text" placeholder="60">
+                    </div>
+                    <div class="text">
+                        <label>Sundial Delay (seconds)</label>
+                        <input id=sundial_delay type="text" placeholder="15">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Auto Reconnect</h3>
+                    <div class="switch2">
+                        <p>Auto Reconnect</p>
+                        <label class="switch">
+                            <input id=auto_reconnect type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="text">
+                        <label>Threshold</label>
+                        <input id=reconnect_threshold type="text" placeholder="3">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Wait Time (Seconds)</label>
+                        <input id=reconnect_wait_time type="text" placeholder="60">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Mirror X (Ratio)</label>
+                        <input id=mirror_ratio type="text" placeholder="60">
+                    </div>
+                    <div class="text">
+                        <label>Mirror Y (Ratio)</label>
+                        <input id=mirror_ratio2 type="text" placeholder="60">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
