@@ -25,13 +25,8 @@
                 Utilities
             </button>
             <div class="config-section">
-
-                <select id="config-select"></select>
-
-                <button onclick="saveConfig()">Save</button>
-                <button onclick="loadConfig()">Load</button>
-                <button onclick="newConfig()">New</button>
-
+                <select id="config-select" onchange="switchConfig(this.value)"></select>
+                <button onclick="openConfigManager()"> Manage </button>
             </div>
         </div>
         <!-- Main Content -->
@@ -79,61 +74,51 @@
                     <h3>Color Options</h3>
                     <button onclick="startEyedropper()"> Pick Colors </button>
                     <div class="color-grid">
-
                         <div class="color-box">
                             <h4>Left Bar</h4>
                             <input id="left_color" type="text" placeholder="#FFFFFF">
                             <input id="left_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                         <div class="color-box">
                             <h4>Right Bar</h4>
                             <input id="right_color" type="text" placeholder="#FFFFFF">
                             <input id="right_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                         <div class="color-box">
                             <h4>Arrows</h4>
                             <input id="arrow_color" type="text" placeholder="#848587">
                             <input id="arrow_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                         <div class="color-box">
                             <h4>Fish</h4>
                             <input id="fish_color" type="text" placeholder="#5B4B43">
                             <input id="fish_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                         <div class="color-box">
                             <h4>Shake</h4>
                             <input id="shake_color" type="text" placeholder="#FFFFFF">
                             <input id="shake_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                         <div class="color-box">
                             <h4>Green Cast</h4>
                             <input id="green_cast_color" type="text" placeholder="#FFFFFF">
                             <input id="green_cast_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                         <div class="color-box">
                             <h4>White Cast</h4>
                             <input id="white_cast_color" type="text" placeholder="#848587">
                             <input id="white_cast_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                         <div class="color-box">
                             <h4>Tracking</h4>
                             <input id="tracking_color" type="text" placeholder="#5B4B43">
                             <input id="tracking_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                         <div class="color-box">
                             <h4>Friends Area</h4>
                             <input id="friends_color" type="text" placeholder="#9BFF9B">
                             <input id="friends_tolerance" type="number" placeholder="Tolerance">
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -433,6 +418,39 @@
                         <input id=mirror_ratio2 type="text" placeholder="60">
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+    <!-- Config Manager Modal -->
+    <div id="config-modal-overlay" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h2>Config Manager</h2>
+                <button
+                    class="modal-close"
+                    onclick="closeConfigManager()">
+                    ×
+                </button>
+            </div>
+            <div class="modal-content">
+                <button onclick="newConfig()">
+                    New Config
+                </button>
+                <button onclick="deleteConfig()">
+                    Delete Config
+                </button>
+                <button onclick="refreshConfigs()">
+                    Refresh Configs
+                </button>
+                <button onclick="openConfigsFolder()">
+                    Open Configs Folder
+                </button>
+                <button onclick="resetSettings()">
+                    Reset Settings
+                </button>
+                <button onclick="resetColors()">
+                    Reset Colors
+                </button>
             </div>
         </div>
     </div>

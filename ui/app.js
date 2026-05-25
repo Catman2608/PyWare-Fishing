@@ -1,9 +1,9 @@
+let currentConfig = null;
 window.setStatus = (message) => {
     const statusLabel = document.getElementById("status-label");
     const statusDot = document.querySelector(".status-dot");
     if (statusLabel) {
         statusLabel.textContent = message;
-        
         // Dynamically style the status dot depending on the status message
         if (statusDot) {
             const lowerMsg = message.toLowerCase();
@@ -23,64 +23,29 @@ window.setStatus = (message) => {
         }
     }
 };
-
 window.addEventListener("pywebviewready", async () => {
     await refreshConfigs();
     await loadStartupConfig();
     bindSettingsSync();
     updateCastingMode();
 });
-function switchTab(tabId) {
-    // Hide all tabs
-    document.querySelectorAll(".tab-content")
-        .forEach(tab => {
-            tab.classList.remove("active");
-        });
-    // Remove active button state
-    document.querySelectorAll(".tab-button")
-        .forEach(button => {
-            button.classList.remove("active");
-        });
-    // Show selected tab
-    document.getElementById(tabId)
-        .classList.add("active");
-    // Highlight selected button
-    event.target.classList.add("active");
-}
 async function startMacro() {
-
     // Save current UI settings first
     const configName =
         document.getElementById(
             "config-select"
         ).value;
-
     const settings = getSettings();
-
     await pywebview.api.save_config(
         configName,
         settings
     );
-
     // Sync runtime variables to Python
     await syncSettings();
-
     // Start macro
     let result =
         await pywebview.api.start_macro();
-
     console.log(result);
-}
-function updateCastingMode() {
-    const castingMode =
-        document.getElementById("casting_mode").value;
-    const perfectCard =
-        document.getElementById("perfect-cast-card");
-    if (castingMode === "perfect") {
-        perfectCard.style.display = "block";
-    } else {
-        perfectCard.style.display = "none";
-    }
 }
 // =========================
 // TAB SWITCHING
@@ -155,19 +120,42 @@ async function syncSettings() {
 }
 function bindSettingsSync() {
     document.querySelectorAll("input, select").forEach(element => {
-        if (element.id && element.id !== "config-select") {
-            element.addEventListener("change", syncSettings);
-            element.addEventListener("input", syncSettings);
-        }
+        if (!element.id) return;
+        // Skip config dropdown
+        if (element.id === "config-select") return;
+        element.addEventListener("change", syncSettings);
+        element.addEventListener("input", syncSettings);
     });
-    document.getElementById("config-select")
-        .addEventListener("change", loadConfig);
 }
-async function saveConfig() {
-    const configName =
-        document.getElementById(
-            "config-select"
-        ).value;
+async function switchConfig(newConfigName) {
+    try {
+        if (!newConfigName) return;
+        // Prevent duplicate reload
+        if (newConfigName === currentConfig) {
+            return;
+        }
+        // Auto-save current config
+        if (currentConfig) {
+            await saveConfig(currentConfig);
+        }
+        // Load new config
+        await loadConfig(newConfigName);
+    } catch (err) {
+        console.error(err);
+        setStatus("Failed to switch config");
+    }
+}
+async function saveConfig(configName = null) {
+    if (!configName) {
+        configName =
+            document.getElementById(
+                "config-select"
+            ).value;
+    }
+    if (!configName) {
+        setStatus("No config selected");
+        return;
+    }
     const settings = getSettings();
     const result =
         await pywebview.api.save_config(
@@ -175,16 +163,22 @@ async function saveConfig() {
             settings
         );
     if (result.success) {
-        alert("Config saved.");
+        window.setStatus(`Saved: ${configName}`);
     } else {
-        alert(result.error);
+        window.setStatus(`Error: "${result.error}"`);
     }
 }
-async function loadConfig() {
-    const configName =
-        document.getElementById(
-            "config-select"
-        ).value;
+async function loadConfig(configName = null) {
+    if (!configName) {
+        configName =
+            document.getElementById(
+                "config-select"
+            ).value;
+    }
+    if (!configName) {
+        setStatus("No config selected");
+        return;
+    }
     const result =
         await pywebview.api.load_config(
             configName
@@ -194,8 +188,12 @@ async function loadConfig() {
             result.settings
         );
         await syncSettings();
+        currentConfig = configName;
+        setStatus(`Loaded: ${configName}`);
     } else {
-        alert(result.error);
+        window.setStatus(
+            `Error: "${result.error}"`
+        );
     }
 }
 async function loadStartupConfig() {
@@ -207,10 +205,12 @@ async function loadStartupConfig() {
                 "config-select"
             );
         select.value = result.config_name;
+        currentConfig = result.config_name;
         applySettings(
             result.settings
         );
         await syncSettings();
+        setStatus(`Loaded: ${currentConfig}`);
     } else {
         await syncSettings();
     }
@@ -239,10 +239,12 @@ async function newConfig() {
         name,
         getSettings()
     );
-    refreshConfigs();
+    await refreshConfigs();
     document.getElementById(
         "config-select"
     ).value = name;
+    currentConfig = name;
+    setStatus(`Created: ${name}`);
 }
 async function deleteConfig() {
     const configName =
@@ -250,10 +252,90 @@ async function deleteConfig() {
             "config-select"
         ).value;
     if (!configName) return;
-    await pywebview.api.delete_config(
-        configName
-    );
-    refreshConfigs();
+    const confirmed =
+        confirm(
+            `Delete "${configName}"?\n\nThis cannot be undone.`
+        );
+    if (!confirmed) return;
+    const result =
+        await pywebview.api.delete_config(
+            configName
+        );
+    if (result.success) {
+        await refreshConfigs();
+        const select =
+            document.getElementById(
+                "config-select"
+            );
+        if (select.options.length > 0) {
+            select.selectedIndex = 0;
+            await loadConfig(
+                select.value
+            );
+        }
+        setStatus(
+            `Deleted: ${configName}`
+        );
+    } else {
+        setStatus(
+            `Delete failed`
+        );
+    }
+}
+async function resetSettings() {
+    const configName =
+        document.getElementById(
+            "config-select"
+        ).value;
+    if (!configName) return;
+    const confirmed =
+        confirm(
+            `Reset ALL settings for "${configName}"?\n\nColors will be preserved.`
+        );
+    if (!confirmed) return;
+    const result =
+        await pywebview.api.reset_settings(
+            configName
+        );
+    if (result.success) {
+        await loadConfig(configName);
+        setStatus(
+            `Settings reset`
+        );
+    } else {
+        setStatus(
+            `Reset failed`
+        );
+    }
+}
+async function resetColors() {
+    const configName =
+        document.getElementById(
+            "config-select"
+        ).value;
+    if (!configName) return;
+    const confirmed =
+        confirm(
+            `Reset colors for "${configName}"?`
+        );
+    if (!confirmed) return;
+    const result =
+        await pywebview.api.reset_colors(
+            configName
+        );
+    if (result.success) {
+        await loadConfig(configName);
+        setStatus(
+            `Colors reset`
+        );
+    } else {
+        setStatus(
+            `Reset failed`
+        );
+    }
+}
+async function openConfigsFolder() {
+    await pywebview.api.open_base_folder();
 }
 async function testLogging() {
     await pywebview.api.test_logging();
@@ -261,3 +343,26 @@ async function testLogging() {
 async function startEyedropper() {
     await pywebview.api.start_eyedropper();
 }
+function openConfigManager() {
+    document
+        .getElementById(
+            "config-modal-overlay"
+        )
+        .classList.add("active");
+}
+function closeConfigManager() {
+    document
+        .getElementById(
+            "config-modal-overlay"
+        )
+        .classList.remove("active");
+}
+document.addEventListener("click", (e) => {
+    const overlay =
+        document.getElementById(
+            "config-modal-overlay"
+        );
+    if (e.target === overlay) {
+        closeConfigManager();
+    }
+});

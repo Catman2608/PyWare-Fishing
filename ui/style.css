@@ -104,7 +104,6 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-
 @keyframes status-pulse {
     0%, 100% {
         transform: scale(1);
@@ -227,29 +226,21 @@ button {
     background-color: #0f172a;
     border: 1px solid rgba(255,255,255,0.06);
     color: rgba(255,255,255,0.9);
-
     padding: 10px 38px 10px 14px;
     border-radius: 10px;
-
     outline: none;
     font-size: 14px;
-
     width: 180px;
-
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-
     cursor: default;
-
     transition:
         border-color 0.2s ease,
         box-shadow 0.2s ease,
         background-color 0.2s ease;
-
     /* Custom arrow */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M3.204 5h9.592L8 10.481 3.204 5z'/%3E%3C/svg%3E");
-
     background-repeat: no-repeat;
     background-position: right 12px center;
     background-size: 12px;
@@ -346,7 +337,6 @@ button {
     gap: 16px;
     margin-top: 15px;
 }
-
 .color-box {
     background: #1e1e1e;
     border: 1px solid #2d2d2d;
@@ -356,13 +346,11 @@ button {
     flex-direction: column;
     gap: 10px;
 }
-
 .color-box h4 {
     margin: 0;
     font-size: 14px;
     font-weight: 600;
 }
-
 .color-box input {
     width: 100%;
     padding: 10px;
@@ -371,4 +359,104 @@ button {
     background: #121212;
     color: white;
     box-sizing: border-box;
+}
+/* =========================
+   CONFIG MODAL
+========================= */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(10px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+.modal-overlay.active {
+    display: flex;
+}
+.modal-window {
+    width: 420px;
+    background: rgba(20, 20, 50, 0.96);
+    border:
+        1px solid rgba(255,255,255,0.08);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow:
+        0 25px 60px rgba(0,0,0,0.45);
+    animation:
+        modalFade 0.18s ease;
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.modal-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    background:
+        linear-gradient(
+            135deg,
+            #ffffff 0%,
+            #a5b4fc 100%
+        );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.modal-close {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    border: none;
+    background:
+        rgba(255,255,255,0.06);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.modal-close:hover {
+    background:
+        rgba(255,255,255,0.12);
+    transform: scale(1.05);
+}
+.modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.modal-content button {
+    width: 100%;
+    background:
+        rgba(255,255,255,0.06);
+    border:
+        1px solid rgba(255,255,255,0.08);
+    color: white;
+    padding: 14px;
+    border-radius: 14px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.modal-content button:hover {
+    background:
+        rgba(255,255,255,0.12);
+    transform: translateY(-1px);
+}
+@keyframes modalFade {
+    from {
+        opacity: 0;
+        transform:
+            translateY(10px)
+            scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform:
+            translateY(0)
+            scale(1);
+    }
 }
