@@ -5,6 +5,9 @@ import json
 import os
 import time
 import sys
+# OCR
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 # Keyboard And Mouse
 from pynput import keyboard, mouse
 from pynput.keyboard import Controller as KeyboardController
@@ -95,11 +98,17 @@ if sys.platform == "win32":
         opacity_alpha = int(255 * transparency)
         return bool(user32.SetLayeredWindowAttributes(hwnd, 0, opacity_alpha, LWA_ALPHA))
 elif sys.platform == "darwin":
+    def get_mouse_position():
+        event = Quartz.CGEventCreate(None)
+        loc = Quartz.CGEventGetLocation(event)
+        return loc.x, loc.y
     def _move_mouse(x, y):
         point = Quartz.CGPointMake(float(x), float(y))
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
-    def _mouse_event(event_type, x, y):
+    def _mouse_event(event_type, x=None, y=None):
+        if x == None or y == None:
+            x, y = get_mouse_position()
         event = Quartz.CGEventCreateMouseEvent(
             None,
             event_type,
@@ -377,6 +386,119 @@ class Eyedropper:
         """Force-close from Python."""
         if self._open:
             self.close_eyedropper()
+class FishOverlay:
+    """Fishing minigame overlay visualization implemented with pywebview."""
+    HTML_FILE = "ui/fish_overlay.html"
+    def __init__(self, parent_app):
+        self.parent_app = parent_app
+        self._win = None
+        self._open = False
+        self._visible = False
+        self.width = 800
+        self.height = 60
+        self.x = int(SCREEN_WIDTH * 0.5) - int(self.width / 2)
+        self.y = int(SCREEN_HEIGHT * 0.65)
+    def init_window(self):
+        if self._win and self._open:
+            return
+        self._win = webview.create_window(
+            "PyWare Fish Overlay",
+            self.HTML_FILE,
+            transparent=True,
+            frameless=True,
+            easy_drag=False,
+            on_top=True,
+            resizable=False,
+            width=self.width,
+            height=self.height,
+            x=self.x,
+            y=self.y,
+            background_color="#000000",
+        )
+        self._open = True
+        self._visible = True
+        self._win.events.closed += self._on_closed
+    def _on_closed(self):
+        self._open = False
+        self._visible = False
+        self._win = None
+    def _eval(self, script):
+        if not self._win or not self._open:
+            return
+        try:
+            self._win.evaluate_js(script)
+        except Exception:
+            pass
+    def set_layout(self, x, y, width, height):
+        width = max(1, int(width))
+        height = max(1, int(height))
+        x = max(0, min(int(x), max(0, self.parent_app.SCREEN_WIDTH - width)))
+        y = max(0, min(int(y), max(0, self.parent_app.SCREEN_HEIGHT - height)))
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.init_window()
+        if not self._win:
+            return
+        try:
+            self._win.resize(width, height)
+            self._win.move(x, y)
+        except Exception:
+            pass
+    def show(self):
+        self.init_window()
+        if self._win:
+            try:
+                self._win.show()
+            except Exception:
+                pass
+            # Re-assert on_top z-order after un-hiding without stealing keyboard focus.
+            # hide()/show() on edgechromium does not guarantee the window is re-stacked
+            # above the game; nudging move() forces the compositor to re-evaluate z-order.
+            try:
+                self._win.move(self.x, self.y)
+            except Exception:
+                pass
+        self._visible = True
+    def hide(self):
+        if self._win and self._open:
+            try:
+                self._win.hide()
+            except Exception:
+                pass
+        self._visible = False
+    def clear(self):
+        self._eval("window.fishOverlay && window.fishOverlay.clear()")
+    def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
+        if bar_center is None:
+            return
+        self.init_window()
+        half_size = int(box_size / 2) if box_size else 0
+        center_x = float(bar_center - canvas_offset)
+        shape = {
+            "x1": float(bar_center - half_size - canvas_offset),
+            "x2": float(bar_center + half_size - canvas_offset),
+            "center_x": center_x,
+            "color": str(color),
+            "show_bar_center": bool(show_bar_center),
+            "bar_y1": max(0.0, min(1.0, float(bar_y1))),
+            "bar_y2": max(0.0, min(1.0, float(bar_y2))),
+        }
+        self._eval(
+            "window.fishOverlay && window.fishOverlay.draw("
+            + json.dumps(shape)
+            + ")"
+        )
+    def close(self):
+        if self._win and self._open:
+            self._open = False
+            try:
+                self._win.destroy()
+            except Exception:
+                pass
+    def is_open(self):
+        return self._open
 class Api:
     def __init__(self):
         self.vars = {} # Save Entry Variables Here
@@ -451,6 +573,9 @@ class Api:
         self.totem_cycle_counter = 0
         self.webhook_start_time = 0
         self.totem_start_time = 0
+        self.fish_overlay = FishOverlay(self)
+        self._fish_overlay_mode = "idle"
+        self._fish_overlay_cast_bounds = None
         self.load_misc_settings()
     def start_eyedropper(self):
         # Toggle Off If Already Open
@@ -546,6 +671,7 @@ class Api:
     # ---------------------
     def update_settings(self, settings):
         self.vars.update(settings)
+        self._apply_fish_overlay_state()
         return {
             "success": True
         }
@@ -903,7 +1029,23 @@ class Api:
         )
         self.set_status("Area selector opened")
     # Macro helper functions
-    # Click At X/Y Position
+    # Hold Mouse
+    def hold_mouse(self):
+        if sys.platform == "win32":
+            windll.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        elif sys.platform == "darwin":
+            _mouse_event(Quartz.kCGEventLeftMouseDown)
+        else:
+            mouse_controller.press(Button.left)
+    # Release Mouse
+    def release_mouse(self):
+        if sys.platform == "win32":
+            windll.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        elif sys.platform == "darwin":
+            _mouse_event(Quartz.kCGEventLeftMouseUp)
+        else:
+            mouse_controller.release(Button.left)
+    # Click At
     def _click_at(self, x, y, click_count=1):
         if sys.platform == "win32":
             # Move Cursor
@@ -1286,6 +1428,59 @@ class Api:
             right = int(self.SCREEN_WIDTH * 0.9739)
             bottom = int(self.SCREEN_HEIGHT * 0.8796)
         return left, top, right, bottom
+    def _get_overlay_anchor_area(self, area_name):
+        left, top, right, bottom, _, _ = self._get_areas(area_name)
+        return left, top, right, bottom
+    def _build_horizontal_overlay_layout(self, area_bounds):
+        left, top, right, bottom = area_bounds
+        width = max(1, right - left)
+        height = max(1, bottom - top)
+        x = left
+        above_y = top - height
+        below_y = bottom
+        y = above_y if above_y >= 0 else below_y
+        return x, y, width, height
+    def _get_fish_overlay_layout(self, mode=None):
+        mode = mode or self._fish_overlay_mode
+        if mode == "casting":
+            shake_left, shake_top, shake_right, shake_bottom = self._get_overlay_anchor_area("shake")
+            shake_height = shake_bottom - shake_top
+            shake_center_x = (shake_left + shake_right) / 2
+            overlay_width = 60
+            overlay_height = max(36, shake_height)
+            y = shake_top
+            cast_center_x = shake_center_x
+            if self._fish_overlay_cast_bounds is not None:
+                cast_left, cast_top, cast_right, cast_bottom = self._fish_overlay_cast_bounds
+                cast_center_x = (cast_left + cast_right) / 2
+                overlay_height = max(36, cast_bottom - cast_top)
+                y = cast_top
+            x = shake_right if cast_center_x <= shake_center_x else shake_left - overlay_width
+            return x, y, overlay_width, overlay_height
+        if mode == "fishing":
+            x, y, overlay_width, overlay_height = self._build_horizontal_overlay_layout(
+                self._get_overlay_anchor_area("fish")
+            )
+            half_height = int(self.SCREEN_HEIGHT / 2)
+            y = y - 80 if y > half_height else y + 80
+            return x, y, overlay_width, overlay_height
+        return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("friend"))
+    def _is_fish_overlay_enabled(self):
+        return self.vars.get("fish_overlay") == "on"
+    def _apply_fish_overlay_state(self):
+        if not hasattr(self, "fish_overlay"):
+            return
+        if not self._is_fish_overlay_enabled() or self._fish_overlay_mode == "idle":
+            self.fish_overlay.hide()
+            return
+        x, y, width, height = self._get_fish_overlay_layout()
+        self.fish_overlay.set_layout(x, y, width, height)
+        self.fish_overlay.show()
+    def _set_fish_overlay_mode(self, mode):
+        self._fish_overlay_mode = mode
+        self._apply_fish_overlay_state()
+    def _on_fish_overlay_toggle(self, *args):
+        self._apply_fish_overlay_state()
     def _grab_screen_region(self, left, top, right, bottom):
         """Optimized path for MSS screen capture with macOS color handling. Coordinates are expected to be already scaled."""
         width  = right - left
@@ -1693,11 +1888,15 @@ class Api:
         if key not in self._keys_held:
             return
         self._keys_held.discard(key)
+        macro_mode = self.vars["macro_mode"]
         if key == "f5":
             if self.macro_running == False:
                 # Save current settings to config before starting
                 self.save_config(self.current_config, self.vars)
-                threading.Thread(target=self.start_fishing, daemon=True).start()
+                if macro_mode == "fishing":
+                    threading.Thread(target=self.start_fishing, daemon=True).start()
+                elif macro_mode == "appraisal":
+                    threading.Thread(target=self.start_appraisal, daemon=True).start()
             else:
                 return
         elif key == "f6":
@@ -2016,7 +2215,18 @@ class Api:
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
         return control_signal
-    # Start macro
+    # Start appraisal
+    def start_appraisal(self):
+        self.macro_running = True
+        time.sleep(0.1)
+        keyboard_controller.press("e")
+        time.sleep(0.05)
+        keyboard_controller.release("e")
+        dialogue_left, dialogue_top, dialogue_right, dialogue_bottom = self._get_areas("shake")
+        hotbar_left, hotbar_top, hotbar_right, hotbar_bottom = self._get_areas("fish")
+        while self.macro_running:
+            pass
+    # Start fishing
     def start_fishing(self):
         self.macro_running = True
         rod_slot = str(self.vars["rod_slot"])
@@ -2228,6 +2438,8 @@ class Api:
         mouse_controller.press(Button.left)
         # Get Areas (Scale Factor Applied Inside _Get_Areas)
         shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, shake_height = self._get_areas("shake")
+        self._fish_overlay_cast_bounds = None
+        self._set_fish_overlay_mode("casting")
         # Config 
         white_color = self.vars.get("white_cast_color", self.vars.get("perfect_color2", "#d4d3ca"))
         green_color = self.vars.get("green_cast_color", self.vars.get("perfect_color", "#64a04c"))
@@ -2287,6 +2499,8 @@ class Api:
                 if time.time() - start_time > max_time:
                     break
                 continue
+            if self._is_fish_overlay_enabled():
+                self.fish_overlay.clear()
             if not tracking_mode:
                 mask = color_mask(region, target_green, green_tol)
                 rows, cols = np.nonzero(mask)
@@ -2340,6 +2554,27 @@ class Api:
             current_distance = white_y_top - green_y
             if total_distance <= 0:
                 continue
+            cast_left = shake_left_s + green_left_x
+            cast_top = shake_top_s + green_y
+            cast_right = shake_left_s + green_right_x
+            cast_bottom = shake_top_s + white_y_bottom
+            if self._fish_overlay_cast_bounds != (cast_left, cast_top, cast_right, cast_bottom):
+                self._fish_overlay_cast_bounds = (cast_left, cast_top, cast_right, cast_bottom)
+                self._apply_fish_overlay_state()
+            if self._is_fish_overlay_enabled():
+                cast_height = max(1, white_y_bottom - green_y)
+                white_ratio = max(0.0, min(1.0, current_distance / cast_height))
+                draw_x = self.fish_overlay.width / 2
+                bar_height = 0.08
+                self.fish_overlay.draw(
+                    bar_center=draw_x, box_size=15, color="green", canvas_offset=0,
+                    bar_y1=0.0, bar_y2=min(1.0, bar_height / 2)
+                )
+                self.fish_overlay.draw(
+                    bar_center=draw_x, box_size=30, color="white", canvas_offset=0,
+                    bar_y1=max(0.0, white_ratio - bar_height / 2),
+                    bar_y2=min(1.0, white_ratio + bar_height / 2)
+                )
             # --- Velocity tracking ---
             now_pc = time.perf_counter()
             white_positions.append((0, white_y_top))   # x is irrelevant; track Y only
@@ -2429,6 +2664,8 @@ class Api:
         stop_event.set()
         mouse_controller.release(Button.left)
         time.sleep(cast_delay)
+        self._fish_overlay_cast_bounds = None
+        self._set_fish_overlay_mode("idle")
         return
     def execute_cast_normal(self):
         delay_before_casting = float(self._get_var_number("delay_before_casting", 0.5, float))
@@ -2585,6 +2822,7 @@ class Api:
         self._pred_prev_bar_x = None
         self._pred_prev_time = None
         self._pred_filtered_vel = 0.0
+        self._set_fish_overlay_mode("fishing")
         # Load Values From Gui
         arrow_hex = self.vars["arrow_color"]
         bar_ratio = float(self.vars["bar_ratio_from_side"] or 0.5)
@@ -2627,13 +2865,13 @@ class Api:
         def hold_mouse():
             nonlocal mouse_down
             if not mouse_down:
-                mouse_controller.press(Button.left)
+                self.hold_mouse()
                 # Keyboard_Controller.Press(Key.Space)
                 mouse_down = True
         def release_mouse():
             nonlocal mouse_down
             if mouse_down:
-                mouse_controller.release(Button.left)
+                self.release_mouse()
                 # Keyboard_Controller.Release(Key.Space)
                 mouse_down = False
         # Start Screen Capture Thread (via _start_capture so it's tracked and
@@ -2648,11 +2886,12 @@ class Api:
                 self._cap_event.clear()
             if frame is None:
                 _minigame_stop.set()
+                self._set_fish_overlay_mode("idle")
                 return
             img = frame[fish_top:fish_bottom, fish_left:fish_right]
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
-            cv2.imwrite("screenshot.png", frame)
+            # cv2.imwrite("screenshot.png", frame)
             if lock_cursor == "on": # Lock cursor if enabled
                 mouse_controller.position = (shake_x, shake_y)
             # Step 2: Detection
@@ -2683,6 +2922,7 @@ class Api:
                         left_x = self.last_left_x
                         right_x = self.last_right_x
             # Step 3: Calculations
+            self.fish_overlay.clear()
             bars_found = left_x is not None and right_x is not None # Check 1
             if bars_found:
                 detection_source = 0
@@ -2741,6 +2981,7 @@ class Api:
             if friend_x is not None:
                 release_mouse()
                 time.sleep(restart_delay)
+                self._set_fish_overlay_mode("idle")
                 return
             if fish_x == None:
                 fish_x = self.last_fish_x
@@ -2780,6 +3021,24 @@ class Api:
                     controller_mode = 0
                     if self.vars["efficiency_mode"] == "on":
                         controller_mode = 5
+            if self._is_fish_overlay_enabled():
+                self.fish_overlay.draw(
+                    bar_center=bar_center, box_size=bar_size,
+                    color="green", canvas_offset=fish_left,
+                    show_bar_center=True
+                )
+                self.fish_overlay.draw(
+                    bar_center=max_left, box_size=15,
+                    color="lightblue", canvas_offset=fish_left
+                )
+                self.fish_overlay.draw(
+                    bar_center=max_right, box_size=15,
+                    color="lightblue", canvas_offset=fish_left
+                )
+                self.fish_overlay.draw(
+                    bar_center=fish_x, box_size=10,
+                    color="red", canvas_offset=fish_left
+                )
             # Step 7: Controller
             error = round(fish_x - bar_center) if bar_center is not None and fish_x is not None else 0
             if controller_mode == 0 and bar_center is not None:
@@ -2814,6 +3073,8 @@ class Api:
             pass
     def stop_macro(self):
         self.macro_running = False
+        self._fish_overlay_cast_bounds = None
+        self._set_fish_overlay_mode("idle")
         try:
             window.show()
         except Exception:
@@ -2851,6 +3112,12 @@ def on_main_window_closed():
         # Close eyedropper if open
         if hasattr(api, "eyedropper") and api.eyedropper:
             api.eyedropper.close()
+    except:
+        pass
+    try:
+        # Close fish overlay if open
+        if hasattr(api, "fish_overlay") and api.fish_overlay:
+            api.fish_overlay.close()
     except:
         pass
     try:
