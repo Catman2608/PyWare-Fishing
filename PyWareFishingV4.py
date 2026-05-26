@@ -148,17 +148,43 @@ BASE_PATH, IS_COMPILED = get_base_path()
 CONFIGS_FOLDER = os.path.join(BASE_PATH, "configs")
 LAST_CONFIG_FILE = os.path.join(BASE_PATH, "last_config.json")
 os.makedirs(CONFIGS_FOLDER, exist_ok=True)
-# Pre-compiled transformation matrix (Display P3 -> sRGB approximation for OpenCV BGR)
-# Designed for cv2.transform() which expects an array of shape (1, 3, 3) or (3, 4)
-if sys.platform == "darwin":
-    # Columns are mapped to match BGR channel ordering
-    P3_TO_SRGB_MATRIX = np.array([
-        [ 1.0983, -0.0786, -0.0197],  # B_out depends heavily on B_in
-        [ 0.0000,  1.0720, -0.0720],  # G_out 
-        [ 0.0000, -0.2248,  1.2249]   # R_out depends heavily on R_in
-    ], dtype=np.float32)
-else:
-    P3_TO_SRGB_MATRIX = None
+def cgimage_to_srgb_numpy(image):
+    width = Quartz.CGImageGetWidth(image)
+    height = Quartz.CGImageGetHeight(image)
+
+    bytes_per_row = width * 4
+
+    # Create sRGB color space
+    color_space = Quartz.CGColorSpaceCreateWithName(
+        Quartz.kCGColorSpaceSRGB
+    )
+
+    # Allocate buffer
+    raw = np.empty((height, width, 4), dtype=np.uint8)
+
+    # Create bitmap context targeting numpy buffer
+    context = Quartz.CGBitmapContextCreate(
+        raw,
+        width,
+        height,
+        8,
+        bytes_per_row,
+        color_space,
+        Quartz.kCGImageAlphaPremultipliedLast |
+        Quartz.kCGBitmapByteOrder32Big
+    )
+
+    # Draw image into sRGB context
+    Quartz.CGContextDrawImage(
+        context,
+        Quartz.CGRectMake(0, 0, width, height),
+        image
+    )
+
+    # RGBA -> BGR
+    bgr = raw[:, :, :3][:, :, ::-1]
+
+    return bgr.copy()
 # Screen dimensions via mss (no tkinter needed)
 with mss.mss() as _sct:
     _m = _sct.monitors[0]
@@ -1265,37 +1291,100 @@ class Api:
                 daemon=True
             )
         thread.start()
-    def _grab_screen_full(self, thread_local):
-        scale = self._get_scale_factor()
-        if not hasattr(thread_local, "sct"):
-            thread_local.sct = mss.mss()
-        if not hasattr(thread_local, "monitor"):
-            thread_local.monitor = {
-                "left": 0,
-                "top": 0,
-                "width": int(self.SCREEN_WIDTH * scale),
-                "height": int(self.SCREEN_HEIGHT * scale)
-            }
-        hdr = self.vars.get("hdr", "off")
-        m = thread_local.monitor
-        img = thread_local.sct.grab(m)
-        # Convert the mss image object directly to a numpy array to handle channel alignment
-        frame = np.array(img, dtype=np.uint8)
-        bgr_frame = frame[:, :, :3]
-        # Mathematical shift correction safely applied for macOS stability
-        if hdr == "on":
-            return self._correct_macos_color(bgr_frame)
+    def _grab_screen_region(self, left, top, right, bottom):
+        """Optimized path for MSS screen capture with macOS color handling. Coordinates are expected to be already scaled."""
+        width = right - left
+        height = bottom - top
+        region = Quartz.CGRectMake(left, top, width, height)
+        if sys.platform == "darwin":
+
+            # Capture full screen
+            image = Quartz.CGWindowListCreateImage(
+                Quartz.CGRectInfinite,
+                Quartz.kCGWindowListOptionOnScreenOnly,
+                Quartz.kCGNullWindowID,
+                Quartz.kCGWindowImageDefault
+            )
+
+            if image is None:
+                return None
+
+            frame = cgimage_to_srgb_numpy(image)
+
+            # Manual crop using actual coordinates
+            cropped = frame[top:bottom, left:right]
+
+            return cropped.copy()
         else:
+            width  = right - left
+            height = bottom - top
+            if width <= 0 or height <= 0:
+                return None
+            # Use a local dict rather than self._monitor to avoid concurrent mutation
+            m = {"left": left, "top": top, "width": width, "height": height}
+            if not hasattr(self._thread_local, "sct"):
+                self._thread_local.sct = mss.mss()
+            img = self._thread_local.sct.grab(m)
+            # MSS Returns BGRA. We convert the memory view to a standard numpy array safely.
+            frame = np.array(img, dtype=np.uint8) 
+            # Slice to BGR (dropping Alpha channel).
+            bgr_frame = frame[:, :, :3]
+            # Mathematical shift correction safely applied for macOS stability
             return bgr_frame
-    def _correct_macos_color(self, frame):
-        """
-        Applies an optimized matrix transformation to correct Display P3 
-        colors back into standard sRGB space instantly on macOS.
-        """
-        if P3_TO_SRGB_MATRIX is not None:
-            # cv2.transform operates directly on the 3 channels very fast in C++
-            return cv2.transform(frame, P3_TO_SRGB_MATRIX)
-        return frame
+    def _grab_screen_full(self, thread_local=None):
+
+        # Fallback like grab_screen_region
+        if thread_local is None:
+            thread_local = self._thread_local
+
+        scale = self._get_scale_factor()
+
+        width = int(self.SCREEN_WIDTH * scale)
+        height = int(self.SCREEN_HEIGHT * scale)
+
+        if sys.platform == "darwin":
+
+            image = Quartz.CGWindowListCreateImage(
+                Quartz.CGRectInfinite,
+                Quartz.kCGWindowListOptionOnScreenOnly,
+                Quartz.kCGNullWindowID,
+                Quartz.kCGWindowImageDefault
+            )
+
+            if image is None:
+                return None
+
+            frame = cgimage_to_srgb_numpy(image)
+
+            # Crop manually for coordinate consistency
+            frame = frame[0:height, 0:width]
+
+            return frame.copy()
+
+        else:
+
+            if not hasattr(thread_local, "sct"):
+                thread_local.sct = mss.mss()
+
+            if not hasattr(thread_local, "monitor"):
+                thread_local.monitor = {
+                    "left": 0,
+                    "top": 0,
+                    "width": width,
+                    "height": height
+                }
+
+            m = thread_local.monitor
+
+            img = thread_local.sct.grab(m)
+
+            # Convert MSS image safely
+            frame = np.array(img, dtype=np.uint8)
+
+            # Remove alpha channel
+            bgr_frame = frame[:, :, :3]
+
+            return bgr_frame
     def _capture_loop_full(self, stop_event, scan_delay):
         thread_local = threading.local()
         # On Macos, Mss Uses Core Graphics Which Is Slow To Call In A Tight Loop.
@@ -1481,27 +1570,6 @@ class Api:
         self._apply_fish_overlay_state()
     def _on_fish_overlay_toggle(self, *args):
         self._apply_fish_overlay_state()
-    def _grab_screen_region(self, left, top, right, bottom):
-        """Optimized path for MSS screen capture with macOS color handling. Coordinates are expected to be already scaled."""
-        width  = right - left
-        height = bottom - top
-        if width <= 0 or height <= 0:
-            return None
-        hdr = self.vars.get("hdr", "off")
-        # Use a local dict rather than self._monitor to avoid concurrent mutation
-        m = {"left": left, "top": top, "width": width, "height": height}
-        if not hasattr(self._thread_local, "sct"):
-            self._thread_local.sct = mss.mss()
-        img = self._thread_local.sct.grab(m)
-        # MSS Returns BGRA. We convert the memory view to a standard numpy array safely.
-        frame = np.array(img, dtype=np.uint8) 
-        # Slice to BGR (dropping Alpha channel).
-        bgr_frame = frame[:, :, :3]
-        # Mathematical shift correction safely applied for macOS stability
-        if hdr == "on":
-            return self._correct_macos_color(bgr_frame)
-        else:
-            return bgr_frame
     def _detect_day_or_night(self, confidence_threshold=0.7):
         """
         Robust day/night detection using white-mask template matching.
@@ -1809,68 +1877,147 @@ class Api:
         Returns:
             Estimated bar center X coordinate, or None if can't estimate
         """
-        # Define Values First
-        left_x = self.last_left_x
-        right_x = self.last_right_x
-        # Handle Missing Arrow
+        # Initialize tracking variables if not already done
+        if not hasattr(self, '_last_bar_left_x'):
+            self._last_bar_left_x = None
+        if not hasattr(self, '_last_bar_right_x'):
+            self._last_bar_right_x = None
+        if not hasattr(self, '_last_bar_box_size'):
+            self._last_bar_box_size = None
+        if not hasattr(self, '_last_bar_center_x'):
+            self._last_bar_center_x = None
+        
+        # Handle missing arrow
         if arrow_centroid_x is None:
-            if self.last_known_box_center_x is not None:
-                return self.last_known_box_center_x, left_x, right_x
-            return None, None, None  # Hard Fail Instead Of Bad Estimation
-        # Set Default Box Size If We Don'T Have One
-        if not self.estimated_box_length or self.estimated_box_length <= 0:
-            if self.last_cached_box_length and self.last_cached_box_length > 0:
-                self.estimated_box_length = self.last_cached_box_length
+            # Return last known positions if available
+            if self._last_bar_center_x is not None:
+                return self._last_bar_center_x, self._last_bar_left_x, self._last_bar_right_x
+            return None, None, None
+        
+        # Get last known values
+        last_center = self._last_bar_center_x
+        box_size = self._last_bar_box_size
+        
+        # If we have previous bar data, determine which side the arrow is on
+        if last_center is not None and box_size is not None and box_size > 0:
+            last_left = self._last_bar_left_x
+            last_right = self._last_bar_right_x
+            
+            # Determine which side based on center comparison
+            arrow_on_left_side = arrow_centroid_x < last_center
+            
+            # SMART VALIDATION: Check if arrow is actually near the bar we think it is
+            # Calculate distances to both last known bars
+            dist_to_left = abs(arrow_centroid_x - last_left) if last_left is not None else float('inf')
+            dist_to_right = abs(arrow_centroid_x - last_right) if last_right is not None else float('inf')
+            
+            # Self-correction: If arrow is much closer to the opposite bar, we detected wrong side!
+            # Threshold: arrow should be within reasonable distance (box_size / 4) of expected bar
+            proximity_threshold = box_size / 4
+            
+            if arrow_on_left_side:
+                # We think arrow is on LEFT, but verify it's actually near left bar
+                if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
+                    # Arrow is actually closer to RIGHT bar - we were wrong!
+                    arrow_on_left_side = False  # Flip the decision
+            
             else:
-                return None, None, None  # Hard Fail Instead Of Bad Estimation
-        # Detect Arrow Direction Swap
-        state_swapped = False
-        if (
-            self.last_indicator_x is not None and
-            arrow_centroid_x is not None
-        ):
-            # Current movement direction
-            delta = arrow_centroid_x - self.last_indicator_x
-            # Check if movement direction flipped
-            if (
-                hasattr(self, "last_arrow_delta") and
-                self.last_arrow_delta is not None
-            ):
-                state_swapped = (
-                    (self.last_arrow_delta > 0 and delta < 0) or
-                    (self.last_arrow_delta < 0 and delta > 0)
-                )
-            # Save for next frame
-            self.last_arrow_delta = delta
-        # Use actual hold state normally
-        effective_holding_state = is_holding
-        # If arrow suddenly reversed direction,
-        # edge ownership likely swapped
-        if state_swapped:
-            effective_holding_state = not effective_holding_state
-        # Position The Box Based On Current Hold State
-        if effective_holding_state:
-            # Holding: Arrow Is On Right, Extend Left
-            self.last_right_x = float(arrow_centroid_x)
-            self.last_left_x = self.last_right_x - self.estimated_box_length
+                # We think arrow is on RIGHT, but verify it's actually near right bar
+                if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
+                    # Arrow is actually closer to LEFT bar - we were wrong!
+                    arrow_on_left_side = True  # Flip the decision
+            
+            # Now apply the corrected decision
+            if arrow_on_left_side:
+                # Arrow is on the LEFT side - update left bar, keep right bar from memory
+                bar_left_x = arrow_centroid_x
+                bar_right_x = self._last_bar_right_x
+                
+                if bar_right_x is None:
+                    # If no right bar in memory, calculate from box size
+                    bar_right_x = bar_left_x + box_size
+                
+                # Validate: ensure left < right
+                if bar_left_x < bar_right_x:
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    return bar_center_x, bar_left_x, bar_right_x
+            else:
+                # Arrow is on the RIGHT side - update right bar, keep left bar from memory
+                bar_right_x = arrow_centroid_x
+                bar_left_x = self._last_bar_left_x
+                
+                if bar_left_x is None:
+                    # If no left bar in memory, calculate from box size
+                    bar_left_x = bar_right_x - box_size
+                
+                # Validate: ensure left < right
+                if bar_left_x < bar_right_x:
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    return bar_center_x, bar_left_x, bar_right_x
+        
+        # Fallback: Try to establish initial box size from previous positions
+        elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
+            box_size = self._last_bar_right_x - self._last_bar_left_x
+            last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
+            
+            if box_size > 0:
+                self._last_bar_box_size = box_size
+                self._last_bar_center_x = last_center
+                
+                # Determine side based on arrow position relative to last center
+                if arrow_centroid_x < last_center:
+                    bar_left_x = arrow_centroid_x
+                    bar_right_x = bar_left_x + box_size
+                else:
+                    bar_right_x = arrow_centroid_x
+                    bar_left_x = bar_right_x - box_size
+                
+                self._last_bar_left_x = bar_left_x
+                self._last_bar_right_x = bar_right_x
+                bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                self._last_bar_center_x = bar_center_x
+                return bar_center_x, bar_left_x, bar_right_x
+            else:
+                # Invalid box size (<=0) - use default based on capture width
+                default_box_size = capture_width // 2
+                bar_left_x = arrow_centroid_x
+                bar_right_x = bar_left_x + default_box_size
+                
+                self._last_bar_left_x = bar_left_x
+                self._last_bar_right_x = bar_right_x
+                self._last_bar_box_size = default_box_size
+                
+                bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                self._last_bar_center_x = bar_center_x
+                return bar_center_x, bar_left_x, bar_right_x
+        
         else:
-            # Not Holding: Arrow Is On Left, Extend Right
-            self.last_left_x = float(arrow_centroid_x)
-            self.last_right_x = self.last_left_x + self.estimated_box_length
-        # Clamp To Capture Bounds (Keep Arrow Anchored)
-        if self.last_left_x < 0:
-            self.last_left_x = 0.0
-            self.last_right_x = min(self.estimated_box_length, capture_width)
-        if self.last_right_x > capture_width:
-            self.last_right_x = float(capture_width)
-            self.last_left_x = max(0.0, self.last_right_x - self.estimated_box_length)
-        # Calculate And Store Center
-        box_center = (self.last_left_x + self.last_right_x) / 2.0
-        self.last_known_box_center_x = box_center
-        # Update Tracking Variables For Next Frame
-        self.last_indicator_x = arrow_centroid_x
-        self.last_holding_state = effective_holding_state
-        return box_center, self.last_left_x, self.last_right_x
+            # No previous data - assume a default box size based on capture width
+            default_box_size = capture_width // 2
+            
+            # Start with arrow as left bar, calculate right from default size
+            bar_left_x = arrow_centroid_x
+            bar_right_x = bar_left_x + default_box_size
+            
+            # Clamp to capture bounds
+            if bar_right_x > capture_width:
+                bar_right_x = float(capture_width)
+                bar_left_x = max(0.0, bar_right_x - default_box_size)
+            
+            # Save these initial estimates
+            self._last_bar_left_x = bar_left_x
+            self._last_bar_right_x = bar_right_x
+            self._last_bar_box_size = default_box_size
+            
+            bar_center_x = (bar_left_x + bar_right_x) / 2.0
+            self._last_bar_center_x = bar_center_x
+            return bar_center_x, bar_left_x, bar_right_x
     # Main macro functions
     def normalize_key(self, key):
         try:
@@ -2218,14 +2365,42 @@ class Api:
     # Start appraisal
     def start_appraisal(self):
         self.macro_running = True
+        tesseract_path = self.vars["tesseract_path"]
+        appraisal_mutation = self.vars["appraisal_mutation"]
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        tolerance = int(self.vars["shake_tolerance"])
+        shake_pixel = self.vars["shake_color"]
         time.sleep(0.1)
         keyboard_controller.press("e")
         time.sleep(0.05)
         keyboard_controller.release("e")
-        dialogue_left, dialogue_top, dialogue_right, dialogue_bottom = self._get_areas("shake")
-        hotbar_left, hotbar_top, hotbar_right, hotbar_bottom = self._get_areas("fish")
+        dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, _, _ = self._get_areas("shake")
+        hotbar_left, hotbar_top, hotbar_right, hotbar_bottom, _, _ = self._get_areas("fish")
         while self.macro_running:
-            pass
+            for i in range(2):
+                time.sleep(1.2)
+                img = self._grab_screen_full()
+                shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
+                fish = img[hotbar_top:hotbar_bottom, hotbar_left:hotbar_right]
+                dialogue = self._find_first_pixel(shake, shake_pixel, tolerance)
+
+                try:
+                    dialogue_x, dialogue_y = dialogue
+
+                    # Convert cropped coordinates back to screen coordinates
+                    screen_x = dialogue_left + dialogue_x
+                    screen_y = dialogue_top + dialogue_y
+
+                    self._click_at(screen_x, screen_y)
+                    time.sleep(1.2)
+
+                except Exception as e:
+                    print(e)
+                    self.stop_macro(f"Appraisal failed: {e}")
+            text = pytesseract.image_to_string(fish)
+            print(text)
+            if appraisal_mutation.lower() in text.lower():
+                self.stop_macro("Appraisal finished")
     # Start fishing
     def start_fishing(self):
         self.macro_running = True
@@ -3018,9 +3193,13 @@ class Api:
                 elif max_right and fish_x >= max_right:
                     controller_mode = 2
                 else:
-                    controller_mode = 0
-                    if self.vars["efficiency_mode"] == "on":
-                        controller_mode = 5
+                    if bar_left_screen <= fish_x <= bar_right_screen:
+                        controller_mode = 0
+                        if self.vars["efficiency_mode"] == "on":
+                            controller_mode = 5
+                    else:
+                        if track_notes == "on":
+                            controller_mode = 1
             if self._is_fish_overlay_enabled():
                 self.fish_overlay.draw(
                     bar_center=bar_center, box_size=bar_size,
@@ -3049,6 +3228,13 @@ class Api:
                     hold_mouse()
                 else:
                     release_mouse()
+            elif controller_mode == 1 and bar_center is not None: # Simple Tracking
+                control = fish_x - bar_center
+                # Stabilize Deadzone Checker
+                if control > 0:
+                    hold_mouse()
+                else:
+                    release_mouse()
             elif controller_mode == 2:
                 hold_mouse()
             elif controller_mode == 3:
@@ -3071,10 +3257,11 @@ class Api:
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
         except Exception:
             pass
-    def stop_macro(self):
+    def stop_macro(self, text="Macro Stupped"):
         self.macro_running = False
         self._fish_overlay_cast_bounds = None
         self._set_fish_overlay_mode("idle")
+        self.set_status(text)
         try:
             window.show()
         except Exception:
