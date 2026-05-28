@@ -40,6 +40,7 @@
                         <select name="macro_mode" id="macro_mode">
                         <option value="fishing">Fishing</option>
                         <option value="appraisal">Appraisal</option>
+                        <option value="enchant">Enchant</option>
                         </select>
                     </div>
                     <h3>Hotkeys</h3>
@@ -419,14 +420,22 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Appraisal (toggle in Basic tab)</h3>
+                    <h3>Appraisal/Enchantment (toggle in Basic tab)</h3>
                     <div class="text">
                         <label>Tesseract Path</label>
                         <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
                     </div>
                     <div class="text">
-                        <label>Mutation</label>
-                        <input id=appraisal_mutation type="text" placeholder="Darkened">
+                        <label>Mutation/Enchant</label>
+                        <input id=mutation_enchant type="text" placeholder="Darkened">
+                    </div>
+                    <div class="text">
+                        <label>Enchantment X (Ratio)</label>
+                        <input id=enchantment_x type="text" placeholder="Darkened">
+                    </div>
+                    <div class="text">
+                        <label>Enchantment Y (Ratio)</label>
+                        <input id=enchantment_y type="text" placeholder="Darkened">
                     </div>
                 </div>
             </div>

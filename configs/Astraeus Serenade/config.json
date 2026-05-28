@@ -1,5 +1,6 @@
 {
-    "config-select": "Default",
+    "config-select": "Pinion Aria",
+    "macro_mode": "enchant",
     "start_stop": "",
     "change_areas": "",
     "force_stop": "",
@@ -26,13 +27,12 @@
     "tracking_tolerance": "",
     "friends_color": "#74ff8e",
     "friends_tolerance": "30",
-    "auto_zoom": "off",
-    "auto_refresh": "off",
+    "auto_zoom": "on",
+    "auto_refresh": "on",
     "efficiency_mode": "off",
     "fish_overlay": "off",
     "status_overlay": "off",
     "track_notes": "off",
-    "hdr": "off",
     "lock_cursor": "off",
     "select_rod_duration": "",
     "casting_mode": "normal",
@@ -77,5 +77,9 @@
     "reconnect_threshold": "100",
     "reconnect_wait_time": "67",
     "mirror_ratio": "0.55",
-    "mirror_ratio2": "0.59"
+    "mirror_ratio2": "0.59",
+    "tesseract_path": "/opt/homebrew/bin/tesseract",
+    "mutation_enchant": "Steady",
+    "enchantment_x": "0.5",
+    "enchantment_y": "0.5"
 }

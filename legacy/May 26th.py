@@ -1,4 +1,3 @@
-# menu_offset
 # GUI
 import webview
 import json
@@ -119,22 +118,6 @@ elif sys.platform == "darwin":
     def make_window_translucent(window, transparency):
         "Does nothing"
         pass
-def get_macos_menu_offset():
-    if sys.platform != "darwin":
-        return 0
-
-    try:
-        import AppKit
-
-        screen = AppKit.NSScreen.mainScreen()
-
-        full_frame = screen.frame()
-        visible_frame = screen.visibleFrame()
-
-        return int(full_frame.size.height - visible_frame.size.height)
-
-    except Exception:
-        return 0
 def get_base_path():
     """Unified base directory for app data."""
     if getattr(sys, 'frozen', False):
@@ -211,28 +194,11 @@ def cgimage_to_srgb_numpy(image):
     bgr = raw[:, :, :3][:, :, ::-1]
 
     return bgr.copy()
-# Screen dimensions via mss — use monitor[1] (primary) not monitor[0] (virtual combined).
-# On Windows with DPI scaling, pywebview's x/y/width/height use physical pixels,
-# so we must query the raw physical resolution, not the scaled logical resolution.
+# Screen dimensions via mss (no tkinter needed)
 with mss.mss() as _sct:
-    if len(_sct.monitors) > 1:
-        _m = _sct.monitors[1]   # Primary monitor
-    else:
-        _m = _sct.monitors[0]   # Fallback: only one entry exists
+    _m = _sct.monitors[0]
     SCREEN_WIDTH  = _m["width"]
     SCREEN_HEIGHT = _m["height"]
-    SCREEN_LEFT   = _m["left"]
-    SCREEN_TOP    = _m["top"]
-# On Windows, mss reports logical (DPI-scaled) pixel dimensions.
-# pywebview's create_window width/height also use logical pixels, so they match.
-# However we must account for the monitor's top-left offset (multi-monitor setups
-# where the primary isn't at 0,0) when positioning overlay windows.
-if sys.platform == "win32":
-    try:
-        import ctypes as _ctypes
-        _ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-monitor DPI aware
-    except Exception:
-        pass
 CONFIG_DIR = CONFIGS_FOLDER
 IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
@@ -254,11 +220,6 @@ class AreaSelector:
         self.parent   = parent
         self.callback = callback
         self._open    = True
-        # Actual window origin reported by JS after the window is placed.
-        # Defaults to SCREEN_LEFT/TOP; overwritten by window_ready() once JS fires.
-        # This corrects for macOS menu-bar push-down and any other OS chrome offset.
-        self._win_origin_x = SCREEN_LEFT
-        self._win_origin_y = SCREEN_TOP
         # Store areas as plain dicts (width/height keys)
         self._areas = {
             "shake":  shake_area.copy(),
@@ -268,16 +229,6 @@ class AreaSelector:
         }
         # Create a second, frameless, transparent, fullscreen pywebview window.
         # js_api=self exposes get_areas / on_mouse_move / save_areas to JS.
-        #
-        # NOTE: x/y must be the primary monitor's actual top-left offset (SCREEN_LEFT/TOP).
-        # On single-monitor setups this is always 0,0.  On multi-monitor setups where the
-        # primary display isn't the leftmost one, SCREEN_LEFT/TOP will be non-zero and the
-        # window must be placed there to sit over the correct screen.
-        #
-        # Do NOT call make_window_translucent() here. That API applies LWA_ALPHA to the
-        # whole HWND, which fights with transparent=True (per-pixel alpha from the HTML).
-        # The HTML canvas already draws its own semi-transparent dark overlay, so the
-        # pywebview window itself should stay fully opaque at the OS level.
         self._win = webview.create_window(
             "Area Selector",
             self.HTML_FILE,
@@ -290,106 +241,63 @@ class AreaSelector:
             on_top=True,
             # Prevent Resizing / Moving
             resizable=False,
-            # Fullscreen Size — matches the primary monitor exactly
+            # Fullscreen Size
             width=SCREEN_WIDTH,
             height=SCREEN_HEIGHT,
-            # Position at the primary monitor's actual origin (handles non-zero offsets)
-            x=SCREEN_LEFT,
-            y=SCREEN_TOP,
+            # Lock Position
+            x=0,
+            y=0,
             background_color="#000000",
         )
         self._win.events.closed += self._on_closed
+        time.sleep(0.05)
+        make_window_translucent(self._win, 0.35)
     # ── JS API methods (called from area_selector.html) ───────────────────────
-    def window_ready(self, win_x, win_y):
-        """
-        Called by JS immediately after pywebviewready fires, passing
-        window.screenX / window.screenY so Python knows the actual pixel
-        offset of the overlay window's top-left corner.
-
-        On macOS, a frameless pywebview window placed at y=0 is still pushed
-        below the menu bar by the window server (~25-28 px).  Without this
-        correction every saved y-coordinate is shifted down by the menu bar
-        height, causing a visible bottom-offset when the saved box is used to
-        crop the screen capture.
-        """
-        if sys.platform == "darwin":
-            self._win_origin_x = 0
-            self._win_origin_y = 0
-        else:
-            self._win_origin_x = int(win_x)
-            self._win_origin_y = int(win_y)
-
     def get_areas(self):
-        """
-        Called by JS on startup to get initial box positions.
-        The stored _areas use screen-absolute coordinates, but the canvas
-        coordinate system starts at (0,0) = the overlay window's top-left.
-        Subtract the actual window origin so boxes appear at the correct canvas position.
-        """
-        out = {}
-        menu_offset = get_macos_menu_offset()
-        for name, b in self._areas.items():
-            out[name] = {
-                "x":      b["x"] - self._win_origin_x,
-                "y": b["y"] - self._win_origin_y - menu_offset,
-                "width":  b.get("width", b.get("w", 0)),
-                "height": b.get("height", b.get("h", 0)),
-            }
-        return out
+        """Called by JS on startup to get initial box positions."""
+        return self._areas
     def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
         """
         Called by JS on every mousemove so the main window status bar
         can show live position ratios.
-
-        mouse_x / mouse_y are CSS-pixel coordinates relative to the overlay
-        window's top-left corner (i.e. relative to SCREEN_LEFT, SCREEN_TOP).
-        The stored _areas use screen-absolute coordinates, so we must add the
-        monitor offset before doing any containment / ratio math.
         """
         if not self._open:
             return
-        # Keep Python's cached areas completely in sync with live dragging in JS.
-        # JS sends w/h keys; Python stores width/height keys — normalise here.
+        # Keep Python's cached areas completely in sync with live dragging in JS
         for name in ("shake", "fish", "friend", "totem"):
             b = current_boxes.get(name, {})
             if b:
                 self._areas[name] = {
-                    "x":      int(b.get("x", 0)) + self._win_origin_x,
-                    "y":      int(b.get("y", 0)) + self._win_origin_y,
+                    "x":      int(b.get("x", 0)),
+                    "y":      int(b.get("y", 0)),
                     "width":  int(b.get("w", b.get("width", 0))),
                     "height": int(b.get("h", b.get("height", 0))),
                 }
-        # Convert canvas-relative coords to screen-absolute for ratio display
-        abs_x = mouse_x + self._win_origin_x
-        abs_y = mouse_y + self._win_origin_y
         for name in ("shake", "fish", "friend", "totem"):
-            b = self._areas.get(name, {})
+            b = current_boxes.get(name, {})
             if not b:
                 continue
             bx, by = b.get("x", 0), b.get("y", 0)
-            bw = b.get("width", 1) or 1
-            bh = b.get("height", 1) or 1
-            if bx <= abs_x <= bx + bw and by <= abs_y <= by + bh:
-                xr = round((abs_x - bx) / bw, 2)
-                yr = round((abs_y - by) / bh, 2)
+            bw, bh = b.get("w", 1) or b.get("width", 1), b.get("h", 1) or b.get("height", 1)
+            if bx <= mouse_x <= bx + bw and by <= mouse_y <= by + bh:
+                xr = round((mouse_x - bx) / bw, 2)
+                yr = round((mouse_y - by) / bh, 2)
                 self.parent.set_status(f"{name.upper()} → X RATIO: {xr}, Y RATIO: {yr}")
                 return
         self.parent.set_status("Area selector opened (press key again to close)")
     def save_areas(self, areas):
         """
         Called by JS when the user presses Escape/F6 to confirm and close.
-        JS sends canvas-relative {x,y,w,h}; we convert to screen-absolute
-        {x,y,width,height} (adding back SCREEN_LEFT/TOP) then fire the callback.
+        Converts {x,y,w,h} → {x,y,width,height} then fires the Python callback.
         """
         if not self._open:
             return
         self._open = False
         out = {}
-        menu_offset = get_macos_menu_offset()
         for name, b in areas.items():
             out[name] = {
-                "x":      b["x"] + self._win_origin_x,
-                "y": b["y"] + self._win_origin_y + menu_offset,
+                "x":      b["x"],
+                "y":      b["y"],
                 "width":  b.get("w", b.get("width", 0)),
                 "height": b.get("h", b.get("height", 0)),
             }
@@ -417,15 +325,10 @@ class AreaSelector:
     def close(self):
         """Force-close from Python (e.g. hotkey toggle)."""
         if self._open:
-            # _areas are screen-absolute; save_areas() expects canvas-relative (it adds
-            # SCREEN_LEFT/TOP back), so subtract the offset here before passing through.
             self.save_areas({
-                name: {
-                    "x": b["x"] - self._win_origin_x,
-                    "y": b["y"] - self._win_origin_y,
-                    "w": b.get("w", b.get("width", 0)),
-                    "h": b.get("h", b.get("height", 0)),
-                }
+                name: {"x": b["x"], "y": b["y"],
+                       "w": b.get("w", b.get("width",0)),
+                       "h": b.get("h", b.get("height",0))}
                 for name, b in self._areas.items()
             })
 # ─────────────────────────────────────────────────────────────────────────────
@@ -648,8 +551,6 @@ class Api:
         # Store Screen Width And Height To Use Later
         self.SCREEN_WIDTH = SCREEN_WIDTH
         self.SCREEN_HEIGHT = SCREEN_HEIGHT
-        self.SCREEN_LEFT = SCREEN_LEFT
-        self.SCREEN_TOP = SCREEN_TOP
         self.SCREEN_SCALE = ((self.SCREEN_WIDTH / 1920) + (self.SCREEN_HEIGHT / 1080)) / 2
         # Macro State
         self.macro_running = False
@@ -2146,8 +2047,6 @@ class Api:
                     threading.Thread(target=self.start_fishing, daemon=True).start()
                 elif macro_mode == "appraisal":
                     threading.Thread(target=self.start_appraisal, daemon=True).start()
-                elif macro_mode == "enchant":
-                    threading.Thread(target=self.start_enchantment, daemon=True).start()
             else:
                 return
         elif key == "f6":
@@ -2416,13 +2315,6 @@ class Api:
         self._last_bar_box_size = None
         self._last_bar_center_x = None
         self.last_arrow_delta = None
-        # Predictive Controller
-        self._pred_prev_fish_x = None
-        self._pred_prev_bar_x = None
-        self._pred_prev_time = None
-        self.color_check_target_velocity = 0.0
-        self.color_check_bar_velocity  = 0.0
-        self._pred_last_click_time = 0.0
     def _pid_control(self, error, bar_center):
         """
         Asymmetric PD controller.
@@ -2473,130 +2365,6 @@ class Api:
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
         return control_signal
-    def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
-        """
-        Predictive controller ported from IRUS idiotproof.
-        Uses linear stopping distance, on-bar counter-thrust, off-bar PD chase,
-        and edge-unreachability logic.
-        Check legacy/May 3rd.py for PD chase controller
-        Args:
-        fish_x: Fish X
-        bar_center: Bar Center
-        fish_left: Left of fish capture area
-        fish_right: Right of fish capture area
-        bar_left: Bar Left
-        bar_right: Bar Right
-        """
-        # Init Failsafe 
-        if not hasattr(self, "_pred_prev_fish_x"):
-            self._reset_control_state()
-        # Failsafe: Missing Data
-        if fish_x is None or bar_center is None or bar_left is None or bar_right is None:
-            should_hold = False
-            return should_hold
-        # Read Settings
-        stopping_distance_multiplier = self._get_var_number("kp", 0.93)
-        velocity_smoothing = self._get_var_number("kd", 0.07)
-        stopping_distance_multiplier = stopping_distance_multiplier * 1.5
-        MIN_DT = 1e-3
-        MAX_DT = 0.1
-        MAX_VEL = 3000.0
-        # Time 
-        now = time.perf_counter()
-        if self._pred_prev_time is None:
-            dt = 0.016
-        else:
-            dt = now - self._pred_prev_time
-            dt = max(min(dt, MAX_DT), MIN_DT)
-        self._pred_prev_time = now
-        # Velocities 
-        if self._pred_prev_fish_x is not None:
-            raw_fish_vel = (fish_x - self._pred_prev_fish_x) / dt
-        else:
-            raw_fish_vel = 0.0
-        if self._pred_prev_bar_x is not None:
-            raw_bar_vel = (bar_center - self._pred_prev_bar_x) / dt
-        else:
-            raw_bar_vel = 0.0
-        raw_fish_vel = max(min(raw_fish_vel, MAX_VEL), -MAX_VEL)
-        raw_bar_vel  = max(min(raw_bar_vel,  MAX_VEL), -MAX_VEL)
-        # Smooth Velocities Independently Then Compute Relative
-        self.color_check_target_velocity = (velocity_smoothing * raw_fish_vel +
-                                        (1 - velocity_smoothing) * self.color_check_target_velocity)
-        self.color_check_bar_velocity  = (velocity_smoothing * raw_bar_vel +
-                                        (1 - velocity_smoothing) * self.color_check_bar_velocity)
-        relative_velocity = self.color_check_bar_velocity - self.color_check_target_velocity  # Bar Relative To Fish (Matches Ref Macro Sign)
-        self._pred_prev_fish_x = fish_x
-        self._pred_prev_bar_x  = bar_center
-        # Nan Guard 
-        if not np.isfinite(relative_velocity):
-            should_hold = False
-            return should_hold
-        # Reachability (Edge Logic) 
-        bar_width = bar_right - bar_left
-        min_reachable = fish_left  + bar_width // 2
-        max_reachable = fish_right - bar_width // 2
-        if fish_x < min_reachable:
-            # Target Too Far Left — Bar Can't Follow, Release
-            should_hold = False
-            return should_hold
-        elif fish_x > max_reachable:
-            # Target Too Far Right — Hold To Push Bar Right
-            should_hold = True
-            return should_hold
-        # Calculate stopping distance based on relative velocity
-        stopping_distance = abs(relative_velocity) * stopping_distance_multiplier
-        # Error: Positive = Bar Is Right Of Fish (Same Sign Convention As Ref Macro)
-        error = bar_center - fish_x
-        # On-Bar: Use Stopping-Distance / Counter-Thrust Logic
-        if error < -stopping_distance:
-            # Bar Is Left Of Fish Beyond Stopping Distance → Hold To Move Right
-            should_hold = True
-        elif error > stopping_distance:
-            # Bar Is Right Of Fish Beyond Stopping Distance → Release To Move Left
-            should_hold = False
-        else:
-            # Within Stopping Distance — Counter-Thrust Based On Relative Velocity
-            if relative_velocity > 0:
-                # Bar Moving Right Relative To Fish → Release (Apply Left Thrust)
-                should_hold = False
-            else:
-                # Bar Moving Left Relative To Fish → Hold (Apply Right Thrust)
-                should_hold = True
-        return should_hold
-    # Start enchanting
-    def start_enchantment(self):
-        self.macro_running = True
-        tesseract_path = self.vars["tesseract_path"]
-        mutation_enchant = self.vars["mutation_enchant"]
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
-        dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
-        x = float(self.vars["enchantment_x"])
-        y = float(self.vars["enchantment_y"])
-        x_scaled = int(dialogue_width * x) + dialogue_left
-        y_scaled = int(dialogue_height * y) + dialogue_top
-        time.sleep(0.1)
-        while self.macro_running:
-            time.sleep(0.1)
-            keyboard_controller.press("e")
-            time.sleep(0.05)
-            keyboard_controller.release("e")
-            time.sleep(0.5)
-            self._click_at(x_scaled, y_scaled)
-            time.sleep(1.2)
-            img = self._grab_screen_full()
-            enchantment = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
-            gray = cv2.cvtColor(enchantment, cv2.COLOR_BGR2GRAY)
-
-            # Upscale image
-            gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-
-            # Sharpen contrast
-            gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
-            text = pytesseract.image_to_string(gray)
-            if mutation_enchant.lower() in text.lower():
-                self.stop_macro("Enchanting finished")
-            time.sleep(4)
     # Start appraisal
     def start_appraisal(self):
         self.macro_running = True
@@ -2637,10 +2405,11 @@ class Api:
             gray = cv2.cvtColor(fish, cv2.COLOR_BGR2GRAY)
 
             # Upscale image
-            gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            # gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
 
             # Sharpen contrast
-            gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
+            # gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
+            cv2.imwrite("gray.png", gray)
             text = pytesseract.image_to_string(gray)
             if mutation_enchant.lower() in text.lower():
                 self.stop_macro("Appraisal finished")

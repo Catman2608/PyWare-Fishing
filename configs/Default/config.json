@@ -1,6 +1,6 @@
 {
-    "config-select": "Default",
-    "macro_mode": "appraisal",
+    "config-select": "Tryhard Rod",
+    "macro_mode": "fishing",
     "start_stop": "",
     "change_areas": "",
     "force_stop": "",
@@ -33,7 +33,6 @@
     "fish_overlay": "on",
     "status_overlay": "off",
     "track_notes": "on",
-    "simple_tracking": "on",
     "lock_cursor": "on",
     "select_rod_duration": "0.35",
     "casting_mode": "normal",
@@ -80,5 +79,7 @@
     "mirror_ratio": "",
     "mirror_ratio2": "",
     "tesseract_path": "/opt/homebrew/bin/tesseract",
-    "appraisal_mutation": "Snowflake"
+    "mutation_enchant": "Steady",
+    "enchantment_x": "0.5",
+    "enchantment_y": "0.5"
 }
