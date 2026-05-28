@@ -1,0 +1,20 @@
+Step 1: run this code to change direction (change to your actual directory):
+cd /Users/YourName/directory/PyWareFishing
+Step 2: Identify if the macro is open source or not. If not:
+pyinstaller --onedir --windowed --target-architecture arm64 \
+--icon="icon.icns" \
+"PyWareFishingV4.py"
+If it's open source:
+nuitka --onedir --windowed \
+--icon="icon.icns" \
+"PyWareFishingV3.py"
+
+Step 3: run this code to create setup instructions 
+
+hdiutil create -volname "VolumeName" -srcfolder cd /Users/YourName/directory/PyWareFishing
+ -ov -format UDZO name.dmg
+
+For me, the first line of code in the terminal looks like this:
+cd "/Users/hoangphuc/Documents/Apps/Macros/PyWare Fishing V4"
+Third line:
+hdiutil create -volname "PyWareFishingSetup.dmg" -srcfolder "/Users/hoangphuc/Documents/Apps/Macros/PyWare Fishing V4/dist" -ov -format UDZO PyWareFishingSetup.dmg

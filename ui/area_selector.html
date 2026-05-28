@@ -50,7 +50,6 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 resize();
-
 // ─── Init: wait for pywebview then load areas from Python ────────────────────
 window.addEventListener("pywebviewready", () => {
   pywebview.api.get_areas().then(data => {
