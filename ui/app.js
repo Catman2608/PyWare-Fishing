@@ -127,7 +127,6 @@ function bindSettingsSync() {
         if (element.id === "config-select") return;
         element.addEventListener("change", syncSettings);
         element.addEventListener("input", syncSettings);
-        
         // Add theme update listeners for color inputs
         if (element.id === "left_color" || element.id === "right_color" || element.id === "arrow_color") {
             element.addEventListener("change", updateAccentColor);
@@ -192,20 +191,15 @@ async function loadConfig(configName = null) {
             configName
         );
     if (result.success) {
-
         applySettings(
             result.settings
         );
-
         await syncSettings();
-
         currentConfig = configName;
-
         // Sync dropdown UI
         document.getElementById(
             "config-select"
         ).value = configName;
-
         setStatus(`Loaded: ${configName}`);
     } else {
         window.setStatus(
@@ -386,89 +380,64 @@ document.addEventListener("click", (e) => {
 document.querySelectorAll(
     '.color-box input[type="text"]'
 ).forEach(input => {
-
     function updateColorPreview() {
-
         const value = input.value.trim();
-
         const isValid =
             /^#([0-9A-F]{3}){1,2}$/i.test(value);
-
         if (isValid) {
-
             input.style.border =
                 `2px solid ${value}`;
-
             input.style.boxShadow =
                 `0 0 10px ${value}88`;
-
         } else {
-
             input.style.border =
                 "2px solid rgba(255,255,255,0.08)";
-
             input.style.boxShadow = "none";
         }
     }
-
     input.addEventListener(
         "input",
         () => {
-
             updateColorPreview();
-
             updateAccentColor();
         }
     );
-
     input.addEventListener(
         "focus",
         updateColorPreview
     );
-
     updateColorPreview();
 });
 function hexBrightness(hex) {
-
     const r = parseInt(hex.substr(1,2), 16);
     const g = parseInt(hex.substr(3,2), 16);
     const b = parseInt(hex.substr(5,2), 16);
-
     return (
         0.2126 * r +
         0.7152 * g +
         0.0722 * b
     );
 }
-
 function updateAccentColor() {
-
+    updateButtonContrast();
     const leftElement = document.getElementById("left_color");
     const rightElement = document.getElementById("right_color");
     const arrowElement = document.getElementById("arrow_color");
-
     // Safely get values, default to empty string if element doesn't exist
     const left = leftElement ? leftElement.value.trim() : "";
     const right = rightElement ? rightElement.value.trim() : "";
     const arrow = arrowElement ? arrowElement.value.trim() : "";
-
     const validHex = /^#([0-9A-F]{3}){1,2}$/i;
-
     const colors = [];
-
     // Compare left/right first
     if (validHex.test(left)) {
         colors.push(left);
     }
-
     if (validHex.test(right)) {
         colors.push(right);
     }
-
     let brightestBar = "#3b5cff";
-
     if (colors.length > 0) {
-
         brightestBar =
             colors.sort(
                 (a, b) =>
@@ -476,10 +445,8 @@ function updateAccentColor() {
                     hexBrightness(a)
             )[0];
     }
-
     // Use brightest bar color only
     let finalAccent = brightestBar;
-
     // Apply CSS variables
     document.documentElement
         .style
@@ -487,17 +454,25 @@ function updateAccentColor() {
             "--accent-color",
             finalAccent
         );
-
+    document.documentElement
+        .style
+        .setProperty(
+            "--left-gradient",
+            left || finalAccent
+        );
+    document.documentElement
+        .style
+        .setProperty(
+            "--right-gradient",
+            right || finalAccent
+        );
     // Glow version
     const r =
         parseInt(finalAccent.substr(1,2),16);
-
     const g =
         parseInt(finalAccent.substr(3,2),16);
-
     const b =
         parseInt(finalAccent.substr(5,2),16);
-
     document.documentElement
         .style
         .setProperty(
@@ -505,4 +480,42 @@ function updateAccentColor() {
             `rgba(${r}, ${g}, ${b}, 0.4)`
         );
 }
+function hexToRgb(hex) {
+    hex = hex.replace("#", "");
+    if (hex.length === 3) {
+        hex = hex.split("").map(c => c + c).join("");
+    }
+    const num = parseInt(hex, 16);
+    return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+    };
+}
+function getBrightness(hex) {
+    const { r, g, b } = hexToRgb(hex);
+    return (r * 299 + g * 587 + b * 114) / 1000;
+}
+function updateButtonContrast() {
+    const left =
+        getComputedStyle(document.documentElement)
+        .getPropertyValue("--left-gradient")
+        .trim();
+    const right =
+        getComputedStyle(document.documentElement)
+        .getPropertyValue("--right-gradient")
+        .trim();
+    const leftBrightness = getBrightness(left);
+    const rightBrightness = getBrightness(right);
+    const average = (leftBrightness + rightBrightness) / 2;
+    const textColor =
+        average > 170
+            ? "#111827"
+            : "white";
+    document.documentElement.style.setProperty(
+        "--button-text",
+        textColor
+    );
+}
 updateAccentColor();
+updateButtonContrast();

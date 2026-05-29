@@ -1,3 +1,30 @@
 {
-    "last_config": "Ruinous Oath"
+    "last_config": "Tranquility Rod",
+    "last_rod": "Basic Rod",
+    "bar_areas": {
+        "shake": {
+            "x": 583,
+            "y": 218,
+            "width": 754,
+            "height": 562
+        },
+        "fish": {
+            "x": 578,
+            "y": 778,
+            "width": 761,
+            "height": 141
+        },
+        "friend": {
+            "x": 8,
+            "y": 926,
+            "width": 68,
+            "height": 89
+        },
+        "totem": {
+            "x": 1829,
+            "y": 899,
+            "width": 40,
+            "height": 50
+        }
+    }
 }

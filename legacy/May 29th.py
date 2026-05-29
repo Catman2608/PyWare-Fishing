@@ -1667,7 +1667,7 @@ class Api:
             overlay_width = fish_height
             overlay_height = shake_height
 
-            x = int(shake_left - 20 - (fish_left / 2))
+            x = shake_left - fish_height - fish_height
             y = shake_top
 
             return x, y, overlay_width, overlay_height
@@ -1771,20 +1771,6 @@ class Api:
         coords = np.argwhere(mask)
         if coords.size > 0:
             y, x = coords[0]
-            return int(x), int(y)
-        return None
-    def _find_last_pixel(self, frame, hex, tolerance=8):
-        if frame is None or frame.size == 0:
-            return None
-        tolerance = int(np.clip(tolerance, 0, 255))
-        b, g, r = self._hex_to_bgr(hex)
-        target = np.array([b, g, r], dtype=np.int32)
-        frame_i = frame.astype(np.int32)
-        diff = frame_i - target
-        mask = np.sqrt(np.sum(diff ** 2, axis=-1)) <= tolerance
-        coords = np.argwhere(mask)
-        if coords.size > 0:
-            y, x = coords[-1]  # Changed from [0] to [-1]
             return int(x), int(y)
         return None
     def _pixel_search(self, frame, target_color_hex, tolerance=8):
@@ -3411,10 +3397,6 @@ class Api:
         scan_delay = float(self.vars["minigame_scan_delay"])
         shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self._get_areas("shake")
         fish_left, fish_top, fish_right, fish_bottom, _, fish_height = self._get_areas("fish")
-        
-        # Calculate the total height for ratio (fish_bottom - shake_top)
-        total_height = fish_bottom - shake_top
-        
         # Start Screen Capture Thread (via _start_capture so it's tracked and
         # any previously running capture thread is stopped before this one begins)
         _minigame_stop = self._start_capture(scan_delay)
@@ -3430,119 +3412,43 @@ class Api:
                 self._set_fish_overlay_mode("idle")
                 return
             self._set_fish_overlay_mode("tranquility")
-            
-            # Full detection area from shake_top to fish_bottom
-            full_img = frame[shake_top:fish_bottom, shake_left:shake_right]
-            
-            # Step 2: Find last pixels in SHAKE area (shake_top to shake_bottom)
-            shake_img = frame[shake_top:shake_bottom, shake_left:shake_right]
-            shake_left_pixel = self._find_last_pixel(shake_img, left_color, left_tolerance)
-            shake_right_pixel = self._find_last_pixel(shake_img, right_color, right_tolerance)
-            shake_arrow_pixel = self._find_last_pixel(shake_img, arrow_color, arrow_tolerance)
-            shake_fish_pixel = self._find_last_pixel(shake_img, fish_color, fish_tolerance)
-            
-            # Step 3: Find last pixels in FISH area (fish_top to fish_bottom)
-            self.fish_overlay.clear()
-            fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
-            fish_left_pixel = self._find_last_pixel(fish_img, left_color, left_tolerance)
-            fish_right_pixel = self._find_last_pixel(fish_img, right_color, right_tolerance)
-            fish_arrow_pixel = self._find_last_pixel(fish_img, arrow_color, arrow_tolerance)
-            fish_fish_pixel = self._find_last_pixel(fish_img, fish_color, fish_tolerance)
-            
-            # Step 4: Determine which pixel to use for each note based on availability
-            # Priority: fish area pixel if exists, otherwise shake area pixel
-            left_pixel = fish_left_pixel if fish_left_pixel is not None else shake_left_pixel
-            right_pixel = fish_right_pixel if fish_right_pixel is not None else shake_arrow_pixel
-            arrow_pixel = fish_arrow_pixel if fish_arrow_pixel is not None else shake_arrow_pixel
-            fish_pixel = fish_fish_pixel if fish_fish_pixel is not None else shake_fish_pixel
-            
-            # Step 5: Convert to ratios using total_height (fish_bottom - shake_top)
-            # Note: Pixel coordinates are relative to their respective cropped images
-            # For shake area pixels, we need to add shake_top offset to get absolute Y
-            # For fish area pixels, we need to add fish_top offset to get absolute Y
-            # Then calculate ratio: (absolute_y - shake_top) / total_height
-            
-            if left_pixel is not None:
-                if left_pixel == fish_left_pixel:
-                    # Pixel from fish area - coordinates relative to fish_img
-                    absolute_y = fish_top + left_pixel[1]
-                else:
-                    # Pixel from shake area - coordinates relative to shake_img
-                    absolute_y = shake_top + left_pixel[1]
-                left_ratio = (absolute_y - shake_top) / total_height
-            else:
-                left_ratio = None
-                
-            if right_pixel is not None:
-                if right_pixel == fish_right_pixel:
-                    absolute_y = fish_top + right_pixel[1]
-                else:
-                    absolute_y = shake_top + right_pixel[1]
-                right_ratio = (absolute_y - shake_top) / total_height
-            else:
-                right_ratio = None
-                
-            if arrow_pixel is not None:
-                if arrow_pixel == fish_arrow_pixel:
-                    absolute_y = fish_top + arrow_pixel[1]
-                else:
-                    absolute_y = shake_top + arrow_pixel[1]
-                arrow_ratio = (absolute_y - shake_top) / total_height
-            else:
-                arrow_ratio = None
-                
-            if fish_pixel is not None:
-                if fish_pixel == fish_fish_pixel:
-                    absolute_y = fish_top + fish_pixel[1]
-                else:
-                    absolute_y = shake_top + fish_pixel[1]
-                fish_ratio = (absolute_y - shake_top) / total_height
-            else:
-                fish_ratio = None
-            
-            # Step 6: Draw
-            # You'll need to adjust the drawing logic based on which pixel was used
-            # This is a placeholder - you may want to draw both or the active one
-            overlay_center_x = fish_height / 2
-            note_height = 0.1
-
-            for ratio, color in (
-                (left_ratio, left_color),
-                (right_ratio, right_color),
-                (arrow_ratio, arrow_color),
-                (fish_ratio, fish_color),
-            ):
-                if ratio is None:
-                    continue
-
-                self.fish_overlay.draw(
-                    bar_center=overlay_center_x,
-                    box_size=fish_height * 0.8,
-                    color=color,
-                    canvas_offset=0,
-                    show_bar_center=False,
-                    bar_y1=max(0.0, ratio - note_height / 2),
-                    bar_y2=min(1.0, ratio + note_height / 2)
-                )
-            
-            # Step 7: Compare note ratios to user given target
-            if left_ratio is not None and left_ratio > target:
+            img = frame[shake_top:fish_bottom, shake_left:shake_right]
+            unused = frame[fish_top:fish_bottom, fish_left:fish_right]
+            # Step 2: Detection
+            # Falling notes
+            row_1 = self._find_first_pixel(img, left_color, left_tolerance)
+            row_2 = self._find_first_pixel(img, right_color, right_tolerance)
+            row_3 = self._find_first_pixel(img, arrow_color, arrow_tolerance)
+            row_4 = self._find_first_pixel(img, fish_color, fish_tolerance)
+            # Convert falling notes to ratios
+            note_1_ratio = row_1[1] / shake_height if row_1 is not None else None
+            note_2_ratio = row_2[1] / shake_height if row_2 is not None else None
+            note_3_ratio = row_3[1] / shake_height if row_3 is not None else None
+            note_4_ratio = row_4[1] / shake_height if row_4 is not None else None
+            # Step 3: Draw
+            self.fish_overlay.draw(
+                bar_center=row_1[1] + 30, box_size=60,
+                color=left_color, canvas_offset=shake_left,
+                show_bar_center=False, 
+                bar_y1 = note_1_ratio, bar_y2 = note_1_ratio + 0.1
+            )
+            # Step 4: Compare note ratios to user given target
+            if note_1_ratio > target:
                 keyboard_controller.press("d")
                 time.sleep(0.02)
                 keyboard_controller.release("d")
-            if right_ratio is not None and right_ratio > target:
+            if note_2_ratio > target:
                 keyboard_controller.press("f")
                 time.sleep(0.02)
                 keyboard_controller.release("f")
-            if arrow_ratio is not None and arrow_ratio > target:
+            if note_3_ratio > target:
                 keyboard_controller.press("j")
                 time.sleep(0.02)
                 keyboard_controller.release("j")
-            if fish_ratio is not None and fish_ratio > target:
+            if note_4_ratio > target:
                 keyboard_controller.press("k")
                 time.sleep(0.02)
                 keyboard_controller.release("k")
-            
             time.sleep(0.01)
     def _enter_minigame(self):
         # Get All 3 Areas
