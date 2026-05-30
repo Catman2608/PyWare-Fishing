@@ -312,8 +312,19 @@
                         <input id=bar_ratio_from_side type="text" placeholder="80">
                     </div>
                     <div class="text">
-                        <label>Note Tracking Ratio</label>
-                        <input id=note_tracking_ratio type="text" placeholder="0.3">
+                        <label>Note Tracking Ratio (Pinion)</label>
+                        <input id=pinion_note_ratio type="text" placeholder="0.3">
+                    </div>
+                    <div class="dropdown">
+                        <label for="tranquility_mode">Tranquility Mode:</label>
+                        <select name="tranquility_mode" id="tranquility_mode">
+                        <option value="rapid">Rapid</option>
+                        <option value="steady">Steady</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Note Target Ratio (Tranquility)</label>
+                        <input id=tranquility_note_ratio type="text" placeholder="0.7">
                     </div>
                     <div class="text">
                         <label>KP (Proportional)</label>
@@ -430,6 +441,21 @@
                     </div>
                     <div class="text">
                         <label>Mutation/Enchant</label>
+                        <input id=mutation_enchant type="text" placeholder="Darkened">
+                    </div>
+                    <div class="text">
+                        <label>Enchantment X (Ratio)</label>
+                        <input id=enchantment_x type="text" placeholder="Darkened">
+                    </div>
+                    <div class="text">
+                        <label>Enchantment Y (Ratio)</label>
+                        <input id=enchantment_y type="text" placeholder="Darkened">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Angler/Quests (toggle in Basic tab)</h3>
+                    <div class="text">
+                        <label>Required Fish</label>
                         <input id=mutation_enchant type="text" placeholder="Darkened">
                     </div>
                     <div class="text">

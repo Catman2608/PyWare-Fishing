@@ -30,7 +30,7 @@
     "auto_zoom": "off",
     "auto_refresh": "off",
     "efficiency_mode": "off",
-    "fish_overlay": "on",
+    "fish_overlay": "off",
     "status_overlay": "off",
     "track_notes": "off",
     "lock_cursor": "off",
@@ -59,7 +59,7 @@
     "minigame_scan_delay": "0.01",
     "restart_delay": "1.5",
     "bar_ratio_from_side": "0.5",
-    "note_tracking_ratio": "0.3",
+    "pinion_note_ratio": "0.3",
     "kp": "0.7",
     "kd": "0.3",
     "logging_mode": "Screenshot",
@@ -81,5 +81,7 @@
     "tesseract_path": "/opt/homebrew/bin/tesseract",
     "mutation_enchant": "Steady",
     "enchantment_x": "0.5",
-    "enchantment_y": "0.5"
+    "enchantment_y": "0.5",
+    "tranquility_note_ratio": "0.6",
+    "tranquility_mode": "steady"
 }

@@ -3016,7 +3016,7 @@ class Api:
         restart_delay = float(self.vars["restart_delay"])
         track_notes = self.vars["track_notes"]
         note_box_hex = self.vars["tracking_color"]
-        note_track_ratio = float(self.vars["note_tracking_ratio"] or 0.1)
+        note_track_ratio = float(self.vars["pinion_note_ratio"] or 0.1)
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
         lock_cursor = (self.vars["lock_cursor"])
         fishing_mode = (self.vars["fishing_mode"])

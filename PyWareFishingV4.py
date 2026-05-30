@@ -2668,14 +2668,13 @@ class Api:
                 output_type=pytesseract.Output.DICT
             )
 
-            target_text = "salmon"
             found = False
 
             for i in range(len(ocr_data["text"])):
 
                 text = ocr_data["text"][i].strip().lower()
 
-                if target_text in text:
+                if required_fish in text:
 
                     # OCR coordinates
                     x = ocr_data["left"][i]
@@ -2695,7 +2694,7 @@ class Api:
                     screen_x = hotbar_left + center_x
                     screen_y = hotbar_top + center_y
 
-                    print(f"Found Salmon at: {screen_x}, {screen_y}")
+                    self.set_status(f"Found {required_fish} at: {screen_x}, {screen_y}")
 
                     # Click the item
                     self._click_at(screen_x, screen_y)
@@ -2727,7 +2726,7 @@ class Api:
                     break
 
             if not found:
-                print("Salmon not found")
+                print(f"{required_fish} not found")
             time.sleep(130)
     # Start enchanting
     def start_enchantment(self):
@@ -3407,13 +3406,11 @@ class Api:
         arrow_tolerance = int(self.vars["arrow_tolerance"])
         fish_tolerance = int(self.vars["fish_tolerance"])
         # Get areas and misc variables
-        target = 0.6 # will be changed later
+        target = float(self.vars["tranquility_note_ratio"]) # Changed from 0.7 to tranquility_note_ratio (using float)
+        tranquility_mode = self.vars["tranquility_mode"]
         scan_delay = float(self.vars["minigame_scan_delay"])
         shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self._get_areas("shake")
         fish_left, fish_top, fish_right, fish_bottom, _, fish_height = self._get_areas("fish")
-        
-        # Calculate the total height for ratio (fish_bottom - shake_top)
-        total_height = fish_bottom - shake_top
         
         # Start Screen Capture Thread (via _start_capture so it's tracked and
         # any previously running capture thread is stopped before this one begins)
@@ -3450,55 +3447,18 @@ class Api:
             fish_fish_pixel = self._find_last_pixel(fish_img, fish_color, fish_tolerance)
             
             # Step 4: Determine which pixel to use for each note based on availability
-            # Priority: fish area pixel if exists, otherwise shake area pixel
-            left_pixel = fish_left_pixel if fish_left_pixel is not None else shake_left_pixel
-            right_pixel = fish_right_pixel if fish_right_pixel is not None else shake_arrow_pixel
-            arrow_pixel = fish_arrow_pixel if fish_arrow_pixel is not None else shake_arrow_pixel
-            fish_pixel = fish_fish_pixel if fish_fish_pixel is not None else shake_fish_pixel
+            # Priority: SHAKE area pixel if exists, otherwise FISH area pixel (fixed)
+            left_pixel = shake_left_pixel[1] if shake_left_pixel is not None else fish_left_pixel[1]
+            right_pixel = shake_right_pixel[1] if shake_right_pixel is not None else fish_right_pixel[1]
+            arrow_pixel = shake_arrow_pixel[1] if shake_arrow_pixel is not None else fish_arrow_pixel[1]
+            fish_pixel = shake_fish_pixel[1] if shake_fish_pixel is not None else fish_fish_pixel[1]
             
             # Step 5: Convert to ratios using total_height (fish_bottom - shake_top)
-            # Note: Pixel coordinates are relative to their respective cropped images
-            # For shake area pixels, we need to add shake_top offset to get absolute Y
-            # For fish area pixels, we need to add fish_top offset to get absolute Y
-            # Then calculate ratio: (absolute_y - shake_top) / total_height
-            
-            if left_pixel is not None:
-                if left_pixel == fish_left_pixel:
-                    # Pixel from fish area - coordinates relative to fish_img
-                    absolute_y = fish_top + left_pixel[1]
-                else:
-                    # Pixel from shake area - coordinates relative to shake_img
-                    absolute_y = shake_top + left_pixel[1]
-                left_ratio = (absolute_y - shake_top) / total_height
-            else:
-                left_ratio = None
-                
-            if right_pixel is not None:
-                if right_pixel == fish_right_pixel:
-                    absolute_y = fish_top + right_pixel[1]
-                else:
-                    absolute_y = shake_top + right_pixel[1]
-                right_ratio = (absolute_y - shake_top) / total_height
-            else:
-                right_ratio = None
-                
-            if arrow_pixel is not None:
-                if arrow_pixel == fish_arrow_pixel:
-                    absolute_y = fish_top + arrow_pixel[1]
-                else:
-                    absolute_y = shake_top + arrow_pixel[1]
-                arrow_ratio = (absolute_y - shake_top) / total_height
-            else:
-                arrow_ratio = None
-                
-            if fish_pixel is not None:
-                if fish_pixel == fish_fish_pixel:
-                    absolute_y = fish_top + fish_pixel[1]
-                else:
-                    absolute_y = shake_top + fish_pixel[1]
-                fish_ratio = (absolute_y - shake_top) / total_height
-            else:
-                fish_ratio = None
+            crop = fish_bottom - shake_top
+            left_ratio = left_pixel / crop if not left_pixel == None else 0
+            right_ratio = right_pixel / crop if not right_pixel == None else 0
+            arrow_ratio = arrow_pixel / crop if not arrow_pixel == None else 0
+            fish_ratio = fish_pixel / crop if not fish_pixel == None else 0
             
             # Step 6: Draw
             # You'll need to adjust the drawing logic based on which pixel was used
@@ -3525,23 +3485,41 @@ class Api:
                     bar_y2=min(1.0, ratio + note_height / 2)
                 )
             
-            # Step 7: Compare note ratios to user given target
-            if left_ratio is not None and left_ratio > target:
-                keyboard_controller.press("d")
-                time.sleep(0.02)
-                keyboard_controller.release("d")
-            if right_ratio is not None and right_ratio > target:
-                keyboard_controller.press("f")
-                time.sleep(0.02)
-                keyboard_controller.release("f")
-            if arrow_ratio is not None and arrow_ratio > target:
-                keyboard_controller.press("j")
-                time.sleep(0.02)
-                keyboard_controller.release("j")
-            if fish_ratio is not None and fish_ratio > target:
-                keyboard_controller.press("k")
-                time.sleep(0.02)
-                keyboard_controller.release("k")
+            # Step 7: Compare note ratios to user given target (based on tranquility mode)
+            if tranquility_mode == "Steady" or tranquility_mode == "steady":
+                if left_ratio is not None and left_ratio > target:
+                    keyboard_controller.press("d")
+                else:
+                    keyboard_controller.release("d")
+                if right_ratio is not None and right_ratio > target:
+                    keyboard_controller.press("f")
+                else:
+                    keyboard_controller.release("f")
+                if arrow_ratio is not None and arrow_ratio > target:
+                    keyboard_controller.press("j")
+                else:
+                    keyboard_controller.release("j")
+                if fish_ratio is not None and fish_ratio > target:
+                    keyboard_controller.press("k")
+                else:
+                    keyboard_controller.release("k")
+            elif tranquility_mode == "Rapid" or tranquility_mode == "rapid":
+                if left_ratio is not None and left_ratio > target:
+                    keyboard_controller.press("d")
+                    time.sleep(0.02)
+                    keyboard_controller.release("d")
+                if right_ratio is not None and right_ratio > target:
+                    keyboard_controller.press("f")
+                    time.sleep(0.02)
+                    keyboard_controller.release("f")
+                if arrow_ratio is not None and arrow_ratio > target:
+                    keyboard_controller.press("j")
+                    time.sleep(0.02)
+                    keyboard_controller.release("j")
+                if fish_ratio is not None and fish_ratio > target:
+                    keyboard_controller.press("k")
+                    time.sleep(0.02)
+                    keyboard_controller.release("k")
             
             time.sleep(0.01)
     def _enter_minigame(self):
@@ -3565,7 +3543,7 @@ class Api:
         restart_delay = float(self.vars["restart_delay"])
         track_notes = self.vars["track_notes"]
         note_box_hex = self.vars["tracking_color"]
-        note_track_ratio = float(self.vars["note_tracking_ratio"] or 0.1)
+        note_track_ratio = float(self.vars["pinion_note_ratio"] or 0.1)
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
         lock_cursor = (self.vars["lock_cursor"])
         fishing_mode = (self.vars["fishing_mode"])
