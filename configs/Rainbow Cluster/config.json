@@ -59,7 +59,7 @@
     "minigame_scan_delay": "0.01",
     "restart_delay": "0.5",
     "bar_ratio_from_side": "0.5",
-    "note_tracking_ratio": "0.3",
+    "pinion_note_ratio": "0.3",
     "kp": "0.93",
     "kd": "0.07",
     "logging_mode": "Screenshot",
