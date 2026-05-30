@@ -122,17 +122,12 @@ elif sys.platform == "darwin":
 def get_macos_menu_offset():
     if sys.platform != "darwin":
         return 0
-
     try:
         import AppKit
-
         screen = AppKit.NSScreen.mainScreen()
-
         full_frame = screen.frame()
         visible_frame = screen.visibleFrame()
-
         return int(full_frame.size.height - visible_frame.size.height)
-
     except Exception:
         return 0
 def get_base_path():
@@ -177,17 +172,13 @@ def open_base_folder():
 def cgimage_to_srgb_numpy(image):
     width = Quartz.CGImageGetWidth(image)
     height = Quartz.CGImageGetHeight(image)
-
     bytes_per_row = width * 4
-
     # Create sRGB color space
     color_space = Quartz.CGColorSpaceCreateWithName(
         Quartz.kCGColorSpaceSRGB
     )
-
     # Allocate buffer
     raw = np.empty((height, width, 4), dtype=np.uint8)
-
     # Create bitmap context targeting numpy buffer
     context = Quartz.CGBitmapContextCreate(
         raw,
@@ -199,17 +190,14 @@ def cgimage_to_srgb_numpy(image):
         Quartz.kCGImageAlphaPremultipliedLast |
         Quartz.kCGBitmapByteOrder32Big
     )
-
     # Draw image into sRGB context
     Quartz.CGContextDrawImage(
         context,
         Quartz.CGRectMake(0, 0, width, height),
         image
     )
-
     # RGBA -> BGR
     bgr = raw[:, :, :3][:, :, ::-1]
-
     return bgr.copy()
 # Screen dimensions via mss — use monitor[1] (primary) not monitor[0] (virtual combined).
 # On Windows with DPI scaling, pywebview's x/y/width/height use physical pixels,
@@ -307,7 +295,6 @@ class AreaSelector:
         Called by JS immediately after pywebviewready fires, passing
         window.screenX / window.screenY so Python knows the actual pixel
         offset of the overlay window's top-left corner.
-
         On macOS, a frameless pywebview window placed at y=0 is still pushed
         below the menu bar by the window server (~25-28 px).  Without this
         correction every saved y-coordinate is shifted down by the menu bar
@@ -320,7 +307,6 @@ class AreaSelector:
         else:
             self._win_origin_x = int(win_x)
             self._win_origin_y = int(win_y)
-
     def get_areas(self):
         """
         Called by JS on startup to get initial box positions.
@@ -342,7 +328,6 @@ class AreaSelector:
         """
         Called by JS on every mousemove so the main window status bar
         can show live position ratios.
-
         mouse_x / mouse_y are CSS-pixel coordinates relative to the overlay
         window's top-left corner (i.e. relative to SCREEN_LEFT, SCREEN_TOP).
         The stored _areas use screen-absolute coordinates, so we must add the
@@ -680,8 +665,8 @@ class Api:
         self.pending_holding_state = None
         self.pending_indicator_x = None
         self.estimated_box_length = None
-        self.last_left_x = None
-        self.last_right_x = None
+        self._last_bar_left_x = None
+        self._last_bar_right_x = None
         self.last_known_box_center_x = None
         # Arrow estimation tracking
         self._last_bar_left_x = None
@@ -1401,7 +1386,6 @@ class Api:
         height = bottom - top
         region = Quartz.CGRectMake(left, top, width, height)
         if sys.platform == "darwin":
-
             # Capture full screen
             image = Quartz.CGWindowListCreateImage(
                 Quartz.CGRectInfinite,
@@ -1409,15 +1393,11 @@ class Api:
                 Quartz.kCGNullWindowID,
                 Quartz.kCGWindowImageDefault
             )
-
             if image is None:
                 return None
-
             frame = cgimage_to_srgb_numpy(image)
-
             # Manual crop using actual coordinates
             cropped = frame[top:bottom, left:right]
-
             return cropped.copy()
         else:
             width  = right - left
@@ -1436,40 +1416,28 @@ class Api:
             # Mathematical shift correction safely applied for macOS stability
             return bgr_frame
     def _grab_screen_full(self, thread_local=None):
-
         # Fallback like grab_screen_region
         if thread_local is None:
             thread_local = self._thread_local
-
         scale = self._get_scale_factor()
-
         width = int(self.SCREEN_WIDTH * scale)
         height = int(self.SCREEN_HEIGHT * scale)
-
         if sys.platform == "darwin":
-
             image = Quartz.CGWindowListCreateImage(
                 Quartz.CGRectInfinite,
                 Quartz.kCGWindowListOptionOnScreenOnly,
                 Quartz.kCGNullWindowID,
                 Quartz.kCGWindowImageDefault
             )
-
             if image is None:
                 return None
-
             frame = cgimage_to_srgb_numpy(image)
-
             # Crop manually for coordinate consistency
             frame = frame[0:height, 0:width]
-
             return frame.copy()
-
         else:
-
             if not hasattr(thread_local, "sct"):
                 thread_local.sct = mss.mss()
-
             if not hasattr(thread_local, "monitor"):
                 thread_local.monitor = {
                     "left": 0,
@@ -1477,17 +1445,12 @@ class Api:
                     "width": width,
                     "height": height
                 }
-
             m = thread_local.monitor
-
             img = thread_local.sct.grab(m)
-
             # Convert MSS image safely
             frame = np.array(img, dtype=np.uint8)
-
             # Remove alpha channel
             bgr_frame = frame[:, :, :3]
-
             return bgr_frame
     def _capture_loop_full(self, stop_event, scan_delay):
         thread_local = threading.local()
@@ -1660,16 +1623,12 @@ class Api:
         elif mode == "tranquility":
             shake_left, shake_top, shake_right, shake_bottom = self._get_overlay_anchor_area("shake")
             fish_left, fish_top, fish_right, fish_bottom = self._get_overlay_anchor_area("fish")
-
             shake_height = shake_bottom - shake_top
             fish_height = fish_bottom - fish_top
-
             overlay_width = fish_height
             overlay_height = shake_height
-
             x = int(shake_left - 20 - (fish_left / 2))
             y = shake_top
-
             return x, y, overlay_width, overlay_height
         return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("friend"))
     def _is_fish_overlay_enabled(self):
@@ -1943,7 +1902,7 @@ class Api:
         if h == 0 or w == 0:
             return None, None
         center_y = int(np.clip(h * scan_height_ratio, 0, h - 1))
-        # Convert To Bgr
+        # Convert To BGR
         left_bgr = np.array(self._hex_to_bgr(left_hex), dtype=np.int32)
         right_bgr = np.array(self._hex_to_bgr(right_hex), dtype=np.int32)
         # Clamp Tolerances
@@ -1996,160 +1955,130 @@ class Api:
             if abs(indicator_x - self.last_indicator_x) < 2:
                 indicator_x = self.last_indicator_x
         return indicator_x
-    def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
+    def _update_arrow_box_estimation(self, arrow_center_x, any_bar_detected_this_frame, width):
         """
-        Estimate box position based on arrow indicator using IRUS-style logic.
-        If holding: arrow is on RIGHT edge, extend LEFT
-        If not holding: arrow is on LEFT edge, extend RIGHT
-        When state swaps: measure distance between arrows to get box size
-        Args:
-            arrow_centroid_x: X coordinate of arrow center
-            is_holding: Whether mouse button is currently held
-            capture_width: Width of capture region
-        Returns:
-            Estimated bar center X coordinate, or None if can't estimate
+        Arrow fallback logic: ONLY triggers if NO bar colors were detected in this frame
+        If arrow is found, it updates ONE side (whichever is closer), OTHER side uses old position
         """
-        # Initialize tracking variables if not already done
-        if not hasattr(self, '_last_bar_left_x'):
-            self._last_bar_left_x = None
-        if not hasattr(self, '_last_bar_right_x'):
-            self._last_bar_right_x = None
-        if not hasattr(self, '_last_bar_box_size'):
-            self._last_bar_box_size = None
-        if not hasattr(self, '_last_bar_center_x'):
-            self._last_bar_center_x = None
-        
-        # Handle missing arrow
-        if arrow_centroid_x is None:
-            # Return last known positions if available
-            if self._last_bar_center_x is not None:
-                return self._last_bar_center_x, self._last_bar_left_x, self._last_bar_right_x
-            return None, None, None
-        
-        # Get last known values
-        last_center = self._last_bar_center_x
-        box_size = self._last_bar_box_size
-        
-        # If we have previous bar data, determine which side the arrow is on
-        if last_center is not None and box_size is not None and box_size > 0:
-            last_left = self._last_bar_left_x
-            last_right = self._last_bar_right_x
-            
-            # Determine which side based on center comparison
-            arrow_on_left_side = arrow_centroid_x < last_center
-            
-            # SMART VALIDATION: Check if arrow is actually near the bar we think it is
-            # Calculate distances to both last known bars
-            dist_to_left = abs(arrow_centroid_x - last_left) if last_left is not None else float('inf')
-            dist_to_right = abs(arrow_centroid_x - last_right) if last_right is not None else float('inf')
-            
-            # Self-correction: If arrow is much closer to the opposite bar, we detected wrong side!
-            # Threshold: arrow should be within reasonable distance (box_size / 4) of expected bar
-            proximity_threshold = box_size / 4
-            
-            if arrow_on_left_side:
-                # We think arrow is on LEFT, but verify it's actually near left bar
-                if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
-                    # Arrow is actually closer to RIGHT bar - we were wrong!
-                    arrow_on_left_side = False  # Flip the decision
-            
-            else:
-                # We think arrow is on RIGHT, but verify it's actually near right bar
-                if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
-                    # Arrow is actually closer to LEFT bar - we were wrong!
-                    arrow_on_left_side = True  # Flip the decision
-            
-            # Now apply the corrected decision
-            if arrow_on_left_side:
-                # Arrow is on the LEFT side - update left bar, keep right bar from memory
-                bar_left_x = arrow_centroid_x
-                bar_right_x = self._last_bar_right_x
-                
-                if bar_right_x is None:
-                    # If no right bar in memory, calculate from box size
-                    bar_right_x = bar_left_x + box_size
-                
-                # Validate: ensure left < right
-                if bar_left_x < bar_right_x:
-                    self._last_bar_left_x = bar_left_x
-                    self._last_bar_right_x = bar_right_x
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
-                    return bar_center_x, bar_left_x, bar_right_x
-            else:
-                # Arrow is on the RIGHT side - update right bar, keep left bar from memory
-                bar_right_x = arrow_centroid_x
-                bar_left_x = self._last_bar_left_x
-                
-                if bar_left_x is None:
-                    # If no left bar in memory, calculate from box size
-                    bar_left_x = bar_right_x - box_size
-                
-                # Validate: ensure left < right
-                if bar_left_x < bar_right_x:
-                    self._last_bar_left_x = bar_left_x
-                    self._last_bar_right_x = bar_right_x
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
-                    return bar_center_x, bar_left_x, bar_right_x
-        
-        # Fallback: Try to establish initial box size from previous positions
-        elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
-            box_size = self._last_bar_right_x - self._last_bar_left_x
-            last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
-            
-            if box_size > 0:
-                self._last_bar_box_size = box_size
-                self._last_bar_center_x = last_center
-                
-                # Determine side based on arrow position relative to last center
-                if arrow_centroid_x < last_center:
-                    bar_left_x = arrow_centroid_x
-                    bar_right_x = bar_left_x + box_size
+        bar_center_x = None
+        bar_left_x = None
+        bar_right_x = None
+        # Arrow estimation logic
+        if not any_bar_detected_this_frame and arrow_center_x is not None:
+            last_center = self._last_bar_center_x
+            box_size = self._last_bar_box_size
+
+            # If we have previous bar data, determine which side the arrow is on
+            if last_center is not None and box_size is not None and box_size > 0:
+                # Get last known bar positions for validation
+                last_left = self._last_bar_left_x
+                last_right = self._last_bar_right_x
+
+                # Determine which side based on center comparison
+                arrow_on_left_side = arrow_center_x < last_center
+
+                # SMART VALIDATION: Check if arrow is actually near the bar we think it is
+                # Calculate distances to both last known bars
+                dist_to_left = abs(arrow_center_x - last_left) if last_left is not None else float('inf')
+                dist_to_right = abs(arrow_center_x - last_right) if last_right is not None else float('inf')
+
+                # Self-correction: If arrow is much closer to the opposite bar, we detected wrong side!
+                # Threshold: arrow should be within reasonable distance (box_size / 4) of expected bar
+                proximity_threshold = box_size / 4
+
+                if arrow_on_left_side:
+                    # We think arrow is on LEFT, but verify it's actually near left bar
+                    if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
+                        # Arrow is actually closer to RIGHT bar - we were wrong!
+                        # print(f"🐟 Arrow mode: SELF-CORRECTION - Arrow at {arrow_center_x:.0f} closer to RIGHT bar ({dist_to_right:.0f}px) than LEFT ({dist_to_left:.0f}px)")
+                        arrow_on_left_side = False  # Flip the decision
+
                 else:
-                    bar_right_x = arrow_centroid_x
-                    bar_left_x = bar_right_x - box_size
-                
-                self._last_bar_left_x = bar_left_x
-                self._last_bar_right_x = bar_right_x
-                bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                self._last_bar_center_x = bar_center_x
-                return bar_center_x, bar_left_x, bar_right_x
-            else:
-                # Invalid box size (<=0) - use default based on capture width
-                default_box_size = capture_width // 2
-                bar_left_x = arrow_centroid_x
-                bar_right_x = bar_left_x + default_box_size
-                
-                self._last_bar_left_x = bar_left_x
-                self._last_bar_right_x = bar_right_x
-                self._last_bar_box_size = default_box_size
-                
-                bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                self._last_bar_center_x = bar_center_x
-                return bar_center_x, bar_left_x, bar_right_x
-        
-        else:
-            # No previous data - assume a default box size based on capture width
-            default_box_size = capture_width // 2
-            
-            # Start with arrow as left bar, calculate right from default size
-            bar_left_x = arrow_centroid_x
-            bar_right_x = bar_left_x + default_box_size
-            
-            # Clamp to capture bounds
-            if bar_right_x > capture_width:
-                bar_right_x = float(capture_width)
-                bar_left_x = max(0.0, bar_right_x - default_box_size)
-            
-            # Save these initial estimates
-            self._last_bar_left_x = bar_left_x
-            self._last_bar_right_x = bar_right_x
-            self._last_bar_box_size = default_box_size
-            
-            bar_center_x = (bar_left_x + bar_right_x) / 2.0
-            self._last_bar_center_x = bar_center_x
-            return bar_center_x, bar_left_x, bar_right_x
+                    # We think arrow is on RIGHT, but verify it's actually near right bar
+                    if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
+                        # Arrow is actually closer to LEFT bar - we were wrong!
+                        # print(f"🐟 Arrow mode: SELF-CORRECTION - Arrow at {arrow_center_x:.0f} closer to LEFT bar ({dist_to_left:.0f}px) than RIGHT ({dist_to_right:.0f}px)")
+                        arrow_on_left_side = True  # Flip the decision
+
+                # Now apply the corrected decision
+                if arrow_on_left_side:
+                    # Arrow is on the LEFT side - update left bar, keep right bar from memory
+                    bar_left_x = arrow_center_x
+                    bar_right_x = self._last_bar_right_x
+
+                    if bar_right_x is None:
+                        # If no right bar in memory, calculate from box size
+                        bar_right_x = bar_left_x + box_size
+
+                    # Validate: ensure left < right
+                    if bar_left_x < bar_right_x:
+                        self._last_bar_left_x = bar_left_x
+                        self._last_bar_right_x = bar_right_x
+                        bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center_x = bar_center_x
+                        bar_center_found = True
+                        # print(f"🐟 Arrow mode: Arrow LEFT of center - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (kept)")
+                    else:
+                        pass # print(f"🐟 Arrow mode: Invalid - arrow left {bar_left_x:.0f} >= right {bar_right_x:.0f}")
+                else:
+                    # Arrow is on the RIGHT side - update right bar, keep left bar from memory
+                    bar_right_x = arrow_center_x
+                    bar_left_x = self._last_bar_left_x
+
+                    if bar_left_x is None:
+                        # If no left bar in memory, calculate from box size
+                        bar_left_x = bar_right_x - box_size
+
+                    # Validate: ensure left < right
+                    if bar_left_x < bar_right_x:
+                        self._last_bar_left_x = bar_left_x
+                        self._last_bar_right_x = bar_right_x
+                        bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center_x = bar_center_x
+                        bar_center_found = True
+                        # print(f"🐟 Arrow mode: Arrow RIGHT of center - L={bar_left_x:.0f} (kept), R={bar_right_x:.0f} (arrow)")
+                    else:
+                        pass # print(f"🐟 Arrow mode: Invalid - left {bar_left_x:.0f} >= arrow right {bar_right_x:.0f}")
+
+            # Fallback: Try to establish initial box size from previous positions
+            elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
+                box_size = self._last_bar_right_x - self._last_bar_left_x
+                last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
+
+                if box_size > 0:
+                    self._last_bar_box_size = box_size
+                    self._last_bar_center_x = last_center
+
+                    # Determine side based on arrow position relative to last center
+                    if arrow_center_x < last_center:
+                        bar_left_x = arrow_center_x
+                        bar_right_x = bar_left_x + box_size
+                        # print(f"🐟 Arrow mode: Initial LEFT - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (size={box_size:.0f})")
+                    else:
+                        bar_right_x = arrow_center_x
+                        bar_left_x = bar_right_x - box_size
+                        # print(f"🐟 Arrow mode: Initial RIGHT - L={bar_left_x:.0f} (size={box_size:.0f}), R={bar_right_x:.0f} (arrow)")
+
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    bar_center_found = True
+                else:
+                    # Invalid box size (<=0) - use default based on fish area width
+                    default_box_size = width // 2
+                    bar_left_x = arrow_center_x
+                    bar_right_x = bar_left_x + default_box_size
+
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    self._last_bar_box_size = default_box_size
+
+                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    bar_center_found = True
+                    # print(f"🐟 Arrow mode: Invalid box size (<=0), using fish area width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")
+        return bar_center_x, bar_left_x, bar_right_x
     # Main macro functions
     def normalize_key(self, key):
         try:
@@ -2442,8 +2371,8 @@ class Api:
         self.pending_holding_state = None
         self.pending_indicator_x = None
         self.estimated_box_length = None
-        self.last_left_x = None
-        self.last_right_x = None
+        self._last_bar_left_x = None
+        self._last_bar_right_x = None
         self.last_known_box_center_x = None
         # Arrow estimation tracking
         self._last_bar_left_x = None
@@ -2605,6 +2534,7 @@ class Api:
         tesseract_path = self.vars["tesseract_path"]
         tolerance = int(self.vars["shake_tolerance"])
         shake_pixel = self.vars["shake_color"]
+        backpack_key = str(self.vars["backpack_key"])
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
         dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
         hotbar_left, hotbar_top, hotbar_right, hotbar_bottom, _, _ = self._get_areas("fish")
@@ -2621,11 +2551,9 @@ class Api:
             try:
                 if dialogue is not None:
                     dialogue_x, dialogue_y = dialogue
-
                     # Convert cropped coordinates back to screen coordinates
                     screen_x = dialogue_left + dialogue_x
                     screen_y = dialogue_top + dialogue_y
-
                     self._click_at(screen_x, screen_y)
                 time.sleep(1.2)
             except Exception as e:
@@ -2635,72 +2563,51 @@ class Api:
             img = self._grab_screen_full()
             quest = img[quest_top:quest_bottom, quest_left:quest_right]
             gray = cv2.cvtColor(quest, cv2.COLOR_BGR2GRAY)
-
             # Upscale image
             gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-
             # Sharpen contrast
             gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
             required_fish = pytesseract.image_to_string(gray)
             time.sleep(0.1)
-            keyboard_controller.press("g")
+            keyboard_controller.press(backpack_key)
             time.sleep(0.05)
-            keyboard_controller.release("g")
+            keyboard_controller.release(backpack_key)
             time.sleep(0.45)
-
             img = self._grab_screen_full()
             hotbar = img[hotbar_top:hotbar_bottom, hotbar_left:hotbar_right]
-
             # OCR PREPROCESSING
-
             gray = cv2.cvtColor(hotbar, cv2.COLOR_BGR2GRAY)
-
             # Upscale for better OCR
             gray = cv2.resize( gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC )
-
             # Sharpen / threshold
             gray = cv2.threshold( gray, 150, 255, cv2.THRESH_BINARY )[1]
-
             # OCR DETECTION
-
             ocr_data = pytesseract.image_to_data(
                 gray,
                 output_type=pytesseract.Output.DICT
             )
-
             found = False
-
             for i in range(len(ocr_data["text"])):
-
                 text = ocr_data["text"][i].strip().lower()
-
                 if required_fish in text:
-
                     # OCR coordinates
                     x = ocr_data["left"][i]
                     y = ocr_data["top"][i]
                     w = ocr_data["width"][i]
                     h = ocr_data["height"][i]
-
                     # Center of detected word
                     center_x = x + (w // 2)
                     center_y = y + (h // 2)
-
                     # Because image was upscaled x3
                     center_x = center_x // 3
                     center_y = center_y // 3
-
                     # Convert cropped coords -> screen coords
                     screen_x = hotbar_left + center_x
                     screen_y = hotbar_top + center_y
-
                     self.set_status(f"Found {required_fish} at: {screen_x}, {screen_y}")
-
                     # Click the item
                     self._click_at(screen_x, screen_y)
-
                     time.sleep(0.25)
-
                     # Press E to claim
                     keyboard_controller.press("e")
                     time.sleep(0.05)
@@ -2712,11 +2619,9 @@ class Api:
                     try:
                         if dialogue is not None:
                             dialogue_x, dialogue_y = dialogue
-
                             # Convert cropped coordinates back to screen coordinates
                             screen_x = dialogue_left + dialogue_x
                             screen_y = dialogue_top + dialogue_y
-
                             self._click_at(screen_x, screen_y)
                         time.sleep(1.2)
                     except Exception as e:
@@ -2724,7 +2629,6 @@ class Api:
                         self.stop_macro(f"Angler/Quest failed: {e}")
                     found = True
                     break
-
             if not found:
                 print(f"{required_fish} not found")
             time.sleep(130)
@@ -2751,10 +2655,8 @@ class Api:
             img = self._grab_screen_full()
             enchantment = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
             gray = cv2.cvtColor(enchantment, cv2.COLOR_BGR2GRAY)
-
             # Upscale image
             gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-
             # Sharpen contrast
             gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
             text = pytesseract.image_to_string(gray)
@@ -2782,27 +2684,21 @@ class Api:
                 shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
                 fish = img[hotbar_top:hotbar_bottom, hotbar_left:hotbar_right]
                 dialogue = self._find_first_pixel(shake, shake_pixel, tolerance)
-
                 try:
                     if dialogue is None:
                         continue
                     dialogue_x, dialogue_y = dialogue
-
                     # Convert cropped coordinates back to screen coordinates
                     screen_x = dialogue_left + dialogue_x
                     screen_y = dialogue_top + dialogue_y
-
                     self._click_at(screen_x, screen_y)
                     time.sleep(1.2)
-
                 except Exception as e:
                     print(e)
                     self.stop_macro(f"Appraisal failed: {e}")
             gray = cv2.cvtColor(fish, cv2.COLOR_BGR2GRAY)
-
             # Upscale image
             gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-
             # Sharpen contrast
             gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
             text = pytesseract.image_to_string(gray)
@@ -3405,13 +3301,17 @@ class Api:
         right_tolerance = int(self.vars["right_tolerance"])
         arrow_tolerance = int(self.vars["arrow_tolerance"])
         fish_tolerance = int(self.vars["fish_tolerance"])
-        # Get areas and misc variables
+        # Get misc variables
         target = float(self.vars["tranquility_note_ratio"]) # Changed from 0.7 to tranquility_note_ratio (using float)
         tranquility_mode = self.vars["tranquility_mode"]
         scan_delay = float(self.vars["minigame_scan_delay"])
+        restart_delay = float(self.vars["restart_delay"])
+        friend_color = self.vars["friends_color"]
+        friend_tol = int(self.vars["friends_tolerance"])
+        # Get areas
         shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self._get_areas("shake")
         fish_left, fish_top, fish_right, fish_bottom, _, fish_height = self._get_areas("fish")
-        
+        friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
         # Start Screen Capture Thread (via _start_capture so it's tracked and
         # any previously running capture thread is stopped before this one begins)
         _minigame_stop = self._start_capture(scan_delay)
@@ -3427,45 +3327,47 @@ class Api:
                 self._set_fish_overlay_mode("idle")
                 return
             self._set_fish_overlay_mode("tranquility")
-            
-            # Full detection area from shake_top to fish_bottom
-            full_img = frame[shake_top:fish_bottom, shake_left:shake_right]
-            
-            # Step 2: Find last pixels in SHAKE area (shake_top to shake_bottom)
+            # Friend detection area
+            friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
+            # Step 2: Find last pixels in SHAKE and FISH area
             shake_img = frame[shake_top:shake_bottom, shake_left:shake_right]
             shake_left_pixel = self._find_last_pixel(shake_img, left_color, left_tolerance)
             shake_right_pixel = self._find_last_pixel(shake_img, right_color, right_tolerance)
             shake_arrow_pixel = self._find_last_pixel(shake_img, arrow_color, arrow_tolerance)
             shake_fish_pixel = self._find_last_pixel(shake_img, fish_color, fish_tolerance)
-            
-            # Step 3: Find last pixels in FISH area (fish_top to fish_bottom)
             self.fish_overlay.clear()
             fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
             fish_left_pixel = self._find_last_pixel(fish_img, left_color, left_tolerance)
             fish_right_pixel = self._find_last_pixel(fish_img, right_color, right_tolerance)
             fish_arrow_pixel = self._find_last_pixel(fish_img, arrow_color, arrow_tolerance)
             fish_fish_pixel = self._find_last_pixel(fish_img, fish_color, fish_tolerance)
-            
+            # Step 3: Restart Method — Friend Area (green present = minigame ended)
+            friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
+            if friend_x is not None:
+                keyboard_controller.release("d")
+                keyboard_controller.release("f")
+                keyboard_controller.release("j")
+                keyboard_controller.release("k")
+                time.sleep(restart_delay)
+                self._set_fish_overlay_mode("idle")
+                return
             # Step 4: Determine which pixel to use for each note based on availability
             # Priority: SHAKE area pixel if exists, otherwise FISH area pixel (fixed)
             left_pixel = shake_left_pixel[1] if shake_left_pixel is not None else fish_left_pixel[1]
             right_pixel = shake_right_pixel[1] if shake_right_pixel is not None else fish_right_pixel[1]
             arrow_pixel = shake_arrow_pixel[1] if shake_arrow_pixel is not None else fish_arrow_pixel[1]
             fish_pixel = shake_fish_pixel[1] if shake_fish_pixel is not None else fish_fish_pixel[1]
-            
             # Step 5: Convert to ratios using total_height (fish_bottom - shake_top)
             crop = fish_bottom - shake_top
             left_ratio = left_pixel / crop if not left_pixel == None else 0
             right_ratio = right_pixel / crop if not right_pixel == None else 0
             arrow_ratio = arrow_pixel / crop if not arrow_pixel == None else 0
             fish_ratio = fish_pixel / crop if not fish_pixel == None else 0
-            
             # Step 6: Draw
             # You'll need to adjust the drawing logic based on which pixel was used
             # This is a placeholder - you may want to draw both or the active one
             overlay_center_x = fish_height / 2
             note_height = 0.1
-
             for ratio, color in (
                 (left_ratio, left_color),
                 (right_ratio, right_color),
@@ -3474,7 +3376,6 @@ class Api:
             ):
                 if ratio is None:
                     continue
-
                 self.fish_overlay.draw(
                     bar_center=overlay_center_x,
                     box_size=fish_height * 0.8,
@@ -3484,7 +3385,6 @@ class Api:
                     bar_y1=max(0.0, ratio - note_height / 2),
                     bar_y2=min(1.0, ratio + note_height / 2)
                 )
-            
             # Step 7: Compare note ratios to user given target (based on tranquility mode)
             if tranquility_mode == "Steady" or tranquility_mode == "steady":
                 if left_ratio is not None and left_ratio > target:
@@ -3520,7 +3420,6 @@ class Api:
                     keyboard_controller.press("k")
                     time.sleep(0.02)
                     keyboard_controller.release("k")
-            
             time.sleep(0.01)
     def _enter_minigame(self):
         # Get All 3 Areas
@@ -3632,17 +3531,17 @@ class Api:
                 elif time.perf_counter() - last_line_seen_time <= line_lost_timeout:
                     if fish_x is None and self.last_fish_x is not None:
                         fish_x = self.last_fish_x
-                    if (left_x is None or right_x is None) and self.last_left_x is not None and self.last_right_x is not None:
-                        left_x = self.last_left_x
-                        right_x = self.last_right_x
+                    if (left_x is None or right_x is None) and self._last_bar_left_x is not None and self._last_bar_right_x is not None:
+                        left_x = self._last_bar_left_x
+                        right_x = self._last_bar_right_x
             # Step 3: Calculations
             self.fish_overlay.clear()
-            bars_found = left_x is not None and right_x is not None # Check 1
-            if bars_found:
+            any_bar_detected_this_frame = left_x is not None and right_x is not None # Check 1
+            if any_bar_detected_this_frame:
                 detection_source = 0
             else:
                 if arrow_method == 2:
-                    bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, mouse_down, fish_width)
+                    bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, any_bar_detected_this_frame, fish_width)
                 else:
                     # This ensures rods with 1 arrow can be tracked normally
                     bar_center = self._find_color_cluster(img, arrow_hex, arrow_tol, 10)
@@ -3652,9 +3551,9 @@ class Api:
                         pass
                     left_x = bar_center - 20 if not bar_center == None else 0
                     right_x = bar_center + 20 if not bar_center == None else 0
-                bars_found = True # Check 2
+                any_bar_detected_this_frame = True # Check 2
                 detection_source = 1
-            if bars_found and not (left_x == None or right_x == None): # Bar Or Arrows Found
+            if any_bar_detected_this_frame and not (left_x == None or right_x == None): # Bar Or Arrows Found
                 bar_size = abs(right_x - left_x)
                 bar_center = (left_x + bar_size // 2) + fish_left # Add Fish Left Here
                 left_deadzone = bar_size * bar_ratio
@@ -3667,8 +3566,8 @@ class Api:
                 max_left = fish_left
                 max_right = fish_right
             if detection_source == 0:
-                self.last_left_x = left_x
-                self.last_right_x = right_x
+                self._last_bar_left_x = left_x
+                self._last_bar_right_x = right_x
                 # Completed: Cache Real Box Size
                 if left_x is not None and right_x is not None:
                     bar_size = abs(right_x - left_x)
@@ -3700,15 +3599,15 @@ class Api:
             if fish_x == None:
                 fish_x = self.last_fish_x
             if left_x == None or right_x == None:
-                left_x = self.last_left_x
-                right_x = self.last_right_x
+                left_x = self._last_bar_left_x
+                right_x = self._last_bar_right_x
             # Position Bar Based On State
             if not mouse_down:
                 right_x = left_x + bar_size if not left_x == None else None
             else:
                 left_x = right_x - bar_size if not right_x == None else None
             # Step 5: Apply Max Left/Right Calculations
-            if bars_found and bar_center is not None: # Bar Found
+            if any_bar_detected_this_frame and bar_center is not None: # Bar Found
                 if note_box_pos is not None:
                     # Direct Mapping (Already In Fish Space)
                     note_screen_x = note_box_pos[0] + fish_left
