@@ -220,47 +220,47 @@
                     </div>
                     <div class="text">
                         <label>Under 700px/s</label>
-                        <input id=perfect_cast_timing_700 type="text" placeholder="0.05">
+                        <input id=perfect_cast_timing_700 type="text" placeholder="0.1">
                     </div>
                     <div class="text">
                         <label>700-800 px/s</label>
-                        <input id=perfect_cast_timing_800 type="text" placeholder="0.0">
+                        <input id=perfect_cast_timing_800 type="text" placeholder="0.08">
                     </div>
                     <div class="text">
                         <label>800-900 px/s</label>
-                        <input id=perfect_cast_timing_900 type="text" placeholder="-0.05">
+                        <input id=perfect_cast_timing_900 type="text" placeholder="0.06">
                     </div>
                     <div class="text">
                         <label>900-1000 px/s</label>
-                        <input id=perfect_cast_timing_1000 type="text" placeholder="0.05">
+                        <input id=perfect_cast_timing_1000 type="text" placeholder="0.04">
                     </div>
                     <div class="text">
                         <label>1000-1100 px/s</label>
-                        <input id=perfect_cast_timing_1100 type="text" placeholder="0.0">
+                        <input id=perfect_cast_timing_1100 type="text" placeholder="0.02">
                     </div>
                     <div class="text">
                         <label>1100-1200 px/s</label>
-                        <input id=perfect_cast_timing_1200 type="text" placeholder="-0.05">
+                        <input id=perfect_cast_timing_1200 type="text" placeholder="0.0">
                     </div>
                     <div class="text">
                         <label>1200-1300 px/s</label>
-                        <input id=perfect_cast_timing_1300 type="text" placeholder="0.0">
+                        <input id=perfect_cast_timing_1300 type="text" placeholder="-0.02">
                     </div>
                     <div class="text">
                         <label>1300-1400 px/s</label>
-                        <input id=perfect_cast_timing_1400 type="text" placeholder="-0.05">
+                        <input id=perfect_cast_timing_1400 type="text" placeholder="-0.04">
                     </div>
                     <div class="text">
                         <label>1400-1500 px/s</label>
-                        <input id=perfect_cast_timing_1500 type="text" placeholder="0.05">
+                        <input id=perfect_cast_timing_1500 type="text" placeholder="-0.06">
                     </div>
                     <div class="text">
                         <label>1500-1600 px/s</label>
-                        <input id=perfect_cast_timing_1600 type="text" placeholder="0.0">
+                        <input id=perfect_cast_timing_1600 type="text" placeholder="-0.08">
                     </div>
                     <div class="text">
                         <label>1600+ px/s</label>
-                        <input id=perfect_cast_timing_1600_plus type="text" placeholder="-0.05">
+                        <input id=perfect_cast_timing_1600_plus type="text" placeholder="-0.1">
                     </div>
                 </div>   
                 <div class="card">
@@ -277,7 +277,7 @@
                     <div class="arrow">&darr;</div> <!-- Arrows -->
                     <div class="text">
                         <label>Delay</label>
-                        <input id=delay_after_casting type="text" placeholder="0.5">
+                        <input id=delay_after_casting type="text" placeholder="1">
                     </div>
                 </div>
                 <div class="card">
@@ -299,11 +299,11 @@
                     </div>
                     <div class="text">
                         <label>Restart Delay</label>
-                        <input id=restart_delay type="text" placeholder="3">
+                        <input id=restart_delay type="text" placeholder="2.5">
                     </div>
                     <div class="text">
                         <label>Bar Ratio From Side</label>
-                        <input id=bar_ratio_from_side type="text" placeholder="80">
+                        <input id=bar_ratio_from_side type="text" placeholder="0.5">
                     </div>
                     <div class="dropdown">
                         <label for="controller_mode">Controller Mode:</label>
@@ -334,11 +334,11 @@
                     </div>
                     <div class="text">
                         <label>KP (Proportional)</label>
-                        <input id=kp type="text" placeholder="0.93">
+                        <input id=kp type="text" placeholder="0.9">
                     </div>
                     <div class="text">
                         <label>KD (Derivative)</label>
-                        <input id=kd type="text" placeholder="0.07">
+                        <input id=kd type="text" placeholder="0.1">
                     </div>
                 </div>
                 <div class="card" id="controller-steady-card" style="display:none;">
@@ -378,11 +378,11 @@
                     </div>
                     <div class="text">
                         <label>Note Target Ratio (Tranquility)</label>
-                        <input id=tranquility_note_ratio type="text" placeholder="0.7">
+                        <input id=tranquility_note_ratio type="text" placeholder="0.8">
                     </div>
                     <div class="text">
                         <label>Note Target Delay (Tranquility)</label>
-                        <input id=target_delay type="text" placeholder="0.06">
+                        <input id=target_delay type="text" placeholder="0">
                     </div>
                 </div>
             </div>
@@ -416,11 +416,11 @@
                     </div>
                     <div class="text">
                         <label>Cycles</label>
-                        <input id=logging_cycle type="text" placeholder="3">
+                        <input id=logging_cycle type="text" placeholder="10">
                     </div>
                     <div class="text">
                         <label>Time (seconds)</label>
-                        <input id=logging_time type="text" placeholder="60">
+                        <input id=logging_time type="text" placeholder="150">
                     </div>
                     <button onclick="testLogging()">Test Webhook</button>
                 </div>

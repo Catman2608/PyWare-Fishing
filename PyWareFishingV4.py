@@ -24,7 +24,9 @@ import mss
 if sys.platform == "win32":
     import ctypes
     from ctypes import wintypes
-import Quartz
+elif sys.platform == "darwin":
+    import Quartz
+    from AppKit import NSScreen
 import math
 import subprocess
 # Logging
@@ -99,6 +101,27 @@ if sys.platform == "win32":
         opacity_alpha = int(255 * transparency)
         return bool(user32.SetLayeredWindowAttributes(hwnd, 0, opacity_alpha, LWA_ALPHA))
 elif sys.platform == "darwin":
+    _scale_cache = None
+    def get_scale_factor():
+        """
+        Return display backing scale factor.
+        macOS returns true Retina pixel ratio.
+        Other platforms return 1.0.
+        """
+        global _scale_cache
+
+        if _scale_cache is not None:
+            return _scale_cache
+
+        if sys.platform == "darwin":
+            try:
+                _scale_cache = float(NSScreen.mainScreen().backingScaleFactor())
+            except Exception:
+                _scale_cache = 1.0
+        else:
+            _scale_cache = 1.0
+
+        return _scale_cache
     def get_mouse_position():
         event = Quartz.CGEventCreate(None)
         loc = Quartz.CGEventGetLocation(event)
@@ -108,8 +131,11 @@ elif sys.platform == "darwin":
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
     def _mouse_event(event_type, x=None, y=None):
+        scale = get_scale_factor()
         if x == None or y == None:
             x, y = get_mouse_position()
+        x = int(x / scale)
+        y = int(y / scale)
         event = Quartz.CGEventCreateMouseEvent(
             None,
             event_type,
@@ -290,6 +316,10 @@ class AreaSelector:
         time.sleep(0.05)
         make_window_translucent(self._win, 0.35)
     # ── JS API methods (called from area_selector.html) ──
+    def on_hover_ratio(self, area_name, x_ratio, y_ratio):
+        self.parent.set_status(
+            f"{area_name.upper()} → X Ratio: {x_ratio:.3f} | Y Ratio: {y_ratio:.3f}"
+        )
     def window_ready(self, win_x, win_y):
         """
         Called by JS immediately after pywebviewready fires, passing
@@ -359,7 +389,7 @@ class AreaSelector:
             if bx <= abs_x <= bx + bw and by <= abs_y <= by + bh:
                 xr = round((abs_x - bx) / bw, 2)
                 yr = round((abs_y - by) / bh, 2)
-                self.parent.set_status(f"{name.upper()} → X RATIO: {xr}, Y RATIO: {yr}")
+                self.parent.set_status(f"Coords: {xr}, {yr}")
                 return
         self.parent.set_status("Area selector opened (press key again to close)")
     def save_areas(self, areas):
@@ -426,9 +456,15 @@ class Eyedropper:
     """
     HTML_FILE = os.path.join(UI_PATH, "eyedropper.html")
     def __init__(self, parent):
+        # Initialization
         self.parent = parent
         self._open = True
         self.last_picked_color = None
+        self._scale = self.parent._get_scale_factor()
+        self._win_origin_x = SCREEN_LEFT
+        self._win_origin_y = SCREEN_TOP
+        # Capture desktop before overlay appears
+        self._screen_capture = self.parent._grab_screen_full()
         # Create fullscreen transparent pywebview window
         self._win = webview.create_window(
             "Eyedropper",
@@ -450,22 +486,44 @@ class Eyedropper:
         make_window_translucent(self._win, 0.05)
     # ── JS API methods (called from eyedropper.html) ──
     def get_pixel_at(self, x, y):
-        """
-        Called by JS on mousemove to get the hex color at (x, y).
-        Returns immediately to update UI in real-time.
-        """
+        """Gets the pixel from the full-screen capture with screen freeze (memory-based)"""
         if not self._open:
             return "#000000"
-        frame = self.parent._grab_screen_region(x, y, x + 1, y + 1)
-        if frame is None or frame.size == 0:
+
+        frame = self._screen_capture
+        if frame is None:
             return "#000000"
-        # MSS returns BGRA, we have BGR after processing
-        b = int(frame[0, 0, 0])
-        g = int(frame[0, 0, 1])
-        r = int(frame[0, 0, 2])
+
+        menu_offset = get_macos_menu_offset()
+
+        screen_x = x + self._win_origin_x
+        screen_y = y + self._win_origin_y + menu_offset
+
+        x = int(screen_x * self._scale)
+        y = int(screen_y * self._scale)
+
+        if (
+            x < 0 or
+            y < 0 or
+            y >= frame.shape[0] or
+            x >= frame.shape[1]
+        ):
+            return "#000000"
+
+        b = int(frame[y, x, 0])
+        g = int(frame[y, x, 1])
+        r = int(frame[y, x, 2])
+
         hex_color = f"#{r:02X}{g:02X}{b:02X}"
-        self.parent.set_status(f"Picked color: {hex_color}")
+
         return hex_color
+    def window_ready(self, win_x, win_y):
+        if sys.platform == "darwin":
+            self._win_origin_x = 0
+            self._win_origin_y = 0
+        else:
+            self._win_origin_x = int(win_x)
+            self._win_origin_y = int(win_y)
     def pick_color(self, hex_color):
         """
         Called by JS when user clicks to pick a color.
@@ -513,10 +571,11 @@ class FishOverlay:
         self._win = None
         self._open = False
         self._visible = False
-        self.width = 800
-        self.height = 60
-        self.x = int(SCREEN_WIDTH * 0.5) - int(self.width / 2)
-        self.y = int(SCREEN_HEIGHT * 0.65)
+        self.scale_factor = get_scale_factor()
+        self.width = int(800 / self.scale_factor)
+        self.height = int(60 / self.scale_factor)
+        self.x = int((int(SCREEN_WIDTH * 0.5) - int(self.width / 2)) / self.scale_factor)
+        self.y = int(int(SCREEN_HEIGHT * 0.65) / self.scale_factor)
     def init_window(self):
         if self._win and self._open:
             return
@@ -553,10 +612,10 @@ class FishOverlay:
         height = max(1, int(height))
         x = max(0, min(int(x), max(0, self.parent_app.SCREEN_WIDTH - width)))
         y = max(0, min(int(y), max(0, self.parent_app.SCREEN_HEIGHT - height)))
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
+        self.x = int(x / self.scale_factor)
+        self.y = int(y / self.scale_factor)
+        self.width = int(width / self.scale_factor)
+        self.height = int(height / self.scale_factor)
         self.init_window()
         if not self._win:
             return
@@ -1158,31 +1217,7 @@ class Api:
             }
     # Area Selector
     def _get_scale_factor(self):
-        """
-        Return display backing scale factor.
-        macOS returns true Retina pixel ratio.
-        Other platforms return 1.0.
-        """
-        if self._scale_cache is not None:
-            return self._scale_cache
-        if sys.platform == "darwin":
-            try:
-                display_id = Quartz.CGMainDisplayID()
-                pixel_width = Quartz.CGDisplayPixelsWide(display_id)
-                bounds = Quartz.CGDisplayBounds(display_id)
-                logical_width = bounds.size.width
-                scale = pixel_width / logical_width if logical_width else 1.0
-                # Normalize tiny floating-point errors
-                if abs(scale - 1.0) < 0.15:
-                    scale = 1.0
-                elif abs(scale - 2.0) < 0.15:
-                    scale = 2.0
-                self._scale_cache = scale
-            except Exception:
-                self._scale_cache = 1.0
-        else:
-            self._scale_cache = 1.0
-        return self._scale_cache
+        return get_scale_factor()
     def open_area_selector(self):
         # Toggle Off If Already Open
         if hasattr(self, "area_selector") and self.area_selector and self.area_selector.is_open():
@@ -1270,8 +1305,7 @@ class Api:
                 if i < click_count - 1:
                     time.sleep(0.03)
         elif sys.platform == "darwin":
-            x = int(x)
-            y = int(y)
+            scale = self._get_scale_factor()
             # Move cursor
             _move_mouse(x, y)
             # Tiny movement (Roblox trick)
@@ -2160,6 +2194,17 @@ class Api:
                     # print(f"🐟 Arrow mode: Invalid box size (<=0), using fish area width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")
         return bar_center_x, bar_left_x, bar_right_x
     # Main macro functions
+    def _get_hotkeys(self):
+        try:
+            start_key = self.normalize_key(str(self.vars["start_stop"]))
+            areas_key = self.normalize_key(str(self.vars["change_areas"]))
+            stop_key = self.normalize_key(str(self.vars["force_stop"]))
+        except Exception as e:
+            self.set_status(f"Get hotkeys failed: {e}")
+            start_key = "f5"
+            areas_key = "f6"
+            stop_key = "f7"
+        return start_key, areas_key, stop_key
     def normalize_key(self, key):
         try:
             return key.char.lower()  # Letter Keys
@@ -2172,13 +2217,14 @@ class Api:
         self._keys_held.add(self.normalize_key(key))
     def on_key_release(self, key):
         key = self.normalize_key(key)
+        start_key, bar_areas_key, stop_key = self._get_hotkeys()
         # Only act if this release follows a genuine press (i.e. a real "hit")
         if key not in self._keys_held:
             return
         self._keys_held.discard(key)
         macro_mode = self.vars["macro_mode"]
         if not macro_mode == "disabled":
-            if key == "f5":
+            if key == start_key:
                 if self.macro_running == False:
                     # Save current settings to config before starting
                     self.save_config(self.current_config, self.vars)
@@ -2192,9 +2238,9 @@ class Api:
                         threading.Thread(target=self.start_angler, daemon=True).start()
                 else:
                     return
-            elif key == "f6":
+            elif key == bar_areas_key:
                 self.open_area_selector()
-            elif key == "f7":
+            elif key == stop_key:
                 self.stop_macro()
         else:
             self.save_config(self.current_config, self.vars)
@@ -3699,6 +3745,7 @@ class Api:
         self.scan_height_ratio = None
         self._last_should_hold = False
         self._last_input_time = 0
+        deadzone_action = 0
         last_line_seen_time = time.perf_counter()
         # Hold And Release Mouse
         def hold_mouse():
@@ -3815,6 +3862,11 @@ class Api:
                     # Accept This Frame And Update Cache
                     self.last_fish_x = fish_x
                 self.last_fish_x = fish_x
+            if deadzone_action == 3:
+                deadzone_action = 0
+            else:
+                deadzone_action = deadzone_action + 1
+            thresh = (1 - round((bar_size / fish_width), 2)) * 0.8
             # Step 4: Restart Method — Friend Area (green present = minigame ended)
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
             if friend_x is not None:
@@ -3888,25 +3940,40 @@ class Api:
                 control = self._steady_control(error, bar_center)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
                 # Stabilize Deadzone Checker
-                if control > 0:
+                if control > thresh:
                     hold_mouse()
-                else:
+                elif control < -thresh:
                     release_mouse()
+                else:
+                    if not deadzone_action == 0:
+                        hold_mouse()
+                    else:
+                        release_mouse()
             elif controller_mode == 1 and bar_center is not None: # PID (Normal)
                 control = self._normal_control(error, bar_center)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
                 # Stabilize Deadzone Checker
-                if control > 0:
+                if control > thresh:
                     hold_mouse()
-                else:
+                elif control < -thresh:
                     release_mouse()
+                else:
+                    if not deadzone_action == 0:
+                        hold_mouse()
+                    else:
+                        release_mouse()
             elif controller_mode == 2 and bar_center is not None: # Simple Tracking
                 control = fish_x - bar_center
                 # Stabilize Deadzone Checker
-                if control > 0:
+                if control > thresh:
                     hold_mouse()
-                else:
+                elif control < -thresh:
                     release_mouse()
+                else:
+                    if not deadzone_action == 0:
+                        hold_mouse()
+                    else:
+                        release_mouse()
             elif controller_mode == 3:
                 hold_mouse()
             elif controller_mode == 4:
@@ -3927,7 +3994,7 @@ class Api:
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
         except Exception:
             pass
-    def stop_macro(self, text="Macro Stupped"):
+    def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False
         self._fish_overlay_cast_bounds = None
         self._set_fish_overlay_mode("idle")

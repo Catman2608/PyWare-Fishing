@@ -1,33 +1,30 @@
 {
-    "last_config": "Migu Rod",
+    "last_config": "Ruinous Oath",
     "last_rod": "Basic Rod",
     "bar_areas": {
         "shake": {
-            "x": 333,
-            "y": 249,
-            "width": 1252,
-            "height": 640
+            "x": 157,
+            "y": 90,
+            "width": 1197,
+            "height": 684
         },
         "fish": {
-            "x": 563,
-            "y": 911,
-            "width": 793,
-            "height": 40
+            "x": 409,
+            "y": 829,
+            "width": 692,
+            "height": 38
         },
         "friend": {
-            "x": 8,
-            "y": 957,
-            "width": 68,
-            "height": 89
+            "x": 3,
+            "y": 901,
+            "width": 54,
+            "height": 81
         },
         "totem": {
-            "x": 1829,
-            "y": 930,
-            "width": 40,
-            "height": 50
+            "x": 1437,
+            "y": 852,
+            "width": 39,
+            "height": 52
         }
-    },
-    "start_key": "F5",
-    "change_bar_areas_key": "F6",
-    "stop_key": "F7"
+    }
 }

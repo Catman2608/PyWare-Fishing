@@ -3,22 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    width: 100%;
-    height: 100%;
-    position: fixed;
-    inset: 0;
-    overflow: hidden;
-    user-select: none;
-    background: transparent;
-  }
-  canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-    background: rgba(29, 29, 29, 0.85);
-  }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        user-select: none;
+        background: transparent;
+    }
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: rgba(29, 29, 29, 0.85);
+    }
 </style>
 </head>
 <body>
@@ -29,42 +29,42 @@ const ctx = canvas.getContext("2d");
 let shapes = [];
 
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  render();
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    render();
 }
 
 function render() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (const shape of shapes) {
-    const py1 = Math.round(shape.bar_y1 * canvas.height);
-    const py2 = Math.round(shape.bar_y2 * canvas.height);
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(shape.x1, py1, shape.x2 - shape.x1, py2 - py1);
-    ctx.strokeStyle = shape.color;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(shape.x1, py1, shape.x2 - shape.x1, py2 - py1);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const shape of shapes) {
+        const py1 = Math.round(shape.bar_y1 * canvas.height);
+        const py2 = Math.round(shape.bar_y2 * canvas.height);
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(shape.x1, py1, shape.x2 - shape.x1, py2 - py1);
+        ctx.strokeStyle = shape.color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(shape.x1, py1, shape.x2 - shape.x1, py2 - py1);
 
-    if (shape.show_bar_center) {
-      ctx.beginPath();
-      ctx.moveTo(shape.center_x, py1);
-      ctx.lineTo(shape.center_x, py2);
-      ctx.strokeStyle = "gray";
-      ctx.lineWidth = 2;
-      ctx.stroke();
+        if (shape.show_bar_center) {
+            ctx.beginPath();
+            ctx.moveTo(shape.center_x, py1);
+            ctx.lineTo(shape.center_x, py2);
+            ctx.strokeStyle = "gray";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
     }
-  }
 }
 
 window.fishOverlay = {
-  draw(shape) {
-    shapes.push(shape);
-    render();
-  },
-  clear() {
-    shapes = [];
-    render();
-  }
+    draw(shape) {
+        shapes.push(shape);
+        render();
+    },
+    clear() {
+        shapes = [];
+        render();
+    }
 };
 
 window.addEventListener("resize", resize);
