@@ -54,6 +54,8 @@ if sys.platform == "win32":
     user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
     user32.SetLayeredWindowAttributes.restype = wintypes.BOOL
     user32.SetLayeredWindowAttributes.argtypes = [wintypes.HWND, wintypes.COLORREF, ctypes.c_byte, wintypes.DWORD]
+    def get_scale_factor():
+        return 1
     def _get_hwnd(window):
         """Return a Windows HWND int from a pywebview window/native object."""
         native = getattr(window, "native", window)
@@ -197,35 +199,38 @@ def open_base_folder():
     else:  # Linux
         subprocess.run(["xdg-open", folder])
 def cgimage_to_srgb_numpy(image):
-    width = Quartz.CGImageGetWidth(image)
-    height = Quartz.CGImageGetHeight(image)
-    bytes_per_row = width * 4
-    # Create sRGB color space
-    color_space = Quartz.CGColorSpaceCreateWithName(
-        Quartz.kCGColorSpaceSRGB
-    )
-    # Allocate buffer
-    raw = np.empty((height, width, 4), dtype=np.uint8)
-    # Create bitmap context targeting numpy buffer
-    context = Quartz.CGBitmapContextCreate(
-        raw,
-        width,
-        height,
-        8,
-        bytes_per_row,
-        color_space,
-        Quartz.kCGImageAlphaPremultipliedLast |
-        Quartz.kCGBitmapByteOrder32Big
-    )
-    # Draw image into sRGB context
-    Quartz.CGContextDrawImage(
-        context,
-        Quartz.CGRectMake(0, 0, width, height),
-        image
-    )
-    # RGBA -> BGR
-    bgr = raw[:, :, :3][:, :, ::-1]
-    return bgr.copy()
+    if sys.platform == "darwin":
+        width = Quartz.CGImageGetWidth(image)
+        height = Quartz.CGImageGetHeight(image)
+        bytes_per_row = width * 4
+        # Create sRGB color space
+        color_space = Quartz.CGColorSpaceCreateWithName(
+            Quartz.kCGColorSpaceSRGB
+        )
+        # Allocate buffer
+        raw = np.empty((height, width, 4), dtype=np.uint8)
+        # Create bitmap context targeting numpy buffer
+        context = Quartz.CGBitmapContextCreate(
+            raw,
+            width,
+            height,
+            8,
+            bytes_per_row,
+            color_space,
+            Quartz.kCGImageAlphaPremultipliedLast |
+            Quartz.kCGBitmapByteOrder32Big
+        )
+        # Draw image into sRGB context
+        Quartz.CGContextDrawImage(
+            context,
+            Quartz.CGRectMake(0, 0, width, height),
+            image
+        )
+        # RGBA -> BGR
+        bgr = raw[:, :, :3][:, :, ::-1]
+        return bgr.copy()
+    else:
+        return image
 # Screen dimensions via mss — use monitor[1] (primary) not monitor[0] (virtual combined).
 # On Windows with DPI scaling, pywebview's x/y/width/height use physical pixels,
 # so we must query the raw physical resolution, not the scaled logical resolution.
