@@ -62,23 +62,23 @@
                     <hr>
                     <div class="text">
                         <label>Fishing Rod Slot</label>
-                        <input id=rod_slot type="text" placeholder="F7">
+                        <input id=rod_slot type="text" placeholder="1">
                     </div>
                     <div class="text">
                         <label>Equipment Bag Slot</label>
-                        <input id=bag_slot type="text" placeholder="F7">
+                        <input id=bag_slot type="text" placeholder="2">
                     </div>
                     <div class="text">
                         <label>Sundial Slot</label>
-                        <input id=sundial_slot type="text" placeholder="F7">
+                        <input id=sundial_slot type="text" placeholder="6">
                     </div>
                     <div class="text">
                         <label>Totem Slot</label>
-                        <input id=target_slot type="text" placeholder="F7">
+                        <input id=target_slot type="text" placeholder="7">
                     </div>
                     <div class="text">
                         <label>Mystic Mirror Slot</label>
-                        <input id=mirror_slot type="text" placeholder="F7">
+                        <input id=mirror_slot type="text" placeholder="8">
                     </div>
                 </div>
                 <div class="card">
@@ -86,49 +86,49 @@
                     <button onclick="startEyedropper()"> Pick Colors </button>
                     <div class="color-grid">
                         <div class="color-box">
-                            <h4>Left Bar</h4>
+                            <p>Left Bar</p>
                             <input id="left_color" type="text" placeholder="#FFFFFF">
-                            <input id="left_tolerance" type="number" placeholder="Tolerance">
+                            <input id="left_tolerance" type="number" placeholder="8">
                         </div>
                         <div class="color-box">
-                            <h4>Right Bar</h4>
+                            <p>Right Bar</p>
                             <input id="right_color" type="text" placeholder="#FFFFFF">
-                            <input id="right_tolerance" type="number" placeholder="Tolerance">
+                            <input id="right_tolerance" type="number" placeholder="8">
                         </div>
                         <div class="color-box">
-                            <h4>Arrows</h4>
+                            <p>Arrows</p>
                             <input id="arrow_color" type="text" placeholder="#848587">
-                            <input id="arrow_tolerance" type="number" placeholder="Tolerance">
+                            <input id="arrow_tolerance" type="number" placeholder="8">
                         </div>
                         <div class="color-box">
-                            <h4>Fish</h4>
+                            <p>Fish</p>
                             <input id="fish_color" type="text" placeholder="#5B4B43">
-                            <input id="fish_tolerance" type="number" placeholder="Tolerance">
+                            <input id="fish_tolerance" type="number" placeholder="4">
                         </div>
                         <div class="color-box">
-                            <h4>Shake</h4>
+                            <p>Shake</p>
                             <input id="shake_color" type="text" placeholder="#FFFFFF">
-                            <input id="shake_tolerance" type="number" placeholder="Tolerance">
+                            <input id="shake_tolerance" type="number" placeholder="5">
                         </div>
                         <div class="color-box">
-                            <h4>Green Cast</h4>
-                            <input id="green_cast_color" type="text" placeholder="#FFFFFF">
-                            <input id="green_cast_tolerance" type="number" placeholder="Tolerance">
+                            <p>Green Cast</p>
+                            <input id="green_cast_color" type="text" placeholder="#64a04c">
+                            <input id="green_cast_tolerance" type="number" placeholder="16">
                         </div>
                         <div class="color-box">
-                            <h4>White Cast</h4>
-                            <input id="white_cast_color" type="text" placeholder="#848587">
-                            <input id="white_cast_tolerance" type="number" placeholder="Tolerance">
+                            <p>White Cast</p>
+                            <input id="white_cast_color" type="text" placeholder="#d4d3ca">
+                            <input id="white_cast_tolerance" type="number" placeholder="20">
                         </div>
                         <div class="color-box">
-                            <h4>Tracking</h4>
-                            <input id="tracking_color" type="text" placeholder="#5B4B43">
-                            <input id="tracking_tolerance" type="number" placeholder="Tolerance">
+                            <p>Tracking</p>
+                            <input id="tracking_color" type="text" placeholder="#149604">
+                            <input id="tracking_tolerance" type="number" placeholder="5">
                         </div>
                         <div class="color-box">
-                            <h4>Friends Area</h4>
+                            <p>Friends Area</p>
                             <input id="friends_color" type="text" placeholder="#9BFF9B">
-                            <input id="friends_tolerance" type="number" placeholder="Tolerance">
+                            <input id="friends_tolerance" type="number" placeholder="5">
                         </div>
                     </div>
                 </div>
@@ -312,6 +312,17 @@
                         <input id=bar_ratio_from_side type="text" placeholder="80">
                     </div>
                     <div class="text">
+                        <label>KP (Proportional)</label>
+                        <input id=kp type="text" placeholder="0.93">
+                    </div>
+                    <div class="text">
+                        <label>KD (Derivative)</label>
+                        <input id=kd type="text" placeholder="0.07">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Special Rods</h3>
+                    <div class="text">
                         <label>Note Tracking Ratio (Pinion)</label>
                         <input id=pinion_note_ratio type="text" placeholder="0.3">
                     </div>
@@ -327,12 +338,8 @@
                         <input id=tranquility_note_ratio type="text" placeholder="0.7">
                     </div>
                     <div class="text">
-                        <label>KP (Proportional)</label>
-                        <input id=kp type="text" placeholder="0.93">
-                    </div>
-                    <div class="text">
-                        <label>KD (Derivative)</label>
-                        <input id=kd type="text" placeholder="0.07">
+                        <label>Note Target Delay (Tranquility)</label>
+                        <input id=target_delay type="text" placeholder="0.06">
                     </div>
                 </div>
             </div>
@@ -439,21 +446,43 @@
                         <label>Tesseract Path</label>
                         <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
                     </div>
+                    <div class="dropdown">
+                        <label for="appraisal_enchant_mode">Appraisal Click mode:</label>
+                        <select name="appraisal_enchant_mode" id="appraisal_enchant_mode">
+                        <option value="search">Pixel Search</option>
+                        <option value="ratio">Ratio</option>
+                        </select>
+                    </div>
                     <div class="text">
                         <label>Mutation/Enchant</label>
                         <input id=mutation_enchant type="text" placeholder="Darkened">
                     </div>
                     <div class="text">
-                        <label>Enchantment X (Ratio)</label>
-                        <input id=enchantment_x type="text" placeholder="0.5">
+                        <label>Click X (Ratio)</label>
+                        <input id=appraisal_enchant_x type="text" placeholder="0.5">
                     </div>
                     <div class="text">
-                        <label>Enchantment Y (Ratio)</label>
-                        <input id=enchantment_y type="text" placeholder="0.5">
+                        <label>Click Y (Ratio)</label>
+                        <input id=appraisal_enchant_y type="text" placeholder="0.5">
                     </div>
                 </div>
                 <div class="card">
                     <h3>Angler/Quests (toggle in Basic tab)</h3>
+                    <div class="dropdown">
+                        <label for="angler_click_mode">Angler Click mode:</label>
+                        <select name="angler_click_mode" id="angler_click_mode">
+                        <option value="search">Pixel Search</option>
+                        <option value="ratio">Ratio</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Click X (Ratio)</label>
+                        <input id=angler_click_x type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Click Y (Ratio)</label>
+                        <input id=angler_click_y type="text" placeholder="0.5">
+                    </div>
                     <div class="text">
                         <label>Backpack Key</label>
                         <input id=backpack_key type="text" placeholder="G">
@@ -465,6 +494,10 @@
                     <div class="text">
                         <label>Backpack Y (Ratio)</label>
                         <input id=backpack_y type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Cooldown (seconds)</label>
+                        <input id=angler_cd type="text" placeholder="0.5">
                     </div>
                 </div>
             </div>

@@ -1286,11 +1286,11 @@ class Api:
             )
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
             log_entry = (
-                "==================================================\n"
+                "==========\n"
                 f"🎣 {text}\n"
                 f"🔄 {loop_count}\n"
                 f"🕐 {timestamp}\n"
-                "==================================================\n\n"
+                "==========\n\n"
             )
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(log_entry)
@@ -1324,13 +1324,13 @@ class Api:
                 os.makedirs(log_dir, exist_ok=True)
                 log_file = os.path.join(log_dir, f"debug_{time.strftime('%Y-%m-%d')}.txt")
                 log_entry = (
-                    "==================================================\n"
+                    "==========\n"
                     "🐞 AUTO BUG REPORT\n"
                     f"📂 Phase: {phase}\n"
                     f"🕐 {timestamp}\n"
                     "--------------------------------------------------\n"
                     f"{report_text}\n"
-                    "==================================================\n\n"
+                    "==========\n\n"
                 )
                 with open(log_file, "a", encoding="utf-8") as f:
                     f.write(log_entry)
@@ -2722,8 +2722,8 @@ class Api:
         mutation_enchant = self.vars["mutation_enchant"]
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
         dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
-        x = float(self.vars["enchantment_x"])
-        y = float(self.vars["enchantment_y"])
+        x = float(self.vars["appraisal_enchant_x"])
+        y = float(self.vars["appraisal_enchant_y"])
         x_scaled = int(dialogue_width * x) + dialogue_left
         y_scaled = int(dialogue_height * y) + dialogue_top
         time.sleep(0.1)
