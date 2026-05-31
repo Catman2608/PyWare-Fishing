@@ -3706,9 +3706,9 @@ class App(CTk):
         if mode == "Disabled":
             return
 
-        # ─────────────────────────
+        # ─
         # CYCLES MODE
-        # ─────────────────────────
+        # ─
         if mode == "Cycles":
             try:
                 trigger_every = int(self.vars["totem_cycles"].get())
@@ -3720,9 +3720,9 @@ class App(CTk):
             if not (trigger_every > 0 and self.totem_cycle_counter % trigger_every == 0):
                 return
 
-        # ─────────────────────────
+        # ─
         # TIME MODE (NEW)
-        # ─────────────────────────
+        # ─
         elif mode == "Time":
             try:
                 trigger_secs = float(self.vars["totem_time"].get())
@@ -4501,7 +4501,7 @@ class App(CTk):
                     fish_x, left_x, right_x = self._do_image_search(img, img_h)
                 else:
                     fish_x, left_x, right_x = self._do_pixel_search(img)
-                # ── Bar direction-jump rejection ──────────────────────────────
+                # ── Bar direction-jump rejection 
                 if left_x is not None and right_x is not None:
                     if (
                         _cached_left_x is not None
@@ -4518,7 +4518,7 @@ class App(CTk):
                 elif left_x is None and right_x is None:
                     # No bar found this frame — cache stays unchanged
                     pass
-                # ─────────────────────────────────────────────────────────────
+                # ──
                 # Find arrow indicator
                 arrow_indicator_x = self._find_arrow_indicator_x(img, arrow_hex, arrow_tol, mouse_down)
                 if track_notes == "on":

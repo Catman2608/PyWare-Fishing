@@ -301,7 +301,7 @@ class AreaSelector:
         self._win.events.closed += self._on_closed
         time.sleep(0.05)
         make_window_translucent(self._win, 0.35)
-    # ── JS API methods (called from area_selector.html) ───────────────────────
+    # ── JS API methods (called from area_selector.html) ──
     def window_ready(self, win_x, win_y):
         """
         Called by JS immediately after pywebviewready fires, passing
@@ -403,7 +403,7 @@ class AreaSelector:
             self._win.destroy()
         except Exception:
             pass
-    # ── Internal ──────────────────────────────────────────────────────────────
+    # ── Internal 
     def _on_closed(self):
         """Fires when the webview window is destroyed for any reason."""
         if self._open:
@@ -430,9 +430,9 @@ class AreaSelector:
                 }
                 for name, b in self._areas.items()
             })
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 # Eyedropper class
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 class Eyedropper:
     """
     Fullscreen transparent overlay for color picking using pywebview.
@@ -463,7 +463,7 @@ class Eyedropper:
         self._win.events.closed += self._on_closed
         time.sleep(0.05)
         make_window_translucent(self._win, 0.05)
-    # ── JS API methods (called from eyedropper.html) ──────────────────────────
+    # ── JS API methods (called from eyedropper.html) ──
     def get_pixel_at(self, x, y):
         """
         Called by JS on mousemove to get the hex color at (x, y).
@@ -508,7 +508,7 @@ class Eyedropper:
             self._win.destroy()
         except Exception:
             pass
-    # ── Internal ──────────────────────────────────────────────────────────────
+    # ── Internal 
     def _on_closed(self):
         """Fires when the webview window is destroyed."""
         if self._open:
