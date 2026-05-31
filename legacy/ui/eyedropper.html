@@ -37,7 +37,7 @@
 <canvas id="c"></canvas>
 <div id="colorDisplay">Hover to pick color • Click to select • Esc to cancel</div>
 <script>
-// ─── Canvas setup ────────────────────────────────────────────────────────────
+//  Canvas setup ─
 const canvas = document.getElementById("c");
 const ctx    = canvas.getContext("2d");
 const colorDisplay = document.getElementById("colorDisplay");
@@ -53,7 +53,7 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-// ─── Drawing ─────────────────────────────────────────────────────────────────
+//  Drawing 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   
@@ -93,7 +93,7 @@ function draw() {
   }
 }
 
-// ─── Mouse events ─────────────────────────────────────────────────────────────
+//  Mouse events ──
 canvas.addEventListener("mousemove", e => {
   canvas.dataset.mouseX = e.clientX;
   canvas.dataset.mouseY = e.clientY;
@@ -115,7 +115,7 @@ canvas.addEventListener("click", e => {
   }
 });
 
-// ─── Keyboard: Escape closes ─────────────────────────────────────────────────
+//  Keyboard: Escape closes ──
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     pywebview.api.close_eyedropper();

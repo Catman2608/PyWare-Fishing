@@ -1,4 +1,3 @@
-# menu_offset
 # GUI
 import webview
 import json
@@ -6,6 +5,7 @@ import os
 import re
 import time
 import sys
+import webbrowser
 # OCR
 import pytesseract
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
@@ -257,40 +257,39 @@ class AreaSelector:
         }
         # Create a second, frameless, transparent, fullscreen pywebview window.
         # js_api=self exposes get_areas / on_mouse_move / save_areas to JS.
-        #
+
         # NOTE: x/y must be the primary monitor's actual top-left offset (SCREEN_LEFT/TOP).
         # On single-monitor setups this is always 0,0.  On multi-monitor setups where the
         # primary display isn't the leftmost one, SCREEN_LEFT/TOP will be non-zero and the
         # window must be placed there to sit over the correct screen.
-        #
-        # Do NOT call make_window_translucent() here. That API applies LWA_ALPHA to the
-        # whole HWND, which fights with transparent=True (per-pixel alpha from the HTML).
-        # The HTML canvas already draws its own semi-transparent dark overlay, so the
-        # pywebview window itself should stay fully opaque at the OS level.
-        self._win = webview.create_window(
-            "Area Selector",
-            self.HTML_FILE,
-            js_api=self,
-            # Window Style
-            transparent=True,
-            frameless=True,
-            easy_drag=False,
-            # Keep Above Everything
-            on_top=True,
-            # Prevent Resizing / Moving
-            resizable=False,
-            # Fullscreen Size — matches the primary monitor exactly
-            width=SCREEN_WIDTH,
-            height=SCREEN_HEIGHT,
-            # Position at the primary monitor's actual origin (handles non-zero offsets)
-            x=SCREEN_LEFT,
-            y=SCREEN_TOP,
-            background_color="#000000",
-        )
+        if sys.platform == "win32":
+            self._win = webview.create_window( "Area Selector", self.HTML_FILE, js_api=self, 
+                                            # Window Style 
+                                            transparent=False, frameless=True, easy_drag=False, 
+                                            # Keep Above Everything 
+                                            on_top=True, 
+                                            # Prevent Resizing / Moving 
+                                            resizable=False, 
+                                            # Fullscreen Size — matches the primary monitor exactly 
+                                            width=SCREEN_WIDTH, height=SCREEN_HEIGHT, 
+                                            # Position at the primary monitor's actual origin (handles non-zero offsets) 
+                                            x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000")
+        else:
+            self._win = webview.create_window( "Area Selector", self.HTML_FILE, js_api=self, 
+                                            # Window Style 
+                                            transparent=True, frameless=True, easy_drag=False, 
+                                            # Keep Above Everything 
+                                            on_top=True, 
+                                            # Prevent Resizing / Moving 
+                                            resizable=False, 
+                                            # Fullscreen Size — matches the primary monitor exactly 
+                                            width=SCREEN_WIDTH, height=SCREEN_HEIGHT, 
+                                            # Position at the primary monitor's actual origin (handles non-zero offsets) 
+                                            x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000")
         self._win.events.closed += self._on_closed
         time.sleep(0.05)
         make_window_translucent(self._win, 0.35)
-    # ── JS API methods (called from area_selector.html) ───────────────────────
+    # ── JS API methods (called from area_selector.html) ──
     def window_ready(self, win_x, win_y):
         """
         Called by JS immediately after pywebviewready fires, passing
@@ -389,7 +388,7 @@ class AreaSelector:
             self._win.destroy()
         except Exception:
             pass
-    # ── Internal ──────────────────────────────────────────────────────────────
+    # ── Internal 
     def _on_closed(self):
         """Fires when the webview window is destroyed for any reason."""
         if self._open:
@@ -416,9 +415,9 @@ class AreaSelector:
                 }
                 for name, b in self._areas.items()
             })
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 # Eyedropper class
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 class Eyedropper:
     """
     Fullscreen transparent overlay for color picking using pywebview.
@@ -449,7 +448,7 @@ class Eyedropper:
         self._win.events.closed += self._on_closed
         time.sleep(0.05)
         make_window_translucent(self._win, 0.05)
-    # ── JS API methods (called from eyedropper.html) ──────────────────────────
+    # ── JS API methods (called from eyedropper.html) ──
     def get_pixel_at(self, x, y):
         """
         Called by JS on mousemove to get the hex color at (x, y).
@@ -494,7 +493,7 @@ class Eyedropper:
             self._win.destroy()
         except Exception:
             pass
-    # ── Internal ──────────────────────────────────────────────────────────────
+    # ── Internal 
     def _on_closed(self):
         """Fires when the webview window is destroyed."""
         if self._open:
@@ -678,6 +677,17 @@ class Api:
         self._last_bar_box_size = None
         self._last_bar_center_x = None
         self.last_arrow_delta = None
+        # PD position smoothing
+        self._smooth_fish_x = None
+        self._smooth_bar_center = None
+
+        self._prev_fish_x = None
+        self._prev_bar_center = None
+
+        self._fish_v_ema = 0.0
+        self._bar_v_ema = 0.0
+
+        self._smooth_control = 0.0
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         self.current_rod_name = "Basic Rod"
@@ -1126,6 +1136,18 @@ class Api:
                     f,
                     indent=4
                 )
+            return {
+                "success": True
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    def open_link(self, url):
+        """Open a URL in the default web browser."""
+        try:
+            webbrowser.open(url)
             return {
                 "success": True
             }
@@ -2445,7 +2467,75 @@ class Api:
         self.color_check_target_velocity = 0.0
         self.color_check_bar_velocity  = 0.0
         self._pred_last_click_time = 0.0
-    def _pid_control(self, error, bar_center):
+        # PD position smoothing
+        self._smooth_fish_x = None
+        self._smooth_bar_center = None
+
+        self._prev_fish_x = None
+        self._prev_bar_center = None
+
+        self._fish_v_ema = 0.0
+        self._bar_v_ema = 0.0
+
+        self._smooth_control = 0.0
+    def _normal_control(self, fish_x, bar_center):
+        """
+        Open-source style PD controller.
+
+        Positive output = hold
+        Negative output = release
+        """
+        MIN_DT = 1e-3
+        MAX_DT = 0.1
+        # Time 
+        now = time.perf_counter()
+        if self._pred_prev_time is None:
+            dt = 0.016
+        else:
+            dt = now - self._pred_prev_time
+            dt = max(min(dt, MAX_DT), MIN_DT)
+        kp = self._get_var_number("kp", 0.90)
+        kd = self._get_var_number("kd", 0.10)
+        pd_clamp = self._get_var_number("pid_clamp", 100.0)
+        position_alpha = self._get_var_number("position_alpha", 0.80)
+        fish_vel_alpha = self._get_var_number("fish_vel_alpha", 0.40)
+        bar_vel_alpha = self._get_var_number("bar_vel_alpha", 0.40)
+        control_alpha = self._get_var_number("control_alpha", 0.60)
+        # Smooth fish position
+        if self._smooth_fish_x is None:
+            self._smooth_fish_x = fish_x
+        else:
+            self._smooth_fish_x = ( position_alpha * fish_x + (1.0 - position_alpha) * self._smooth_fish_x )
+        # Smooth bar position
+        if self._smooth_bar_center is None:
+            self._smooth_bar_center = bar_center
+        else:
+            self._smooth_bar_center = ( position_alpha * bar_center + (1.0 - position_alpha) * self._smooth_bar_center )
+        # Fish velocity
+        if self._prev_fish_x is not None and dt > 0:
+            fish_v = ( self._smooth_fish_x - self._prev_fish_x ) / dt
+        else:
+            fish_v = 0.0
+        self._fish_v_ema = ( fish_vel_alpha * fish_v + (1.0 - fish_vel_alpha) * self._fish_v_ema )
+        self._prev_fish_x = self._smooth_fish_x
+        # Bar velocity
+        if self._prev_bar_center is not None and dt > 0:
+            bar_v = ( self._smooth_bar_center - self._prev_bar_center ) / dt
+        else:
+            bar_v = 0.0
+        self._bar_v_ema = ( bar_vel_alpha * bar_v + (1.0 - bar_vel_alpha) * self._bar_v_ema )
+        self._prev_bar_center = self._smooth_bar_center
+        # Error
+        error = ( self._smooth_fish_x - self._smooth_bar_center )
+        # PD
+        deriv = ( self._fish_v_ema - self._bar_v_ema )
+        control_raw = ( kp * error + kd * deriv )
+        control_raw = max( -pd_clamp, min(pd_clamp, control_raw) )
+        # Output smoothing
+        control = ( control_alpha * control_raw + (1.0 - control_alpha) * self._smooth_control )
+        self._smooth_control = control
+        return control
+    def _steady_control(self, error, bar_center):
         """
         Asymmetric PD controller.
         Args:
@@ -2517,9 +2607,8 @@ class Api:
             should_hold = False
             return should_hold
         # Read Settings
-        stopping_distance_multiplier = self._get_var_number("kp", 0.93)
-        velocity_smoothing = self._get_var_number("kd", 0.07)
-        stopping_distance_multiplier = stopping_distance_multiplier * 1.5
+        stopping_distance_multiplier = self._get_var_number("stopping_distance", 0.93)
+        velocity_smoothing = self._get_var_number("velocity_smoothing", 0.07)
         MIN_DT = 1e-3
         MAX_DT = 0.1
         MAX_VEL = 3000.0
@@ -3567,6 +3656,7 @@ class Api:
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
         self._reset_pid_state()
         mouse_down = False
+        minigame_controller_mode = self.vars["controller_mode"].lower()
         controller_mode = 0
         self._pred_prev_fish_x = None
         self._pred_prev_bar_x = None
@@ -3605,7 +3695,6 @@ class Api:
             note_box_tol = 8
             arrow_tol = 8
             arrow_method = 2
-        previous_detection_source = None
         self.last_bar_size = None
         self.scan_height_ratio = None
         self._last_should_hold = False
@@ -3764,17 +3853,17 @@ class Api:
                 if fish_x == None:
                     fish_x = 0
                 if max_left and fish_x <= max_left: # Max Left And Right Check (Inside Bar)
-                    controller_mode = 3
+                    controller_mode = 4
                 elif max_right and fish_x >= max_right:
-                    controller_mode = 2
+                    controller_mode = 3
                 else:
                     if bar_left_screen <= fish_x <= bar_right_screen:
                         controller_mode = 0
-                        if self.vars["efficiency_mode"] == "on":
+                        if minigame_controller_mode == "predictive":
                             controller_mode = 5
                     else:
                         if track_notes == "on":
-                            controller_mode = 1
+                            controller_mode = 2
             if self._is_fish_overlay_enabled():
                 self.fish_overlay.draw(
                     bar_center=bar_center, box_size=bar_size,
@@ -3795,24 +3884,32 @@ class Api:
                 )
             # Step 7: Controller
             error = round(fish_x - bar_center) if bar_center is not None and fish_x is not None else 0
-            if controller_mode == 0 and bar_center is not None:
-                control = self._pid_control(error, bar_center)
+            if controller_mode == 0 and bar_center is not None: # PID (Steady)
+                control = self._steady_control(error, bar_center)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
                 # Stabilize Deadzone Checker
                 if control > 0:
                     hold_mouse()
                 else:
                     release_mouse()
-            elif controller_mode == 1 and bar_center is not None: # Simple Tracking
+            elif controller_mode == 1 and bar_center is not None: # PID (Normal)
+                control = self._normal_control(error, bar_center)
+                # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
+                # Stabilize Deadzone Checker
+                if control > 0:
+                    hold_mouse()
+                else:
+                    release_mouse()
+            elif controller_mode == 2 and bar_center is not None: # Simple Tracking
                 control = fish_x - bar_center
                 # Stabilize Deadzone Checker
                 if control > 0:
                     hold_mouse()
                 else:
                     release_mouse()
-            elif controller_mode == 2:
-                hold_mouse()
             elif controller_mode == 3:
+                hold_mouse()
+            elif controller_mode == 4:
                 release_mouse()
             elif controller_mode == 5 and bar_center is not None:
                 should_hold = self._predictive_control(fish_x, bar_center, 

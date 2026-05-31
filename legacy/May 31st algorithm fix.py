@@ -253,7 +253,7 @@ APP_VERSION = "4.0"
         self._win.events.closed += self._on_closed
         time.sleep(0.05)
         make_window_translucent(self._win, 0.35)
-        #── JS API Methods (called From Area_selector.html) ───────────────────────    def window_ready(self, win_x, win_y):
+        #── JS API Methods (called From Area_selector.html) ──    def window_ready(self, win_x, win_y):
         """
         Called by JS immediately after pywebviewready fires, passing
         window.screenX / window.screenY so Python knows the actual pixel
@@ -351,7 +351,7 @@ APP_VERSION = "4.0"
             self._win.destroy()
         except Exception:
             pass
-        #── Internal ──────────────────────────────────────────────────────────────    def _on_closed(self):
+        #── Internal     def _on_closed(self):
         """Fires when the webview window is destroyed for any reason."""
         if self._open:
                         #Window Closed Without Save_areas (e.g. OS Close); Still Fire Callback            self._open = False
@@ -375,7 +375,7 @@ APP_VERSION = "4.0"
                 }
                 for name, b in self._areas.items()
             })
-#─────────────────────────────────────────────────────────────────────────────#Eyedropper Class#─────────────────────────────────────────────────────────────────────────────class Eyedropper:
+##Eyedropper Class#class Eyedropper:
     """
     Fullscreen transparent overlay for color picking using pywebview.
     The HTML canvas handles UI rendering and mouse interaction.
@@ -404,7 +404,7 @@ APP_VERSION = "4.0"
         self._win.events.closed += self._on_closed
         time.sleep(0.05)
         make_window_translucent(self._win, 0.05)
-        #── JS API Methods (called From Eyedropper.html) ──────────────────────────    def get_pixel_at(self, x, y):
+        #── JS API Methods (called From Eyedropper.html) ──    def get_pixel_at(self, x, y):
         """
         Called by JS on mousemove to get the hex color at (x, y).
         Returns immediately to update UI in real-time.
@@ -451,7 +451,7 @@ APP_VERSION = "4.0"
             self._win.destroy()
         except Exception:
             pass
-        #── Internal ──────────────────────────────────────────────────────────────    def _on_closed(self):
+        #── Internal     def _on_closed(self):
         """Fires when the webview window is destroyed."""
         if self._open:
             self._open = False

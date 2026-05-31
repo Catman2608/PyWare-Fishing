@@ -28,6 +28,7 @@ window.addEventListener("pywebviewready", async () => {
     await loadStartupConfig();
     bindSettingsSync();
     updateCastingMode();
+    updateControllerMode();
     updateAccentColor();
 });
 async function startMacro() {
@@ -73,6 +74,27 @@ function updateCastingMode() {
         perfectCard.style.display = "none";
     }
 }
+function updateControllerMode() {
+    const mode = document.getElementById("controller_mode").value;
+
+    const normalCard = document.getElementById("controller-normal-card");
+    const steadyCard = document.getElementById("controller-steady-card");
+    const predictiveCard = document.getElementById("controller-predictive-card");
+
+    // Hide all
+    normalCard.style.display = "none";
+    steadyCard.style.display = "none";
+    predictiveCard.style.display = "none";
+
+    // Show selected
+    if (mode === "normal") {
+        normalCard.style.display = "block";
+    } else if (mode === "steady") {
+        steadyCard.style.display = "block";
+    } else if (mode === "predictive") {
+        predictiveCard.style.display = "block";
+    }
+}
 // Save settings
 function getSettings() {
     const settings = {};
@@ -102,6 +124,7 @@ function applySettings(settings) {
         }
     });
     updateCastingMode();
+    updateControllerMode();
     updateAccentColor();
 }
 function setElementValue(element, value) {
@@ -353,6 +376,38 @@ async function testLogging() {
 }
 async function startEyedropper() {
     await pywebview.api.start_eyedropper();
+}
+async function openLink(link) {
+    if (!link) {
+        setStatus(
+            `No link provided`
+        );
+        return;
+    }
+    const result = await pywebview.api.open_link(link);
+    if (!result || result.success) {
+        setStatus(
+            `Opened link`
+        );
+    } else {
+        setStatus(
+            `Could not open link`
+        );
+    }
+}
+function openSupportTab() {
+    document
+        .getElementById(
+            "support-modal-overlay"
+        )
+        .classList.add("active");
+}
+function closeSupportTab() {
+    document
+        .getElementById(
+            "support-modal-overlay"
+        )
+        .classList.remove("active");
 }
 function openConfigManager() {
     document

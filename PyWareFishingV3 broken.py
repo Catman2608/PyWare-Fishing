@@ -174,7 +174,7 @@ def save_app_state(state):
         print(f"Error saving config: {e}")
         # Optionally Show Error To User
         messagebox.showerror("Save Error", f"Could not save configuration: {e}")
-# ── Pack Download Helper ─────────────────────────────────────────────────────
+# ── Pack Download Helper 
 # Drive folder that contains configs.zip and images.zip
 PACK_FOLDER_URL = "https://drive.google.com/drive/folders/1pDSSKYRmMHQcv2SSrMxfzcGz4mgY-esS"
 def download_and_extract_packs(status_callback=None):
@@ -270,7 +270,7 @@ def download_and_extract_packs(status_callback=None):
             )
             # Clean up downloaded files (remove __MACOSX, move configs folder)
             _cleanup_downloaded_files(tmp_dir)
-            # ── configs.zip ──────────────────────────────────────────────
+            # ── configs.zip ──
             configs_zip = os.path.join(tmp_dir, "configs.zip")
             if os.path.exists(configs_zip):
                 _status("Extracting configs.zip…")
@@ -278,7 +278,7 @@ def download_and_extract_packs(status_callback=None):
                 _status(f"Config pack installed → {CONFIG_DIR}")
             else:
                 _status("Warning: configs.zip not found in download.")
-            # ── images.zip ───────────────────────────────────────────────
+            # ── images.zip 
             images_zip = os.path.join(tmp_dir, "images.zip")
             if os.path.exists(images_zip):
                 _status("Extracting images.zip…")

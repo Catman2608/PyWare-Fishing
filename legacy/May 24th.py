@@ -164,7 +164,7 @@ class AreaSelector:
         )
         self._win.events.closed += self._on_closed
 
-    # ── JS API methods (called from area_selector.html) ───────────────────────
+    # ── JS API methods (called from area_selector.html) ──
 
     def get_areas(self):
         """Called by JS on startup to get initial box positions."""
@@ -227,7 +227,7 @@ class AreaSelector:
         except Exception:
             pass
 
-    # ── Internal ──────────────────────────────────────────────────────────────
+    # ── Internal 
 
     def _on_closed(self):
         """Fires when the webview window is destroyed for any reason."""

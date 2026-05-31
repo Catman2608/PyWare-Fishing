@@ -23,7 +23,7 @@
 <body>
 <canvas id="c"></canvas>
 <script>
-// ─── Constants ───────────────────────────────────────────────────────────────
+//  Constants ─
 const HANDLE_R = 7;   // handle square half-size (px)
 const BORDER   = 3;   // box border width
 
@@ -35,11 +35,11 @@ const AREAS = {
 };
 const AREA_ORDER = ["shake", "fish", "friend", "totem"];
 
-// ─── State ───────────────────────────────────────────────────────────────────
+//  State ──
 let boxes = {};           // { shake: {x,y,w,h}, ... }  — logical px
 let drag  = null;         // { name, handle, startX, startY, origBox }
 
-// ─── Canvas setup ────────────────────────────────────────────────────────────
+//  Canvas setup ─
 const canvas = document.getElementById("c");
 const ctx    = canvas.getContext("2d");
 
@@ -51,7 +51,7 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-// ─── Init: wait for pywebview then load areas from Python ────────────────────
+//  Init: wait for pywebview then load areas from Python ──
 window.addEventListener("pywebviewready", () => {
   pywebview.api.get_areas().then(data => {
     boxes = data;   // {shake:{x,y,width,height}, ...}
@@ -67,7 +67,7 @@ window.addEventListener("pywebviewready", () => {
   });
 });
 
-// ─── Drawing ─────────────────────────────────────────────────────────────────
+//  Drawing 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -124,7 +124,7 @@ function handlePoints(b) {
   ];
 }
 
-// ─── Hit testing ─────────────────────────────────────────────────────────────
+//  Hit testing ──
 // Returns handle name ("nw","ne","sw","se","n","s","w","e") or null
 function hitHandle(px, py, b) {
   const { x, y, w, h } = b;
@@ -153,7 +153,7 @@ function cursorForHandle(h) {
   }[h] || "default";
 }
 
-// ─── Mouse events ─────────────────────────────────────────────────────────────
+//  Mouse events ──
 canvas.addEventListener("mousemove", e => {
   if (drag) {
     const dx = e.clientX - drag.startX;
@@ -217,7 +217,7 @@ canvas.addEventListener("mousedown", e => {
 canvas.addEventListener("mouseup", () => { drag = null; });
 canvas.addEventListener("mouseleave", () => { drag = null; });
 
-// ─── Keyboard: Escape or F6 closes and saves ─────────────────────────────────
+//  Keyboard: Escape or F6 closes and saves 
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" || e.key === "F6") {
     saveAndClose();
