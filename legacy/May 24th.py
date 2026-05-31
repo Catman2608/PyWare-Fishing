@@ -817,11 +817,11 @@ class Api:
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
             log_entry = (
-                "==================================================\n"
+                "==========\n"
                 f"🎣 {text}\n"
                 f"🔄 {loop_count}\n"
                 f"🕐 {timestamp}\n"
-                "==================================================\n\n"
+                "==========\n\n"
             )
 
             with open(log_file, "a", encoding="utf-8") as f:
@@ -862,13 +862,13 @@ class Api:
                 log_file = os.path.join(log_dir, f"debug_{time.strftime('%Y-%m-%d')}.txt")
                 
                 log_entry = (
-                    "==================================================\n"
+                    "==========\n"
                     "🐞 AUTO BUG REPORT\n"
                     f"📂 Phase: {phase}\n"
                     f"🕐 {timestamp}\n"
                     "--------------------------------------------------\n"
                     f"{report_text}\n"
-                    "==================================================\n\n"
+                    "==========\n\n"
                 )
                 
                 with open(log_file, "a", encoding="utf-8") as f:
