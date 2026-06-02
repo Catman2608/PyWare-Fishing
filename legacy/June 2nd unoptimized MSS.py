@@ -152,8 +152,7 @@ def get_macos_menu_offset():
     if sys.platform != "darwin":
         return 0
     try:
-        import AppKit
-        screen = AppKit.NSScreen.mainScreen()
+        screen = NSScreen.mainScreen()
         full_frame = screen.frame()
         visible_frame = screen.visibleFrame()
         return int(full_frame.size.height - visible_frame.size.height)
@@ -189,10 +188,11 @@ folder_path = os.path.dirname(script_path)
 filename_with_ext = os.path.basename(script_path)
 filename_without_ext = os.path.splitext(filename_with_ext)[0]
 print("Filename without Extension:", filename_without_ext)
-if "Legacy" in folder_path and IS_COMPILED == False:
+if "legacy" in folder_path.lower():
     UI_PATH = os.path.join(BASE_PATH, filename_without_ext, "ui")
 else:
     UI_PATH = os.path.join(BASE_PATH, "ui")
+print(UI_PATH)
 # =========================
 # CONFIG FOLDER
 # =========================
@@ -726,8 +726,14 @@ class Api:
         # P/D State Variables
         self.prev_error = 0.0      # Previous Error Term
         self.last_time = None      # Timestamp Of Last Pd Sample
+        self.prev_measurement = None
+        self.filtered_derivative = 0.0
         self.last_bar_size = None
-        self._normal_prev_bar_center = None  # Last bar center for _normal_control D-term
+        self.pid_source = None  # "Bar" Or "Arrow"
+        self.pid_integral = 0.0 # Used For Normal Pid
+        self.pid_last_time = 0
+        self.pid_last_error = 0.0
+        self._pid_filtered_d = 0.0  # Used For Derivative Smoothing
         # Arrow-Based Box Estimation Variables
         self.last_indicator_x = None
         self.last_holding_state = None
@@ -736,14 +742,24 @@ class Api:
         self.estimated_box_length = None
         self._last_bar_left_x = None
         self._last_bar_right_x = None
+        self.last_known_box_center_x = None
+        # Arrow estimation tracking
+        self._last_bar_left_x = None
+        self._last_bar_right_x = None
         self._last_bar_box_size = None
         self._last_bar_center_x = None
         self.last_arrow_delta = None
         # PD position smoothing
+        self._smooth_fish_x = None
+        self._smooth_bar_center = None
+
         self._prev_fish_x = None
         self._prev_bar_center = None
+
         self._fish_v_ema = 0.0
         self._bar_v_ema = 0.0
+
+        self._smooth_control = 0.0
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         self.current_rod_name = "Basic Rod"
@@ -2472,14 +2488,24 @@ class Api:
         # P/D State Variables
         self.prev_error = 0.0      # Previous Error Term
         self.last_time = None      # Timestamp Of Last Pd Sample
+        self.prev_measurement = None
+        self.filtered_derivative = 0.0
         self.last_bar_size = None
-        self._normal_prev_bar_center = None  # Last bar center for _normal_control D-term
+        self.pid_source = None  # "Bar" Or "Arrow"
+        self.pid_integral = 0.0 # Used For Normal Pid
+        self.pid_last_time = 0
+        self.pid_last_error = 0.0
+        self._pid_filtered_d = 0.0  # Used For Derivative Smoothing
         # Arrow-Based Box Estimation Variables
         self.last_indicator_x = None
         self.last_holding_state = None
         self.pending_holding_state = None
         self.pending_indicator_x = None
         self.estimated_box_length = None
+        self._last_bar_left_x = None
+        self._last_bar_right_x = None
+        self.last_known_box_center_x = None
+        # Arrow estimation tracking
         self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
@@ -2493,10 +2519,16 @@ class Api:
         self.color_check_bar_velocity  = 0.0
         self._pred_last_click_time = 0.0
         # PD position smoothing
+        self._smooth_fish_x = None
+        self._smooth_bar_center = None
+
         self._prev_fish_x = None
         self._prev_bar_center = None
+
         self._fish_v_ema = 0.0
         self._bar_v_ema = 0.0
+
+        self._smooth_control = 0.0
     def _normal_control(self, error):
         """
         Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
@@ -3767,7 +3799,7 @@ class Api:
                 detection_source = 1
             if any_bar_detected_this_frame and not (left_x == None or right_x == None): # Bar Or Arrows Found
                 bar_size = abs(right_x - left_x)
-                bar_center = (left_x + bar_size / 2.0) + fish_left # Add Fish Left Here (float to preserve sub-pixel precision for velocity)
+                bar_center = (left_x + bar_size // 2) + fish_left # Add Fish Left Here
                 left_deadzone = bar_size * bar_ratio
                 right_deadzone = bar_size * bar_ratio
                 max_left = fish_left + left_deadzone
@@ -3877,7 +3909,7 @@ class Api:
                     color="red", canvas_offset=fish_left
                 )
             # Step 7: Controller
-            error = (fish_x - bar_center) if bar_center is not None and fish_x is not None else 0.0
+            error = round(fish_x - bar_center) if bar_center is not None and fish_x is not None else 0
             if controller_mode == 0 and bar_center is not None: # PID (Steady)
                 control = self._steady_control(error, bar_center)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
@@ -3892,7 +3924,7 @@ class Api:
                     else:
                         release_mouse()
             elif controller_mode == 1 and bar_center is not None: # PID (Normal)
-                control = self._normal_control(error, bar_center)
+                control = self._normal_control(error)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
                 # Stabilize Deadzone Checker
                 if control > thresh:
