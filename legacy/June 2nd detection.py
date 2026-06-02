@@ -1214,13 +1214,6 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    def set_status(self, message):
-        """Push a status message to the main webview window's JS."""
-        try:
-            safe = message.replace("\\", "\\\\").replace("`", "\\`").replace("'", "\\'")
-            window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
-        except Exception:
-            pass
     # Area Selector
     def _get_scale_factor(self):
         return get_scale_factor()
@@ -1282,55 +1275,6 @@ class Api:
         )
         self.set_status("Area selector opened")
     # Macro helper functions
-    # Main macro functions
-    def _get_hotkeys(self):
-        try:
-            start_key = self.normalize_key(str(self.vars["start_stop"]))
-            areas_key = self.normalize_key(str(self.vars["change_areas"]))
-            stop_key = self.normalize_key(str(self.vars["force_stop"]))
-        except Exception as e:
-            self.set_status(f"Get hotkeys failed: {e}")
-            start_key = "f5"
-            areas_key = "f6"
-            stop_key = "f7"
-        return start_key, areas_key, stop_key
-    def normalize_key(self, key):
-        try:
-            return key.char.lower()  # Letter Keys
-        except AttributeError:
-            return str(key).replace("Key.", "").lower()
-    def on_key_press(self, key):
-        key = self.normalize_key(key)
-        start_key, bar_areas_key, stop_key = self._get_hotkeys()
-        macro_mode = self.vars["macro_mode"]
-        if not macro_mode == "disabled":
-            if key == start_key:
-                if self.macro_running == False:
-                    # Save current settings to config before starting
-                    self.save_config(self.current_config, self.vars)
-                    if macro_mode == "fishing" or macro_mode == "tranquility":
-                        threading.Thread(target=self.start_fishing, daemon=True).start()
-                    elif macro_mode == "appraisal":
-                        threading.Thread(target=self.start_appraisal, daemon=True).start()
-                    elif macro_mode == "enchant":
-                        threading.Thread(target=self.start_enchantment, daemon=True).start()
-                    elif macro_mode == "angler":
-                        threading.Thread(target=self.start_angler, daemon=True).start()
-                else:
-                    return
-            elif key == bar_areas_key:
-                self.open_area_selector()
-            elif key == stop_key:
-                self.stop_macro()
-        else:
-            self.save_config(self.current_config, self.vars, f"Pressed: {key}")
-    def _string_to_key(self, key_string):
-        key_string = key_string.strip().lower()
-        # Try Special Keys
-        if hasattr(Key, key_string):
-            return getattr(Key, key_string)
-        # Fallback To Character
-        return key_string
     # Hold Mouse
     def hold_mouse(self):
         if sys.platform == "win32":
@@ -1379,7 +1323,193 @@ class Api:
             mouse_controller.press(Button.left)
             time.sleep(0.04)
             mouse_controller.release(Button.left)
-    # Screen Capture and Capture Thread
+    # Logging-Related Functions
+    def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
+        """Worker function to send text webhook."""
+        logging_name = self.vars["logging_name"]
+        webhook_url2 = self.vars["logging_url"]
+        try:
+            if show_status == True:
+                payload = {
+                    'content': f'{message_prefix}🎣 Cycle completed\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                    'username': logging_name,
+                    'embeds': [{
+                        'description': f'{loop_count}',
+                        'color': 0x5865F2,
+                        'timestamp': time.strftime("%Y-%m-%dT%H:%M:%S")
+                    }]
+                }
+                response = requests.post(webhook_url, json=payload, timeout=10)
+            else:
+                payload = {
+                    'content': f'{message_prefix}🎣 Cycle failed\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                    'username': logging_name,
+                    'embeds': [{
+                        'description': f'{loop_count}',
+                        'color': 0x5865F2,
+                        'timestamp': time.strftime("%Y-%m-%dT%H:%M:%S")
+                    }]
+                }
+                response = requests.post(webhook_url2, json=payload, timeout=10)
+            if response.status_code == 200 or response.status_code == 204:
+                if show_status == True:
+                    self.set_status(f"Discord text sent ({loop_count})")
+            else:
+                self.set_status(f"Error: Discord text failed: {response.status_code}")
+        except Exception as e:
+            self.set_status(f"Error sending Discord text: {e}")
+    def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
+        logging_name = self.vars["logging_name"]
+        webhook_url2 = self.vars["logging_url"]
+        try:
+            with mss.mss() as sct:
+                monitor = sct.monitors[1]
+                screenshot = np.array(sct.grab(monitor))
+            screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+            _, buffer = cv2.imencode(".png", screenshot)
+            img_byte_arr = io.BytesIO(buffer.tobytes())
+            files = {'file': ('screenshot.png', img_byte_arr, 'image/png')}
+            if show_status == True:
+                payload = {
+                    'content': f'{message_prefix}🎣 **Cycle completed**\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                    'username': logging_name
+                }
+                response = requests.post(webhook_url, data=payload, files=files, timeout=10)
+            else:
+                payload = {
+                    'content': f'{message_prefix}🎣 **Cycle failed**\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                    'username': logging_name
+                }
+                response = requests.post(webhook_url2, data=payload, files=files, timeout=10)
+            if response.status_code in (200, 204):
+                if show_status == True:
+                    self.set_status(f"Discord screenshot sent ({loop_count})")
+            else:
+                self.set_status(f"Error: Discord screenshot failed: {response.status_code}")
+        except Exception as e:
+            self.set_status(f"Error: sending Discord screenshot: {e}")
+    def _debug_log_worker(self, text, loop_count, show_status=False):
+        """Write debug logs to a text file."""
+        try:
+            # Use base path for logs
+            log_dir = BASE_PATH
+            os.makedirs(log_dir, exist_ok=True)
+            # Daily log file
+            log_file = os.path.join(
+                log_dir,
+                f"debug_{time.strftime('%Y-%m-%d')}.txt"
+            )
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            log_entry = (
+                "==========\n"
+                f"🎣 {text}\n"
+                f"🔄 {loop_count}\n"
+                f"🕐 {timestamp}\n"
+                "==========\n\n"
+            )
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(log_entry)
+            if show_status:
+                self.set_status(f"Debug log saved ({loop_count})")
+        except Exception as e:
+            self.set_status(f"Error writing debug log: {e}")
+    def test_logging(self):
+        self.send_logging("**Logging is working**", "TEST", show_status=True)
+    def _auto_bug_report(self, error_text, phase="Unknown"):
+        """Send a text-only crash report to the bug report webhook or save to file."""
+        # Safely get values and reset state
+        self._set_fish_overlay_mode("idle")
+        logging_mode = self.vars["logging_mode"]
+        if logging_mode == "Disabled":
+            return
+        platform_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        # Prepare the report text
+        report_text = (
+            "Auto Bug Report\n"
+            f"Version: {APP_VERSION}\n"
+            f"Platform: {platform_name}\n"
+            f"Phase: {phase}\n"
+            f"Time: {timestamp}\n\n"
+            f"{error_text}"
+        )
+        if logging_mode == "File":
+            try:
+                log_dir = BASE_PATH
+                os.makedirs(log_dir, exist_ok=True)
+                log_file = os.path.join(log_dir, f"debug_{time.strftime('%Y-%m-%d')}.txt")
+                log_entry = (
+                    "==========\n"
+                    "🐞 AUTO BUG REPORT\n"
+                    f"📂 Phase: {phase}\n"
+                    f"🕐 {timestamp}\n"
+                    "--------------------------------------------------\n"
+                    f"{report_text}\n"
+                    "==========\n\n"
+                )
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(log_entry)
+                self.set_status(f"Bug report saved to file ({phase})")
+                return
+            except Exception as e:
+                self.set_status(f"Error saving bug report to file: {e}")
+                return
+        webhook_url = self.vars["logging_url"]
+        logging_name = self.vars["logging_name"]
+        crash_line = "Unknown"
+        for line in reversed(error_text.splitlines()):
+            if line.strip().startswith('File "') and ", line " in line:
+                crash_line = line.strip()
+                break
+        payload = {
+            "content": (
+                "**Auto Bug Report**\n"
+                f"Version: `{APP_VERSION}` | Platform: `{platform_name}` | Phase: `{phase}`\n"
+                f"Crash line: `{crash_line}`\n"
+                "Full traceback with line numbers is attached as text."
+            ),
+            "username": logging_name
+        }
+        try:
+            report_bytes = io.BytesIO(report_text.encode("utf-8"))
+            files = {"file": ("bug_report.txt", report_bytes, "text/plain")}
+            response = requests.post(webhook_url, data=payload, files=files, timeout=10)
+            if response.status_code not in (200, 204):
+                self.set_status(f"Error: Bug report failed: {response.status_code}")
+        except Exception as e:
+            self.set_status(f"Error sending bug report: {e}")
+    def send_logging(self, text, loop_count, show_status=True):
+        logging_mode = self.vars["logging_mode"]
+        if logging_mode == "Disabled":
+            self.set_status("⚠ Logging is disabled.")
+            return
+        if not logging_mode == "File":
+            # logging_url
+            webhook_url = self.vars["logging_url"].strip()
+            if not webhook_url.startswith("https://discord.com/api/webhooks/"):
+                self.set_status("Error: Invalid webhook URL.")
+                return
+        if show_status == True:
+            self.set_status("Sending test webhook...")
+        if logging_mode == "Screenshot":
+            thread = threading.Thread(
+                target=self._discord_screenshot_worker,
+                args=(webhook_url, f"{text}\n", loop_count, show_status),
+                daemon=True
+            )
+        elif logging_mode == "File":
+            thread = threading.Thread(
+                target=self._debug_log_worker,
+                args=(text, loop_count, show_status),
+                daemon=True
+            )
+        else:
+            thread = threading.Thread(
+                target=self._discord_text_worker,
+                args=(webhook_url, f"{text}\n", loop_count, show_status),
+                daemon=True
+            )
+        thread.start()
     def _grab_screen_region(self, left, top, right, bottom):
         """Optimized path for MSS screen capture with macOS color handling. Coordinates are expected to be already scaled."""
         width = right - left
@@ -1540,7 +1670,6 @@ class Api:
         self._active_capture_thread = thread
         thread.start()
         return stop_event
-    # Get values (with fallback)
     def _get_areas(self, area_key):
         # Apply Scale Factor
         scale = self._get_scale_factor()
@@ -1648,23 +1777,77 @@ class Api:
         self._apply_fish_overlay_state()
     def _on_fish_overlay_toggle(self, *args):
         self._apply_fish_overlay_state()
-    def _get_var_number(self, key, default, cast=float):
-        """Read a numeric GUI setting with a safe fallback."""
-        try:
-            value = self.vars.get(key)
-            if value is None:
-                # Compatibility mapping for 1600plus key differences
-                if key == "perfect_cast_timing_1600_plus":
-                    value = self.vars.get("perfect_cast_timing_1600plus")
-                if value is None:
-                    return default
-            if isinstance(value, str):
-                value = value.strip()
-                if value == "":
-                    return default
-            return cast(value)
-        except Exception:
-            return default
+    def _detect_day_or_night(self, confidence_threshold=0.7):
+        """
+        Robust day/night detection using white-mask template matching.
+        """
+        totem_left, totem_top, totem_right, totem_bottom, _, _ = self._get_areas("totem")
+        frame2 = self._grab_screen_region(totem_left, totem_top, totem_right, totem_bottom)
+        if frame2 is None or frame2.size == 0:
+            return None, 0.0
+        image_size = int(50 / self.SCREEN_SCALE)
+        frame = cv2.resize(frame2, (image_size, image_size))
+        def white_mask(img):
+            lower = np.array([200, 200, 200], dtype=np.uint8)
+            upper = np.array([255, 255, 255], dtype=np.uint8)
+            mask = cv2.inRange(img, lower, upper)
+            # If completely empty, return early
+            if mask is None or mask.size == 0:
+                return None
+            k = np.ones((3, 3), np.uint8)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, k)
+            return mask
+        def best_match(frame_mask, ref_mask):
+            if frame_mask is None or ref_mask is None:
+                return 0.0
+            if frame_mask.size == 0 or ref_mask.size == 0:
+                return 0.0
+            fh, fw = frame_mask.shape
+            rh, rw = ref_mask.shape
+            # Ensure valid dimensions
+            if fh == 0 or fw == 0 or rh == 0 or rw == 0:
+                return 0.0
+            # Resize reference if needed
+            if rh > fh or rw > fw:
+                scale = min(fh / rh, fw / rw)
+                new_w = max(1, int(rw * scale))
+                new_h = max(1, int(rh * scale))
+                if new_w <= 0 or new_h <= 0:
+                    return 0.0
+                ref_mask = cv2.resize(ref_mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+                rh, rw = ref_mask.shape
+            # Final safety check (CRITICAL)
+            if rh > fh or rw > fw:
+                return 0.0
+            try:
+                result = cv2.matchTemplate(frame_mask, ref_mask, cv2.TM_CCOEFF_NORMED)
+                # THIS prevents your exact crash
+                if result is None or result.size == 0:
+                    return 0.0
+                _, max_val, _, _ = cv2.minMaxLoc(result)
+                return float(max_val)
+            except Exception:
+                return 0.0
+        frame_mask = white_mask(frame)
+        if frame_mask is None:
+            return None, 0.0
+        sun_path  = os.path.join(IMAGES_PATH, "sun.png")
+        moon_path = os.path.join(IMAGES_PATH, "moon.png")
+        sun_img  = cv2.imread(sun_path)
+        moon_img = cv2.imread(moon_path)
+        if sun_img is None or moon_img is None:
+            print("Totem detection: sun.png or moon.png missing.")
+            return None, 0.0
+        sun_mask  = white_mask(sun_img)
+        moon_mask = white_mask(moon_img)
+        sun_conf  = best_match(frame_mask, sun_mask)
+        moon_conf = best_match(frame_mask, moon_mask)
+        best_conf = max(sun_conf, moon_conf)
+        if best_conf < confidence_threshold:
+            return None, best_conf
+        result = "Day" if sun_conf >= moon_conf else "Night"
+        return result, best_conf
     def _find_first_pixel(self, frame, hex, tolerance=8):
         if frame is None or frame.size == 0:
             return None
@@ -1693,6 +1876,33 @@ class Api:
             y, x = coords[-1]  # Changed from [0] to [-1]
             return int(x), int(y)
         return None
+    def _pixel_search(self, frame, target_color_hex, tolerance=8):
+        """
+        Search for a specific color in a frame and return all matching pixel coordinates.
+        Args:
+            frame: BGR numpy array from cv2/mss
+            target_color_hex: Hex color code (e.g., "#FFFFFF")
+            tolerance: Color tolerance range (0-255)
+        Returns:
+            List of (x, y) tuples of matching pixels, or empty list if none found
+        """
+        if frame is None or frame.size == 0:
+            return []
+        # Convert Hex To Bgr
+        bgr_color = self._hex_to_bgr(target_color_hex)
+        if bgr_color is None:
+            return []
+        # Create Mask For Matching Colors (Euclidean Distance)
+        target = np.array(bgr_color, dtype=np.int32)
+        frame_int = frame.astype(np.int32)
+        diff = frame_int - target
+        dist = np.sqrt(np.sum(diff ** 2, axis=-1))
+        mask = (dist <= tolerance).astype(np.uint8) * 255
+        y_coords, x_coords = np.where(mask > 0)
+        # Return As List Of (X, Y) Tuples
+        if len(x_coords) > 0:
+            return list(zip(x_coords, y_coords))
+        return []
     def _find_circles(self, frame):
         """
         Detect circles in frame using strict Hough Circle Transform for perfect circles only.
@@ -1746,221 +1956,325 @@ class Api:
             return None
     def _find_color_center(self, frame, target_color_hex, tolerance=8):
         """
-        Find the center point of a color cluster in a frame
-        Using vectorized detection
-        Returns: Tuple of X, Y
+        Find the center point of a color cluster in a frame.
+        Using vectorized detection.
         """
+
         if frame is None:
             return None
-        # Convert Color
-        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int32)
-        # Convert Frame For Safe Subtraction
-        frame_int = frame.astype(np.int32)
+
+        # Convert color
+        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int16)
+
+        # Convert frame for safe subtraction
+        frame_int = frame.astype(np.int16)
+
         tol = int(np.clip(tolerance, 0, 255))
-        # Euclidean Distance Comparison
-        diff = frame_int - target_bgr
-        mask = np.sqrt(np.sum(diff ** 2, axis=2)) <= tol
+
+        # Vectorized absolute tolerance comparison
+        mask = np.all(np.abs(frame_int - target_bgr) <= tol, axis=2)
+
         y_coords, x_coords = np.where(mask)
+
         if len(x_coords) == 0:
             return None
-        # Center Calculation (Vectorized Mean)
-        center_x = int(np.mean(x_coords))
+
+        # Center calculation (vectorized mean)
+        center_x = int((np.min(x_coords) + np.max(x_coords)) / 2)
         center_y = int(np.mean(y_coords))
+
         return (center_x, center_y)
     def _find_color_cluster(self, frame, target_color_hex, tolerance=8, min_area=10):
         """
         Find the largest color cluster and return its center.
+
         Args:
             frame: BGR image
             target_color_hex: hex color string
             tolerance: color tolerance
             min_area: minimum cluster size to be valid
+
         Returns:
             (center_x, center_y) or None
         """
-        # Required_Fish_Pixels
+        # required_fish_pixels
         if frame is None:
             return None
-        # Color Mask (Vectorized Like Your Fast Version) 
-        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int32)
-        frame_int = frame.astype(np.int32)
+
+        # --- COLOR MASK (vectorized like your fast version) ---
+        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int16)
+        frame_int = frame.astype(np.int16)
         tol = int(np.clip(tolerance, 0, 255))
-        mask = (np.sqrt(np.sum((frame_int - target_bgr) ** 2, axis=2)) <= tol).astype(np.uint8)
+
+        mask = np.all(np.abs(frame_int - target_bgr) <= tol, axis=2).astype(np.uint8)
+
         if not np.any(mask):
             return None
-        # Connected Components (Cluster Detection) 
+
+        # --- CONNECTED COMPONENTS (cluster detection) ---
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+
         if num_labels <= 1:
-            return None  # Only Background
-        # Skip Label 0 (Background)
+            return None  # only background
+
+        # Skip label 0 (background)
         largest_label = None
         largest_area = 0
+
         for label in range(1, num_labels):
             area = stats[label, cv2.CC_STAT_AREA]
+
             if area > largest_area and area >= min_area:
                 largest_area = area
                 largest_label = label
+
         if largest_label is None:
             return None
-        # Centroid 
+
+        # --- CENTROID ---
         center_x, center_y = centroids[largest_label]
+
         return int(center_x), int(center_y)
-    def _update_arrow_box_estimation(self, arrow_centroid_x, capture_width):
+    def _find_bar_edges(
+        self,
+        frame,
+        left_hex,
+        right_hex,
+        tolerance=15,
+        tolerance2=15,
+        scan_height_ratio=0.55
+    ):
+        if frame is None:
+            return None, None
+
+        if frame.size == 0 or frame.ndim < 2:
+            return None, None
+
+        h, w = frame.shape[:2]
+        if h == 0 or w == 0:
+            return None, None
+
+        y = int(h * scan_height_ratio)
+
+        # Convert to BGR
+        left_bgr = np.array(self._hex_to_bgr(left_hex), dtype=np.int16)
+        right_bgr = np.array(self._hex_to_bgr(right_hex), dtype=np.int16)
+
+        # Extract scan line
+        line = frame[y].astype(np.int16)
+
+        # Clamp tolerances
+        tol_l = int(np.clip(tolerance, 0, 255))
+        tol_r = int(np.clip(tolerance2, 0, 255))
+
+        # --- LEFT MASK (with lower + upper bound) ---
+        left_lower = left_bgr - tol_l
+        left_upper = left_bgr + tol_l
+        left_mask = np.all((line >= left_lower) & (line <= left_upper), axis=1)
+
+        # --- RIGHT MASK (with lower + upper bound) ---
+        right_lower = right_bgr - tol_r
+        right_upper = right_bgr + tol_r
+        right_mask = np.all((line >= right_lower) & (line <= right_upper), axis=1)
+
+        left_indices = np.where(left_mask)[0]
+        right_indices = np.where(right_mask)[0]
+
+        # Keep your original edge logic
+        left_edge = int(left_indices[0]) if left_indices.size else None
+        right_edge = int(right_indices[-1]) if right_indices.size else None
+
+        return left_edge, right_edge
+    def _find_arrow_indicator_x(self, frame, arrow_hex, tolerance, is_holding):
         """
-        Estimate box position based on arrow indicator using geometry-based logic.
-        
-        Determines which side the arrow is on by comparing to last known center position,
-        uses proximity validation for self-correction, and falls back to default size if needed.
-        
-        Args:
-            arrow_centroid_x: X coordinate of arrow center
-            capture_width: Width of capture region
-        
-        Returns:
-            Tuple of (bar_center_x, left_x, right_x) or (None, None, None) if can't estimate
+        If releasing -> Left arrow -> Use min
+        If holding -> Right arrow -> Use max
         """
-        
-        # Initialize tracking variables if not already done
-        if not hasattr(self, '_last_bar_left_x'):
-            self._last_bar_left_x = None
-        if not hasattr(self, '_last_bar_right_x'):
-            self._last_bar_right_x = None
-        if not hasattr(self, '_last_bar_box_size'):
-            self._last_bar_box_size = None
-        if not hasattr(self, '_last_bar_center_x'):
-            self._last_bar_center_x = None
-        
-        # Handle missing arrow
-        if arrow_centroid_x is None:
-            # Return last known positions if available
-            if self._last_bar_center_x is not None:
-                return self._last_bar_center_x, self._last_bar_left_x, self._last_bar_right_x
-            return None, None, None
-        
-        # Get last known values
-        last_center = self._last_bar_center_x
-        box_size = self._last_bar_box_size
-        
-        # If we have previous bar data, determine which side the arrow is on
-        if last_center is not None and box_size is not None and box_size > 0:
-            last_left = self._last_bar_left_x
-            last_right = self._last_bar_right_x
-            
-            # Determine which side based on center comparison
-            arrow_on_left_side = arrow_centroid_x < last_center
-            
-            # SMART VALIDATION: Check if arrow is actually near the bar we think it is
-            # Calculate distances to both last known bars
-            dist_to_left = abs(arrow_centroid_x - last_left) if last_left is not None else float('inf')
-            dist_to_right = abs(arrow_centroid_x - last_right) if last_right is not None else float('inf')
-            
-            # Self-correction: If arrow is much closer to the opposite bar, we detected wrong side!
-            # Threshold: arrow should be within reasonable distance (box_size / 4) of expected bar
-            proximity_threshold = box_size / 4
-            
-            if arrow_on_left_side:
-                # We think arrow is on LEFT, but verify it's actually near left bar
-                if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
-                    # Arrow is actually closer to RIGHT bar - we were wrong!
-                    arrow_on_left_side = False  # Flip the decision
-            
-            else:
-                # We think arrow is on RIGHT, but verify it's actually near right bar
-                if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
-                    # Arrow is actually closer to LEFT bar - we were wrong!
-                    arrow_on_left_side = True  # Flip the decision
-            
-            # Now apply the corrected decision
-            if arrow_on_left_side:
-                # Arrow is on the LEFT side - update left bar, keep right bar from memory
-                bar_left_x = arrow_centroid_x
-                bar_right_x = self._last_bar_right_x
-                
-                if bar_right_x is None:
-                    # If no right bar in memory, calculate from box size
-                    bar_right_x = bar_left_x + box_size
-                
-                # Validate: ensure left < right
-                if bar_left_x < bar_right_x:
-                    self._last_bar_left_x = bar_left_x
-                    self._last_bar_right_x = bar_right_x
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
-                    return bar_center_x, bar_left_x, bar_right_x
-            else:
-                # Arrow is on the RIGHT side - update right bar, keep left bar from memory
-                bar_right_x = arrow_centroid_x
-                bar_left_x = self._last_bar_left_x
-                
-                if bar_left_x is None:
-                    # If no left bar in memory, calculate from box size
-                    bar_left_x = bar_right_x - box_size
-                
-                # Validate: ensure left < right
-                if bar_left_x < bar_right_x:
-                    self._last_bar_left_x = bar_left_x
-                    self._last_bar_right_x = bar_right_x
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
-                    return bar_center_x, bar_left_x, bar_right_x
-        # Fallback: Try to establish initial box size from previous positions
-        elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
-            box_size = self._last_bar_right_x - self._last_bar_left_x
-            last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
-            
-            if box_size > 0:
-                self._last_bar_box_size = box_size
-                self._last_bar_center_x = last_center
-                
-                # Determine side based on arrow position relative to last center
-                if arrow_centroid_x < last_center:
-                    bar_left_x = arrow_centroid_x
-                    bar_right_x = bar_left_x + box_size
+        if sys.platform == "darwin":
+            tolerance += 8
+        pixels = self._pixel_search(frame, arrow_hex, tolerance)
+        if not pixels:
+            return None
+        xs = [x for x, _ in pixels]
+        indicator_x = max(xs) if is_holding else min(xs)
+        # Small Jitter Filter
+        if self.last_indicator_x is not None:
+            if abs(indicator_x - self.last_indicator_x) < 2:
+                indicator_x = self.last_indicator_x
+        return indicator_x
+    def _update_arrow_box_estimation(self, arrow_center_x, any_bar_detected_this_frame, width):
+        """
+        Arrow fallback logic: ONLY triggers if NO bar colors were detected in this frame
+        If arrow is found, it updates ONE side (whichever is closer), OTHER side uses old position
+        """
+        bar_center_x = None
+        bar_left_x = None
+        bar_right_x = None
+        # Arrow estimation logic
+        if not any_bar_detected_this_frame and arrow_center_x is not None:
+            last_center = self._last_bar_center_x
+            box_size = self._last_bar_box_size
+            # If we have previous bar data, determine which side the arrow is on
+            if last_center is not None and box_size is not None and box_size > 0:
+                # Get last known bar positions for validation
+                last_left = self._last_bar_left_x
+                last_right = self._last_bar_right_x
+                # Determine which side based on center comparison
+                arrow_on_left_side = arrow_center_x < last_center
+                # SMART VALIDATION: Check if arrow is actually near the bar we think it is
+                # Calculate distances to both last known bars
+                dist_to_left = abs(arrow_center_x - last_left) if last_left is not None else float('inf')
+                dist_to_right = abs(arrow_center_x - last_right) if last_right is not None else float('inf')
+                # Self-correction: If arrow is much closer to the opposite bar, we detected wrong side!
+                # Threshold: arrow should be within reasonable distance (box_size / 4) of expected bar
+                proximity_threshold = box_size / 4
+                if arrow_on_left_side:
+                    # We think arrow is on LEFT, but verify it's actually near left bar
+                    if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
+                        # Arrow is actually closer to RIGHT bar - we were wrong!
+                        # print(f"🐟 Arrow mode: SELF-CORRECTION - Arrow at {arrow_center_x:.0f} closer to RIGHT bar ({dist_to_right:.0f}px) than LEFT ({dist_to_left:.0f}px)")
+                        arrow_on_left_side = False  # Flip the decision
                 else:
-                    bar_right_x = arrow_centroid_x
-                    bar_left_x = bar_right_x - box_size
-                
-                self._last_bar_left_x = bar_left_x
-                self._last_bar_right_x = bar_right_x
-                bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                self._last_bar_center_x = bar_center_x
-                return bar_center_x, bar_left_x, bar_right_x
-            else:
-                # Invalid box size (<=0) - use default based on capture width
-                default_box_size = capture_width // 2
-                bar_left_x = arrow_centroid_x
-                bar_right_x = bar_left_x + default_box_size
-                
-                self._last_bar_left_x = bar_left_x
-                self._last_bar_right_x = bar_right_x
-                self._last_bar_box_size = default_box_size
-                
-                bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                self._last_bar_center_x = bar_center_x
-                return bar_center_x, bar_left_x, bar_right_x
-        
+                    # We think arrow is on RIGHT, but verify it's actually near right bar
+                    if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
+                        # Arrow is actually closer to LEFT bar - we were wrong!
+                        # print(f"🐟 Arrow mode: SELF-CORRECTION - Arrow at {arrow_center_x:.0f} closer to LEFT bar ({dist_to_left:.0f}px) than RIGHT ({dist_to_right:.0f}px)")
+                        arrow_on_left_side = True  # Flip the decision
+                # Now apply the corrected decision
+                if arrow_on_left_side:
+                    # Arrow is on the LEFT side - update left bar, keep right bar from memory
+                    bar_left_x = arrow_center_x
+                    bar_right_x = self._last_bar_right_x
+                    if bar_right_x is None:
+                        # If no right bar in memory, calculate from box size
+                        bar_right_x = bar_left_x + box_size
+                    # Validate: ensure left < right
+                    if bar_left_x < bar_right_x:
+                        self._last_bar_left_x = bar_left_x
+                        self._last_bar_right_x = bar_right_x
+                        bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center_x = bar_center_x
+                        bar_center_found = True
+                        # print(f"🐟 Arrow mode: Arrow LEFT of center - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (kept)")
+                    else:
+                        pass # print(f"🐟 Arrow mode: Invalid - arrow left {bar_left_x:.0f} >= right {bar_right_x:.0f}")
+                else:
+                    # Arrow is on the RIGHT side - update right bar, keep left bar from memory
+                    bar_right_x = arrow_center_x
+                    bar_left_x = self._last_bar_left_x
+                    if bar_left_x is None:
+                        # If no left bar in memory, calculate from box size
+                        bar_left_x = bar_right_x - box_size
+                    # Validate: ensure left < right
+                    if bar_left_x < bar_right_x:
+                        self._last_bar_left_x = bar_left_x
+                        self._last_bar_right_x = bar_right_x
+                        bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center_x = bar_center_x
+                        bar_center_found = True
+                        # print(f"🐟 Arrow mode: Arrow RIGHT of center - L={bar_left_x:.0f} (kept), R={bar_right_x:.0f} (arrow)")
+                    else:
+                        pass # print(f"🐟 Arrow mode: Invalid - left {bar_left_x:.0f} >= arrow right {bar_right_x:.0f}")
+            # Fallback: Try to establish initial box size from previous positions
+            elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
+                box_size = self._last_bar_right_x - self._last_bar_left_x
+                last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
+                if box_size > 0:
+                    self._last_bar_box_size = box_size
+                    self._last_bar_center_x = last_center
+                    # Determine side based on arrow position relative to last center
+                    if arrow_center_x < last_center:
+                        bar_left_x = arrow_center_x
+                        bar_right_x = bar_left_x + box_size
+                        # print(f"🐟 Arrow mode: Initial LEFT - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (size={box_size:.0f})")
+                    else:
+                        bar_right_x = arrow_center_x
+                        bar_left_x = bar_right_x - box_size
+                        # print(f"🐟 Arrow mode: Initial RIGHT - L={bar_left_x:.0f} (size={box_size:.0f}), R={bar_right_x:.0f} (arrow)")
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    bar_center_found = True
+                else:
+                    # Invalid box size (<=0) - use default based on fish area width
+                    default_box_size = width // 2
+                    bar_left_x = arrow_center_x
+                    bar_right_x = bar_left_x + default_box_size
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    self._last_bar_box_size = default_box_size
+                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    bar_center_found = True
+                    # print(f"🐟 Arrow mode: Invalid box size (<=0), using fish area width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")
+        return bar_center_x, bar_left_x, bar_right_x
+    # Main macro functions
+    def _get_hotkeys(self):
+        try:
+            start_key = self.normalize_key(str(self.vars["start_stop"]))
+            areas_key = self.normalize_key(str(self.vars["change_areas"]))
+            stop_key = self.normalize_key(str(self.vars["force_stop"]))
+        except Exception as e:
+            self.set_status(f"Get hotkeys failed: {e}")
+            start_key = "f5"
+            areas_key = "f6"
+            stop_key = "f7"
+        return start_key, areas_key, stop_key
+    def normalize_key(self, key):
+        try:
+            return key.char.lower()  # Letter Keys
+        except AttributeError:
+            return str(key).replace("Key.", "").lower()
+    def on_key_press(self, key):
+        key = self.normalize_key(key)
+        start_key, bar_areas_key, stop_key = self._get_hotkeys()
+        macro_mode = self.vars["macro_mode"]
+        if not macro_mode == "disabled":
+            if key == start_key:
+                if self.macro_running == False:
+                    # Save current settings to config before starting
+                    self.save_config(self.current_config, self.vars)
+                    if macro_mode == "fishing" or macro_mode == "tranquility":
+                        threading.Thread(target=self.start_fishing, daemon=True).start()
+                    elif macro_mode == "appraisal":
+                        threading.Thread(target=self.start_appraisal, daemon=True).start()
+                    elif macro_mode == "enchant":
+                        threading.Thread(target=self.start_enchantment, daemon=True).start()
+                    elif macro_mode == "angler":
+                        threading.Thread(target=self.start_angler, daemon=True).start()
+                else:
+                    return
+            elif key == bar_areas_key:
+                self.open_area_selector()
+            elif key == stop_key:
+                self.stop_macro()
         else:
-            # No previous data - assume a default box size based on capture width
-            default_box_size = capture_width // 2
-            
-            # Start with arrow as left bar, calculate right from default size
-            bar_left_x = arrow_centroid_x
-            bar_right_x = bar_left_x + default_box_size
-            
-            # Clamp to capture bounds
-            if bar_right_x > capture_width:
-                bar_right_x = float(capture_width)
-                bar_left_x = max(0.0, bar_right_x - default_box_size)
-            
-            # Save these initial estimates
-            self._last_bar_left_x = bar_left_x
-            self._last_bar_right_x = bar_right_x
-            self._last_bar_box_size = default_box_size
-            
-            bar_center_x = (bar_left_x + bar_right_x) / 2.0
-            self._last_bar_center_x = bar_center_x
-            return bar_center_x, bar_left_x, bar_right_x
-        return None, None, None
+            self.save_config(self.current_config, self.vars, f"Pressed: {key}")
+    def _string_to_key(self, key_string):
+        key_string = key_string.strip().lower()
+        # Try Special Keys
+        if hasattr(Key, key_string):
+            return getattr(Key, key_string)
+        # Fallback To Character
+        return key_string
+    def _get_var_number(self, key, default, cast=float):
+        """Read a numeric GUI setting with a safe fallback."""
+        try:
+            value = self.vars.get(key)
+            if value is None:
+                # Compatibility mapping for 1600plus key differences
+                if key == "perfect_cast_timing_1600_plus":
+                    value = self.vars.get("perfect_cast_timing_1600plus")
+                if value is None:
+                    return default
+            if isinstance(value, str):
+                value = value.strip()
+                if value == "":
+                    return default
+            return cast(value)
+        except Exception:
+            return default
     def _hex_to_bgr(self, hex_color):
         "Convert hex color to BGR tuple for OpenCV."
         if hex_color is None or hex_color.lower() in ["none", "# None", ""]:
@@ -1987,29 +2301,22 @@ class Api:
         except:
             left_tol = 8
             right_tol = 8
-            fish_tol = 0
+            fish_tol = 1
         # macOS Tolerance Buffer To Make Configs Cross-Compatible
         if sys.platform == "darwin":
             left_tol += 2
             right_tol += 2
             fish_tol += 2
         fish_center = self._find_color_cluster(frame, fish_hex, fish_tol, 5)
-        left_bar_center = self._find_first_pixel(frame, left_bar_hex, left_tol)
-        if left_bar_center == None:
-            left_bar_center = self._find_first_pixel(frame, right_bar_hex, right_tol)
-        right_bar_center = self._find_last_pixel(frame, right_bar_hex, right_tol)
-        if right_bar_center == None:
-            right_bar_center = self._find_last_pixel(frame, left_bar_hex, left_tol)
         try:
             fish_center = fish_center[0]
         except:
-            fish_center = None
-        try:
-            left_bar_center = left_bar_center[0]
-            right_bar_center = right_bar_center[0]
-        except:
-            left_bar_center = None
-            right_bar_center = None
+            pass
+        left_bar_center, right_bar_center = self._find_bar_edges(frame, left_bar_hex, right_bar_hex, left_tol, right_tol)
+        if left_bar_center is None:
+            left_bar_center, right_bar_center = self._find_bar_edges(frame, right_bar_hex, right_bar_hex, right_tol, right_tol)
+        elif right_bar_center is None:
+            left_bar_center, right_bar_center = self._find_bar_edges(frame, left_bar_hex, left_bar_hex, left_tol, left_tol)
         return fish_center, left_bar_center, right_bar_center
     def _do_line_search(self, frame, original_width=None):
         """
@@ -2371,265 +2678,7 @@ class Api:
                 # Bar Moving Left Relative To Fish → Hold (Apply Right Thrust)
                 should_hold = True
         return should_hold
-    # Utility Functions
-    def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
-        """Worker function to send text webhook."""
-        logging_name = self.vars["logging_name"]
-        webhook_url2 = self.vars["logging_url"]
-        try:
-            if show_status == True:
-                payload = {
-                    'content': f'{message_prefix}🎣 Cycle completed\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': logging_name,
-                    'embeds': [{
-                        'description': f'{loop_count}',
-                        'color': 0x5865F2,
-                        'timestamp': time.strftime("%Y-%m-%dT%H:%M:%S")
-                    }]
-                }
-                response = requests.post(webhook_url, json=payload, timeout=10)
-            else:
-                payload = {
-                    'content': f'{message_prefix}🎣 Cycle failed\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': logging_name,
-                    'embeds': [{
-                        'description': f'{loop_count}',
-                        'color': 0x5865F2,
-                        'timestamp': time.strftime("%Y-%m-%dT%H:%M:%S")
-                    }]
-                }
-                response = requests.post(webhook_url2, json=payload, timeout=10)
-            if response.status_code == 200 or response.status_code == 204:
-                if show_status == True:
-                    self.set_status(f"Discord text sent ({loop_count})")
-            else:
-                self.set_status(f"Error: Discord text failed: {response.status_code}")
-        except Exception as e:
-            self.set_status(f"Error sending Discord text: {e}")
-    def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
-        logging_name = self.vars["logging_name"]
-        webhook_url2 = self.vars["logging_url"]
-        try:
-            with mss.mss() as sct:
-                monitor = sct.monitors[1]
-                screenshot = np.array(sct.grab(monitor))
-            screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
-            _, buffer = cv2.imencode(".png", screenshot)
-            img_byte_arr = io.BytesIO(buffer.tobytes())
-            files = {'file': ('screenshot.png', img_byte_arr, 'image/png')}
-            if show_status == True:
-                payload = {
-                    'content': f'{message_prefix}🎣 **Cycle completed**\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': logging_name
-                }
-                response = requests.post(webhook_url, data=payload, files=files, timeout=10)
-            else:
-                payload = {
-                    'content': f'{message_prefix}🎣 **Cycle failed**\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': logging_name
-                }
-                response = requests.post(webhook_url2, data=payload, files=files, timeout=10)
-            if response.status_code in (200, 204):
-                if show_status == True:
-                    self.set_status(f"Discord screenshot sent ({loop_count})")
-            else:
-                self.set_status(f"Error: Discord screenshot failed: {response.status_code}")
-        except Exception as e:
-            self.set_status(f"Error: sending Discord screenshot: {e}")
-    def _debug_log_worker(self, text, loop_count, show_status=False):
-        """Write debug logs to a text file."""
-        try:
-            # Use base path for logs
-            log_dir = BASE_PATH
-            os.makedirs(log_dir, exist_ok=True)
-            # Daily log file
-            log_file = os.path.join(
-                log_dir,
-                f"debug_{time.strftime('%Y-%m-%d')}.txt"
-            )
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            log_entry = (
-                "==========\n"
-                f"🎣 {text}\n"
-                f"🔄 {loop_count}\n"
-                f"🕐 {timestamp}\n"
-                "==========\n\n"
-            )
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(log_entry)
-            if show_status:
-                self.set_status(f"Debug log saved ({loop_count})")
-        except Exception as e:
-            self.set_status(f"Error writing debug log: {e}")
-    def test_logging(self):
-        self.send_logging("**Logging is working**", "TEST", show_status=True)
-    def _auto_bug_report(self, error_text, phase="Unknown"):
-        """Send a text-only crash report to the bug report webhook or save to file."""
-        # Safely get values and reset state
-        self._set_fish_overlay_mode("idle")
-        logging_mode = self.vars["logging_mode"]
-        if logging_mode == "Disabled":
-            return
-        platform_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        # Prepare the report text
-        report_text = (
-            "Auto Bug Report\n"
-            f"Version: {APP_VERSION}\n"
-            f"Platform: {platform_name}\n"
-            f"Phase: {phase}\n"
-            f"Time: {timestamp}\n\n"
-            f"{error_text}"
-        )
-        if logging_mode == "File":
-            try:
-                log_dir = BASE_PATH
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, f"debug_{time.strftime('%Y-%m-%d')}.txt")
-                log_entry = (
-                    "==========\n"
-                    "🐞 AUTO BUG REPORT\n"
-                    f"📂 Phase: {phase}\n"
-                    f"🕐 {timestamp}\n"
-                    "--------------------------------------------------\n"
-                    f"{report_text}\n"
-                    "==========\n\n"
-                )
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(log_entry)
-                self.set_status(f"Bug report saved to file ({phase})")
-                return
-            except Exception as e:
-                self.set_status(f"Error saving bug report to file: {e}")
-                return
-        webhook_url = self.vars["logging_url"]
-        logging_name = self.vars["logging_name"]
-        crash_line = "Unknown"
-        for line in reversed(error_text.splitlines()):
-            if line.strip().startswith('File "') and ", line " in line:
-                crash_line = line.strip()
-                break
-        payload = {
-            "content": (
-                "**Auto Bug Report**\n"
-                f"Version: `{APP_VERSION}` | Platform: `{platform_name}` | Phase: `{phase}`\n"
-                f"Crash line: `{crash_line}`\n"
-                "Full traceback with line numbers is attached as text."
-            ),
-            "username": logging_name
-        }
-        try:
-            report_bytes = io.BytesIO(report_text.encode("utf-8"))
-            files = {"file": ("bug_report.txt", report_bytes, "text/plain")}
-            response = requests.post(webhook_url, data=payload, files=files, timeout=10)
-            if response.status_code not in (200, 204):
-                self.set_status(f"Error: Bug report failed: {response.status_code}")
-        except Exception as e:
-            self.set_status(f"Error sending bug report: {e}")
-    def send_logging(self, text, loop_count, show_status=True):
-        logging_mode = self.vars["logging_mode"]
-        if logging_mode == "Disabled":
-            self.set_status("⚠ Logging is disabled.")
-            return
-        if not logging_mode == "File":
-            # logging_url
-            webhook_url = self.vars["logging_url"].strip()
-            if not webhook_url.startswith("https://discord.com/api/webhooks/"):
-                self.set_status("Error: Invalid webhook URL.")
-                return
-        if show_status == True:
-            self.set_status("Sending test webhook...")
-        if logging_mode == "Screenshot":
-            thread = threading.Thread(
-                target=self._discord_screenshot_worker,
-                args=(webhook_url, f"{text}\n", loop_count, show_status),
-                daemon=True
-            )
-        elif logging_mode == "File":
-            thread = threading.Thread(
-                target=self._debug_log_worker,
-                args=(text, loop_count, show_status),
-                daemon=True
-            )
-        else:
-            thread = threading.Thread(
-                target=self._discord_text_worker,
-                args=(webhook_url, f"{text}\n", loop_count, show_status),
-                daemon=True
-            )
-        thread.start()
-    def _detect_day_or_night(self, confidence_threshold=0.7):
-        """
-        Robust day/night detection using white-mask template matching.
-        """
-        totem_left, totem_top, totem_right, totem_bottom, _, _ = self._get_areas("totem")
-        frame2 = self._grab_screen_region(totem_left, totem_top, totem_right, totem_bottom)
-        if frame2 is None or frame2.size == 0:
-            return None, 0.0
-        image_size = int(50 / self.SCREEN_SCALE)
-        frame = cv2.resize(frame2, (image_size, image_size))
-        def white_mask(img):
-            lower = np.array([200, 200, 200], dtype=np.uint8)
-            upper = np.array([255, 255, 255], dtype=np.uint8)
-            mask = cv2.inRange(img, lower, upper)
-            # If completely empty, return early
-            if mask is None or mask.size == 0:
-                return None
-            k = np.ones((3, 3), np.uint8)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, k)
-            return mask
-        def best_match(frame_mask, ref_mask):
-            if frame_mask is None or ref_mask is None:
-                return 0.0
-            if frame_mask.size == 0 or ref_mask.size == 0:
-                return 0.0
-            fh, fw = frame_mask.shape
-            rh, rw = ref_mask.shape
-            # Ensure valid dimensions
-            if fh == 0 or fw == 0 or rh == 0 or rw == 0:
-                return 0.0
-            # Resize reference if needed
-            if rh > fh or rw > fw:
-                scale = min(fh / rh, fw / rw)
-                new_w = max(1, int(rw * scale))
-                new_h = max(1, int(rh * scale))
-                if new_w <= 0 or new_h <= 0:
-                    return 0.0
-                ref_mask = cv2.resize(ref_mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-                rh, rw = ref_mask.shape
-            # Final safety check (CRITICAL)
-            if rh > fh or rw > fw:
-                return 0.0
-            try:
-                result = cv2.matchTemplate(frame_mask, ref_mask, cv2.TM_CCOEFF_NORMED)
-                # THIS prevents your exact crash
-                if result is None or result.size == 0:
-                    return 0.0
-                _, max_val, _, _ = cv2.minMaxLoc(result)
-                return float(max_val)
-            except Exception:
-                return 0.0
-        frame_mask = white_mask(frame)
-        if frame_mask is None:
-            return None, 0.0
-        sun_path  = os.path.join(IMAGES_PATH, "sun.png")
-        moon_path = os.path.join(IMAGES_PATH, "moon.png")
-        sun_img  = cv2.imread(sun_path)
-        moon_img = cv2.imread(moon_path)
-        if sun_img is None or moon_img is None:
-            print("Totem detection: sun.png or moon.png missing.")
-            return None, 0.0
-        sun_mask  = white_mask(sun_img)
-        moon_mask = white_mask(moon_img)
-        sun_conf  = best_match(frame_mask, sun_mask)
-        moon_conf = best_match(frame_mask, moon_mask)
-        best_conf = max(sun_conf, moon_conf)
-        if best_conf < confidence_threshold:
-            return None, best_conf
-        result = "Day" if sun_conf >= moon_conf else "Night"
-        return result, best_conf
-    # Start utilities
+    # Start angler (quest)
     def start_angler(self):
         self.macro_running = True
         dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
@@ -2875,7 +2924,7 @@ class Api:
             text = pytesseract.image_to_string(gray)
             if mutation_enchant.lower() in text.lower():
                 self.stop_macro("Appraisal finished")
-    # Start main automation
+    # Start fishing
     def start_fishing(self):
         self.macro_running = True
         rod_slot = str(self.vars["rod_slot"])
@@ -3642,11 +3691,13 @@ class Api:
         else:
             line_lost_timeout = 0.0
         try:
-            note_box_tol = int(self.vars["tracking_tolerance"])
-            arrow_tol = int(self.vars["arrow_tolerance"])
+            note_box_tol = int(self.vars["note_box_tolerance"] or 8)
+            arrow_tol = int(self.vars["arrow_tolerance"] or 8)
+            arrow_method = int(self.vars["arrow_method"])
         except:
             note_box_tol = 8
             arrow_tol = 8
+            arrow_method = 2
         self.last_bar_size = None
         self.scan_height_ratio = None
         self._last_should_hold = False
@@ -3691,15 +3742,11 @@ class Api:
                 fish_x, left_x, right_x = self._do_line_search(img)
             else:
                 fish_x, left_x, right_x = self._do_pixel_search(img)
+            arrow_indicator_x = self._find_arrow_indicator_x(img, arrow_hex, arrow_tol, mouse_down)
             if track_notes == "on":
-                note_coords = self._find_color_center(note_img, note_box_hex, note_box_tol)
+                note_box_pos = self._find_color_center(note_img, note_box_hex, note_box_tol)
             else:
-                note_coords = None
-            arrow_indicator_x = self._find_first_pixel(img, arrow_hex, arrow_tol)
-            try:
-                arrow_indicator_x = arrow_indicator_x[0]
-            except:
-                arrow_indicator_x = None
+                note_box_pos = None
             # Convert Fish X From Tuple To Int
             if fish_x is None:
                 pass
@@ -3723,7 +3770,17 @@ class Api:
             if any_bar_detected_this_frame:
                 detection_source = 0
             else:
-                bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, fish_width)
+                if arrow_method == 2:
+                    bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, any_bar_detected_this_frame, fish_width)
+                else:
+                    # This ensures rods with 1 arrow can be tracked normally
+                    bar_center = self._find_color_cluster(img, arrow_hex, arrow_tol, 10)
+                    try:
+                        bar_center = bar_center[0]
+                    except:
+                        pass
+                    left_x = bar_center - 20 if not bar_center == None else 0
+                    right_x = bar_center + 20 if not bar_center == None else 0
                 any_bar_detected_this_frame = True # Check 2
                 detection_source = 1
             if any_bar_detected_this_frame and not (left_x == None or right_x == None): # Bar Or Arrows Found
@@ -3786,14 +3843,14 @@ class Api:
                 left_x = right_x - bar_size if not right_x == None else None
             # Step 5: Apply Max Left/Right Calculations
             if any_bar_detected_this_frame and bar_center is not None: # Bar Found
-                if note_coords is not None:
+                if note_box_pos is not None:
                     # Direct Mapping (Already In Fish Space)
-                    note_screen_x = note_coords[0] + fish_left
-                    note_screen_y = note_coords[1]
+                    note_screen_x = note_box_pos[0] + fish_left
+                    note_screen_y = note_box_pos[1]
                     note_screen_y_ratio = note_screen_y / (fish_bottom - fish_top)
                 else:
                     note_screen_x = None
-                if note_coords is not None and track_notes == "on":
+                if note_box_pos is not None and track_notes == "on":
                     if note_screen_y_ratio >= note_track_ratio:
                         fish_x = note_screen_x
                 elif track_notes == "off":
@@ -3890,6 +3947,13 @@ class Api:
                 else:
                     release_mouse()
             time.sleep(scan_delay)
+    def set_status(self, message):
+        """Push a status message to the main webview window's JS."""
+        try:
+            safe = message.replace("\\", "\\\\").replace("`", "\\`").replace("'", "\\'")
+            window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
+        except Exception:
+            pass
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False
         self._fish_overlay_cast_bounds = None

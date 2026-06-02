@@ -1,0 +1,510 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+:root {
+    --accent-color: #3b5cff;
+    --accent-glow: rgba(59, 92, 255, 0.4);
+    --left-gradient: #3b82f6;
+    --right-gradient: #8b5cf6;
+    --button-text: white;
+}
+body {
+    background: #05051b;
+    color: white;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden;
+}
+/* Layout ── */
+.app {
+    display: flex;
+    height: 100vh;
+}
+/* Sidebar ── */
+.sidebar {
+    width: 220px;
+    min-width: 220px;
+    max-width: 220px;
+    background: rgba(20, 20, 50, 0.95);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+/* Merged duplicate .logo blocks */
+.logo {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    letter-spacing: 0.1px;
+    background: linear-gradient(to right, var(--left-gradient), var(--right-gradient));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 18px var(--accent-glow);
+}
+.config-section {
+    margin-top: auto;
+    padding: 10px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.config-section button {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    width: 100%;
+    margin-top: 4px;
+}
+.config-section button:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+/* Status */
+.status-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+.status-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #10b981;
+    display: inline-block;
+    flex-shrink: 0;
+    animation: status-pulse 2s infinite ease-in-out;
+}
+.status-text {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@keyframes status-pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+        box-shadow: 0 0 8px currentColor;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.6;
+        box-shadow: 0 0 12px currentColor;
+    }
+}
+/* Sidebar Tabs ── */
+/* Sidebar Tabs ── */
+.tab-button {
+    position: relative;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.78);
+    padding: 12px 14px 12px 18px;
+    border-radius: 12px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+        background 0.16s ease,
+        color 0.16s ease,
+        transform 0.16s ease;
+}
+/* Left accent bar */
+.tab-button::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 999px;
+    background:
+        linear-gradient(
+            to bottom,
+            var(--left-gradient),
+            var(--right-gradient)
+        );
+    opacity: 0;
+    transition:
+        opacity 0.18s ease,
+        transform 0.18s ease;
+    transform: scaleY(0.6);
+}
+/* Hover */
+.tab-button:hover {
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(255, 255, 255, 0.96);
+}
+/* Active */
+.tab-button.active {
+    background: rgba(255, 255, 255, 0.07);
+    color: white;
+}
+/* Show left line */
+.tab-button.active::before {
+    opacity: 1;
+    transform: scaleY(1);
+}
+/* Keyboard focus */
+.tab-button:focus-visible {
+    outline: 2px solid rgba(255,255,255,0.18);
+    outline-offset: 2px;
+}
+/* Content ── */
+.content {
+    flex: 1;
+    padding: 40px;
+    overflow-y: auto;
+}
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display: block;
+}
+/* Cards ─ */
+.card {
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 15px;
+    margin-top: 15px;
+    backdrop-filter: blur(15px);
+}
+/* Buttons (global) ─ */
+button {
+    font-family: inherit;
+}
+.card button {
+    background: linear-gradient(to right, var(--left-gradient), var(--right-gradient));
+    border: none;
+    color: var(--button-text);
+    padding: 10px 15px;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-top: 16px;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+.card button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px var(--accent-glow);
+}
+/* Form Rows */
+.text {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-top: 18px;
+    letter-spacing: 0.3px;
+}
+.text label {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 15px;
+    min-width: 160px;
+}
+.text input {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 12px;
+    outline: none;
+    width: 160px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+.text input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+.text input:focus {
+    border-color: rgba(70, 100, 255, 0.8);
+    box-shadow: 0 0 12px rgba(70, 100, 255, 0.25);
+}
+/* Dropdowns */
+.dropdown {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-top: 18px;
+}
+.dropdown select,
+.config-section select {
+    background-color: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.9);
+    padding: 10px 38px 10px 14px;
+    border-radius: 10px;
+    outline: none;
+    font-size: 14px;
+    width: 180px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: default;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M3.204 5h9.592L8 10.481 3.204 5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+    letter-spacing: 0.3px;
+    font-weight: 500;
+}
+.dropdown select:focus {
+    border-color: rgba(70, 100, 255, 0.8);
+    box-shadow: 0 0 12px rgba(70, 100, 255, 0.25);
+}
+.dropdown option {
+    background: #111827;
+    color: white;
+}
+/* Toggles ── */
+.switch2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 18px;
+}
+.switch2 p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 15px;
+}
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 30px;
+}
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    transition: 0.25s ease;
+}
+.slider::before {
+    content: "";
+    position: absolute;
+    height: 22px;
+    width: 22px;
+    left: 4px;
+    top: 4px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.25s ease;
+}
+.switch input:checked + .slider {
+    background: linear-gradient(to right, var(--left-gradient), var(--right-gradient));
+    box-shadow: 0 0 14px var(--accent-glow);
+}
+.switch input:checked + .slider::before {
+    transform: translateX(22px);
+}
+/* Misc ── */
+.vertical-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.arrow {
+    font-size: 1.5rem;
+    color: #666;
+    user-select: none;
+}
+#perfect-cast-card {
+    display: none;
+}
+/* Color Grid ─ */
+.color-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 15px;
+}
+.color-box {
+    background: #1e1e1e;
+    border: 1px solid #2d2d2d;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+/* Merged duplicate .color-box h4 blocks */
+.color-box h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-color);
+    text-shadow: 0 0 8px var(--accent-glow);
+}
+.color-box input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    background: #121212;
+    color: white;
+    box-sizing: border-box;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+/* Accent Theming */
+.tab-content h1,
+.card h3 {
+    color: var(--accent-color);
+    text-shadow: 0 0 18px var(--accent-glow);
+    margin-bottom: 12px;
+}
+.card h3 {
+    text-shadow: 0 0 12px var(--accent-glow);
+    margin-bottom: 10px;
+}
+/* Config Modal ── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(10px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+.modal-overlay.active {
+    display: flex;
+}
+.modal-window {
+    width: 420px;
+    background: rgba(20, 20, 50, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+    animation: modalFade 0.18s ease;
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.modal-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(
+            to bottom,
+            var(--left-gradient),
+            var(--right-gradient)
+        );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.modal-close {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    border: none;
+    background: rgba(255, 255, 255, 0.06);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.modal-close:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: scale(1.05);
+}
+.modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.modal-content button {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: white;
+    padding: 14px;
+    border-radius: 14px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.modal-content button:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+@keyframes modalFade {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+@keyframes gradientFlow {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+/* Animated Gradient Text */
+
+.tab-content h1,
+.card h3 {
+    background:
+        linear-gradient(
+            90deg,
+            var(--left-gradient),
+            var(--right-gradient),
+            var(--left-gradient)
+        );
+
+    background-size: 200% 200%;
+
+    animation:
+        gradientFlow 4s linear infinite;
+
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+
+    text-shadow:
+        0 0 18px var(--accent-glow);
+}

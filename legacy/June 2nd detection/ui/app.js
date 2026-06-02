@@ -368,56 +368,6 @@ async function resetColors() {
         );
     }
 }
-async function exportConfig() {
-    try {
-        const settings = getSettings();
-
-        const result = await pywebview.api.export_config(
-            settings
-        );
-
-        if (result.success) {
-            setStatus(`Exported: ${result.path}`);
-        } else {
-            setStatus(`Export failed: ${result.error}`);
-        }
-    } catch (err) {
-        console.error(err);
-        setStatus("Export failed");
-    }
-}
-
-async function importConfig() {
-    try {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = ".json,application/json";
-
-        input.onchange = async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-
-            try {
-                const text = await file.text();
-                const settings = JSON.parse(text);
-
-                applySettings(settings);
-                await syncSettings();
-                await saveConfig();
-
-                setStatus(`Imported: ${file.name}`);
-            } catch (err) {
-                console.error(err);
-                setStatus("Invalid config file");
-            }
-        };
-
-        input.click();
-    } catch (err) {
-        console.error(err);
-        setStatus("Import failed");
-    }
-}
 async function openConfigsFolder() {
     await pywebview.api.open_base_folder();
 }
