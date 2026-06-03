@@ -23,6 +23,7 @@ window.setStatus = (message) => {
         }
     }
 };
+window.addEventListener("pywebviewready", checkVersion);
 window.addEventListener("pywebviewready", async () => {
     await refreshConfigs();
     await loadStartupConfig();
@@ -444,6 +445,52 @@ async function openLink(link) {
             `Could not open link`
         );
     }
+}
+const APP_VERSION = "4.1";
+
+async function checkVersion() {
+    try {
+        const pythonVersion = await pywebview.api.get_macro_version();
+        const jsVersion = APP_VERSION;
+
+        const py = parseFloat(pythonVersion);
+        const js = parseFloat(jsVersion);
+
+        if (js > py) {
+            alert(
+                `Version mismatch.\n\n` +
+                `Python version: ${pythonVersion}\n` +
+                `UI version: ${jsVersion}\n\n` +
+                `Please update PyWare Fishing.`
+            );
+        }
+        else if (js < py) {
+            alert(
+                `You have updated from version ${jsVersion} to ${pythonVersion}.\n\n` +
+                `Go to Manage -> Open Configs Folder to complete the update process.`
+            );
+        }
+    }
+    catch (e) {
+        console.error("Version check failed:", e);
+    }
+}
+function showErrorModal(traceback) {
+    document.getElementById("error-traceback").value = traceback;
+    document.getElementById("error-modal-overlay").style.display = "flex";
+}
+
+function closeErrorModal() {
+    document.getElementById("error-modal-overlay").style.display = "none";
+}
+
+function copyTraceback() {
+    const tb = document.getElementById("error-traceback");
+
+    tb.select();
+    tb.setSelectionRange(0, 999999);
+
+    navigator.clipboard.writeText(tb.value);
 }
 function openSupportTab() {
     document

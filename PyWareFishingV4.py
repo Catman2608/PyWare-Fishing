@@ -6,6 +6,8 @@ import re
 import time
 import sys
 import webbrowser
+# Error handling
+from tkinter import messagebox
 # OCR
 import pytesseract
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
@@ -111,10 +113,8 @@ elif sys.platform == "darwin":
         Other platforms return 1.0.
         """
         global _scale_cache
-
         if _scale_cache is not None:
             return _scale_cache
-
         if sys.platform == "darwin":
             try:
                 _scale_cache = float(NSScreen.mainScreen().backingScaleFactor())
@@ -122,7 +122,6 @@ elif sys.platform == "darwin":
                 _scale_cache = 1.0
         else:
             _scale_cache = 1.0
-
         return _scale_cache
     def get_mouse_position():
         event = Quartz.CGEventCreate(None)
@@ -185,15 +184,12 @@ BASE_PATH, IS_COMPILED = get_base_path()
 # Get correct legacy folder
 script_path = os.path.abspath(__file__)
 folder_path = os.path.dirname(script_path)
-
 filename_with_ext = os.path.basename(script_path)
 filename_without_ext = os.path.splitext(filename_with_ext)[0]
-print("Filename without Extension:", filename_without_ext)
 if "legacy" in folder_path.lower() and not str(IS_COMPILED) == "True":
     UI_PATH = os.path.join(BASE_PATH, filename_without_ext, "ui")
 else:
     UI_PATH = os.path.join(BASE_PATH, "ui")
-print("legacy" in folder_path.lower())
 # =========================
 # CONFIG FOLDER
 # =========================
@@ -268,7 +264,7 @@ CONFIG_DIR = CONFIGS_FOLDER
 IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 CONFIG_PATH = LAST_CONFIG_FILE
-APP_VERSION = "4.0"
+APP_VERSION = "4.1"
 # Area Selector — pywebview-based (no tkinter)
 class AreaSelector:
     """
@@ -290,16 +286,15 @@ class AreaSelector:
         # This corrects for macOS menu-bar push-down and any other OS chrome offset.
         self._win_origin_x = SCREEN_LEFT
         self._win_origin_y = SCREEN_TOP
-        # Store areas as plain dicts (width/height keys)
+        # Store areas as RATIOS (0-1 range) consistently
         self._areas = {
-            "shake":  shake_area.copy(),
-            "fish":   fish_area.copy(),
-            "friend": friend_area.copy(),
-            "totem":  totem_area.copy(),
+            "shake":  self._to_ratios(shake_area),
+            "fish":   self._to_ratios(fish_area),
+            "friend": self._to_ratios(friend_area),
+            "totem":  self._to_ratios(totem_area),
         }
         # Create a second, frameless, transparent, fullscreen pywebview window.
         # js_api=self exposes get_areas / on_mouse_move / save_areas to JS.
-
         # NOTE: x/y must be the primary monitor's actual top-left offset (SCREEN_LEFT/TOP).
         # On single-monitor setups this is always 0,0.  On multi-monitor setups where the
         # primary display isn't the leftmost one, SCREEN_LEFT/TOP will be non-zero and the
@@ -331,6 +326,42 @@ class AreaSelector:
         self._win.events.closed += self._on_closed
         time.sleep(0.05)
         make_window_translucent(self._win, 0.35)
+    def _to_ratios(self, area):
+        """Convert any area dict to ratios (0-1 range)"""
+        return {
+            "x": area.get("x", 0),
+            "y": area.get("y", 0),
+            "width": area.get("width", area.get("w", 0)),
+            "height": area.get("height", area.get("h", 0)),
+        }
+    def _ratios_to_pixels(self, ratios, add_offset=True):
+        """Convert ratio dict to pixel coordinates relative to canvas or screen"""
+        x_pixels = ratios["x"] * SCREEN_WIDTH
+        y_pixels = ratios["y"] * SCREEN_HEIGHT
+        w_pixels = ratios["width"] * SCREEN_WIDTH
+        h_pixels = ratios["height"] * SCREEN_HEIGHT
+        if add_offset:
+            x_pixels += self._win_origin_x
+            y_pixels += self._win_origin_y
+        return {
+            "x": x_pixels,
+            "y": y_pixels,
+            "width": w_pixels,
+            "height": h_pixels,
+        }
+    def _pixels_to_ratios(self, pixels, subtract_offset=True):
+        """Convert pixel dict to ratios (0-1 range)"""
+        x_pixels = pixels.get("x", 0)
+        y_pixels = pixels.get("y", 0)
+        if subtract_offset:
+            x_pixels -= self._win_origin_x
+            y_pixels -= self._win_origin_y
+        return {
+            "x": x_pixels / SCREEN_WIDTH,
+            "y": y_pixels / SCREEN_HEIGHT,
+            "width": pixels.get("w", pixels.get("width", 0)) / SCREEN_WIDTH,
+            "height": pixels.get("h", pixels.get("height", 0)) / SCREEN_HEIGHT,
+        }
     # ── JS API methods (called from area_selector.html) ──
     def on_hover_ratio(self, area_name, x_ratio, y_ratio):
         self.parent.set_status(
@@ -356,18 +387,18 @@ class AreaSelector:
     def get_areas(self):
         """
         Called by JS on startup to get initial box positions.
-        The stored _areas use screen-absolute coordinates, but the canvas
-        coordinate system starts at (0,0) = the overlay window's top-left.
-        Subtract the actual window origin so boxes appear at the correct canvas position.
+        Returns pixel coordinates relative to the canvas (window-relative, not screen-absolute).
         """
         out = {}
         menu_offset = get_macos_menu_offset()
-        for name, b in self._areas.items():
+        for name, ratios in self._areas.items():
+            # Convert ratios to canvas-relative pixels (no screen offset added)
+            pixels = self._ratios_to_pixels(ratios, add_offset=False)
             out[name] = {
-                "x":      b["x"] - self._win_origin_x,
-                "y": b["y"] - self._win_origin_y - menu_offset,
-                "width":  b.get("width", b.get("w", 0)),
-                "height": b.get("height", b.get("h", 0)),
+                "x": pixels["x"],
+                "y": pixels["y"] - menu_offset,  # macOS adjustment
+                "width": pixels["width"],
+                "height": pixels["height"],
             }
         return out
     def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
@@ -376,32 +407,31 @@ class AreaSelector:
         can show live position ratios.
         mouse_x / mouse_y are CSS-pixel coordinates relative to the overlay
         window's top-left corner (i.e. relative to SCREEN_LEFT, SCREEN_TOP).
-        The stored _areas use screen-absolute coordinates, so we must add the
-        monitor offset before doing any containment / ratio math.
         """
         if not self._open:
             return
-        # Keep Python's cached areas completely in sync with live dragging in JS.
-        # JS sends w/h keys; Python stores width/height keys — normalise here.
+        # Update cached areas with latest from JS (JS sends canvas-relative pixels)
+        menu_offset = get_macos_menu_offset()
         for name in ("shake", "fish", "friend", "totem"):
             b = current_boxes.get(name, {})
             if b:
-                self._areas[name] = {
-                    "x":      int(b.get("x", 0)) + self._win_origin_x,
-                    "y":      int(b.get("y", 0)) + self._win_origin_y,
-                    "width":  int(b.get("w", b.get("width", 0))),
-                    "height": int(b.get("h", b.get("height", 0))),
-                }
-        # Convert canvas-relative coords to screen-absolute for ratio display
+                # Canvas y has menu_offset subtracted (same as get_areas); add it back
+                # so the stored ratio always reflects true screen-relative position.
+                adjusted = dict(b)
+                adjusted["y"] = b.get("y", 0) + menu_offset
+                self._areas[name] = self._pixels_to_ratios(adjusted, subtract_offset=False)
+        # Convert mouse canvas-relative to screen-absolute for hit testing
         abs_x = mouse_x + self._win_origin_x
         abs_y = mouse_y + self._win_origin_y
         for name in ("shake", "fish", "friend", "totem"):
-            b = self._areas.get(name, {})
-            if not b:
+            ratios = self._areas.get(name, {})
+            if not ratios:
                 continue
-            bx, by = b.get("x", 0), b.get("y", 0)
-            bw = b.get("width", 1) or 1
-            bh = b.get("height", 1) or 1
+            # Hit test using ratios (multiply by screen dimensions)
+            bx = ratios["x"] * SCREEN_WIDTH
+            by = ratios["y"] * SCREEN_HEIGHT
+            bw = (ratios["width"] * SCREEN_WIDTH) or 1
+            bh = (ratios["height"] * SCREEN_HEIGHT) or 1
             if bx <= abs_x <= bx + bw and by <= abs_y <= by + bh:
                 xr = round((abs_x - bx) / bw, 2)
                 yr = round((abs_y - by) / bh, 2)
@@ -411,21 +441,20 @@ class AreaSelector:
     def save_areas(self, areas):
         """
         Called by JS when the user presses Escape/F6 to confirm and close.
-        JS sends canvas-relative {x,y,w,h}; we convert to screen-absolute
-        {x,y,width,height} (adding back SCREEN_LEFT/TOP) then fire the callback.
+        JS sends canvas-relative {x,y,w,h} pixels; we convert to ratios and fire callback.
         """
         if not self._open:
             return
         self._open = False
-        out = {}
         menu_offset = get_macos_menu_offset()
+        out = {}
         for name, b in areas.items():
-            out[name] = {
-                "x":      b["x"] + self._win_origin_x,
-                "y": b["y"] + self._win_origin_y + menu_offset,
-                "width":  b.get("w", b.get("width", 0)),
-                "height": b.get("h", b.get("height", 0)),
-            }
+            # Canvas pixels from JS have menu_offset already subtracted (get_areas
+            # sends y = ratio*H - menu_offset), so add it back before converting to
+            # ratios, otherwise y drifts up by menu_offset/SCREEN_HEIGHT each cycle.
+            adjusted = dict(b)
+            adjusted["y"] = b.get("y", 0) + menu_offset
+            out[name] = self._pixels_to_ratios(adjusted, subtract_offset=False)
         self.callback(out["shake"], out["fish"], out["friend"], out["totem"])
         if hasattr(self.parent, "_keys_held"):
             self.parent._keys_held.discard("f6")
@@ -450,17 +479,19 @@ class AreaSelector:
     def close(self):
         """Force-close from Python (e.g. hotkey toggle)."""
         if self._open:
-            # _areas are screen-absolute; save_areas() expects canvas-relative (it adds
-            # SCREEN_LEFT/TOP back), so subtract the offset here before passing through.
-            self.save_areas({
-                name: {
-                    "x": b["x"] - self._win_origin_x,
-                    "y": b["y"] - self._win_origin_y,
-                    "w": b.get("w", b.get("width", 0)),
-                    "h": b.get("h", b.get("height", 0)),
+            # Build canvas-relative pixels that mirror what JS sends via save_areas:
+            # get_areas sends y = ratio*H - menu_offset, so we must do the same here.
+            menu_offset = get_macos_menu_offset()
+            canvas_pixels = {}
+            for name, ratios in self._areas.items():
+                pixels = self._ratios_to_pixels(ratios, add_offset=False)
+                canvas_pixels[name] = {
+                    "x": pixels["x"],
+                    "y": pixels["y"] - menu_offset,
+                    "w": pixels["width"],
+                    "h": pixels["height"],
                 }
-                for name, b in self._areas.items()
-            })
+            self.save_areas(canvas_pixels)
 # 
 # Eyedropper class
 # 
@@ -505,19 +536,14 @@ class Eyedropper:
         """Gets the pixel from the full-screen capture with screen freeze (memory-based)"""
         if not self._open:
             return "#000000"
-
         frame = self._screen_capture
         if frame is None:
             return "#000000"
-
         menu_offset = get_macos_menu_offset()
-
         screen_x = x + self._win_origin_x
         screen_y = y + self._win_origin_y + menu_offset
-
         x = int(screen_x * self._scale)
         y = int(screen_y * self._scale)
-
         if (
             x < 0 or
             y < 0 or
@@ -525,13 +551,10 @@ class Eyedropper:
             x >= frame.shape[1]
         ):
             return "#000000"
-
         b = int(frame[y, x, 0])
         g = int(frame[y, x, 1])
         r = int(frame[y, x, 2])
-
         hex_color = f"#{r:02X}{g:02X}{b:02X}"
-
         return hex_color
     def window_ready(self, win_x, win_y):
         if sys.platform == "darwin":
@@ -588,10 +611,12 @@ class FishOverlay:
         self._open = False
         self._visible = False
         self.scale_factor = get_scale_factor()
-        self.width = int(800 / self.scale_factor)
-        self.height = int(60 / self.scale_factor)
-        self.x = int((int(SCREEN_WIDTH * 0.5) - int(self.width / 2)) / self.scale_factor)
-        self.y = int(int(SCREEN_HEIGHT * 0.65) / self.scale_factor)
+        logical_w = SCREEN_WIDTH / self.scale_factor
+        logical_h = SCREEN_HEIGHT / self.scale_factor
+        self.width  = int(800 / self.scale_factor)
+        self.height = int(60  / self.scale_factor)
+        self.x = int(logical_w * 0.5 - self.width / 2)
+        self.y = int(logical_h * 0.65)
     def init_window(self):
         if self._win and self._open:
             return
@@ -636,8 +661,8 @@ class FishOverlay:
         if not self._win:
             return
         try:
-            self._win.resize(width, height)
-            self._win.move(x, y)
+            self._win.resize(self.width, self.height)
+            self._win.move(self.x, self.y)
         except Exception:
             pass
     def show(self):
@@ -755,12 +780,10 @@ class Api:
         self._thread_local = threading.local()
         self._monitor = {}      # pre-allocated monitor dict, reused every grab
         self._scale_cache = None  # cached DPI scale factor
-
         # Buffer for capture/logic thread decoupling (used in start_macro())
         self._cap_lock = threading.Lock()
         self._cap_frame = None    # latest full screen frame
         self._cap_event = threading.Event()  # signals a new frame pair is ready
-
         self.webhook_cycle_counter = 0
         self.totem_cycle_counter = 0
         self.webhook_start_time = 0
@@ -956,7 +979,7 @@ class Api:
             with open(LAST_CONFIG_FILE, "w") as f:
                 json.dump(data, f, indent=4)
         except Exception as e:
-            print("Error saving last config:", e)
+            self.set_status("Error saving last config:", e)
     def resolve_config_name(self, config_name):
         configs = self.list_configs()
         if config_name in configs:
@@ -981,7 +1004,7 @@ class Api:
             self.current_config = config_name
             self.save_last_config(config_name)
         except Exception as e:
-            print("Error loading config:", e)
+            self.set_status("Error loading config:", e)
     def get_startup_config(self):
         config_name = self.resolve_config_name(self.current_config)
         if not config_name:
@@ -1046,17 +1069,17 @@ class Api:
                 area = loaded_areas.get(key)
                 if isinstance(area, dict):
                     self.bar_areas[key] = {
-                        "x": int(area.get("x", 0)),
-                        "y": int(area.get("y", 0)),
-                        "width": int(area.get("width", 0)),
-                        "height": int(area.get("height", 0)),
+                        "x": float(area.get("x", 0)),
+                        "y": float(area.get("y", 0)),
+                        "width": float(area.get("width", 0)),
+                        "height": float(area.get("height", 0)),
                     }
             # Hotkeys
             start_key  = data.get("start_key", "F5")
             change_key = data.get("change_bar_areas_key", "F6")
             stop_key   = data.get("stop_key", "F7")
         except Exception as e:
-            print(f"Failed to load misc settings: {e}")
+            self.set_status(f"Failed to load misc settings: {e}")
         # Convert Hotkeys
         self.hotkey_start = self._string_to_key(start_key)
         self.hotkey_change_areas = self._string_to_key(change_key)
@@ -1078,10 +1101,10 @@ class Api:
             area = self.bar_areas.get(key)
             if isinstance(area, dict):
                 clean_bar_areas[key] = {
-                    "x": int(area.get("x", 0)),
-                    "y": int(area.get("y", 0)),
-                    "width": int(area.get("width", 0)),
-                    "height": int(area.get("height", 0)),
+                    "x": float(area.get("x", 0)),
+                    "y": float(area.get("y", 0)),
+                    "width": float(area.get("width", 0)),
+                    "height": float(area.get("height", 0)),
                 }
             else:
                 clean_bar_areas[key] = None
@@ -1214,6 +1237,8 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
+    def get_macro_version(self):
+        return APP_VERSION
     def set_status(self, message):
         """Push a status message to the main webview window's JS."""
         try:
@@ -1229,35 +1254,33 @@ class Api:
         if hasattr(self, "area_selector") and self.area_selector and self.area_selector.is_open():
             self.area_selector.close()
             return
-        screen_w = SCREEN_WIDTH
-        screen_h = SCREEN_HEIGHT
         # Default Fallback Areas
         def default_shake_area():
-            left = int(screen_w * 0.1041)
-            top = int(screen_h * 0.0925)
-            right = int(screen_w * 0.8958)
-            bottom = int(screen_h * 0.7888)
+            left = 0.1041
+            top = 0.0925
+            right = 0.8958
+            bottom = 0.7888
             return {"x": left, "y": top,
                     "width": right - left, "height": bottom - top}
         def default_fish_area():
-            left = int(screen_w * 0.2844)
-            top = int(screen_h * 0.7981)
-            right = int(screen_w * 0.7141)
-            bottom = int(screen_h * 0.8370)
+            left = 0.2844
+            top = 0.7981
+            right = 0.7141
+            bottom = 0.8370
             return {"x": left, "y": top,
                     "width": right - left, "height": bottom - top}
         def default_friend_area():
-            left = int(screen_w * 0.0046)
-            top = int(screen_h * 0.8583)
-            right = int(screen_w * 0.0401)
-            bottom = int(screen_h * 0.94)
+            left = 0.0046
+            top = 0.8583
+            right = 0.0401
+            bottom = 0.94
             return {"x": left, "y": top,
                     "width": right - left, "height": bottom - top}
         def default_totem_area():
-            left = int(screen_w * 0.9531)
-            top = int(screen_h * 0.8333)
-            right = int(screen_w * 0.9739)
-            bottom = int(screen_h * 0.8796)
+            left = 0.9531
+            top = 0.8333
+            right = 0.9739
+            bottom = 0.8796
             return {"x": left, "y": top,
                     "width": right - left, "height": bottom - top}
         # Load Saved Areas Or Fallback
@@ -1556,12 +1579,12 @@ class Api:
             left, top, right, bottom = self._get_default_areas(area_key)
             width  = right - left
             height = bottom - top
-        left2   = int(left * scale)
-        top2    = int(top * scale)
-        right2  = int(right * scale)
-        bottom2 = int(bottom * scale)
-        width2  = int(width * scale)
-        height2 = int(height * scale)
+        left2   = int(left * scale * SCREEN_WIDTH)
+        top2    = int(top * scale * SCREEN_HEIGHT)
+        right2  = int(right * scale * SCREEN_WIDTH)
+        bottom2 = int(bottom * scale * SCREEN_HEIGHT)
+        width2  = int(width * scale * SCREEN_WIDTH)
+        height2 = int(height * scale * SCREEN_HEIGHT)
         return left2, top2, right2, bottom2, width2, height2
     def _get_default_areas(self, area):
         if area == "shake":
@@ -1742,7 +1765,7 @@ class Api:
             # Only use strict HoughCircles detection - no backup methods to avoid false positives
             return None
         except Exception as e:
-            print(f"    Error in circle detection: {e}")
+            self.set_status(f"    Error in circle detection: {e}")
             return None
     def _find_color_center(self, frame, target_color_hex, tolerance=8):
         """
@@ -1808,18 +1831,14 @@ class Api:
     def _update_arrow_box_estimation(self, arrow_centroid_x, capture_width):
         """
         Estimate box position based on arrow indicator using geometry-based logic.
-        
         Determines which side the arrow is on by comparing to last known center position,
         uses proximity validation for self-correction, and falls back to default size if needed.
-        
         Args:
             arrow_centroid_x: X coordinate of arrow center
             capture_width: Width of capture region
-        
         Returns:
             Tuple of (bar_center_x, left_x, right_x) or (None, None, None) if can't estimate
         """
-        
         # Initialize tracking variables if not already done
         if not hasattr(self, '_last_bar_left_x'):
             self._last_bar_left_x = None
@@ -1829,57 +1848,46 @@ class Api:
             self._last_bar_box_size = None
         if not hasattr(self, '_last_bar_center_x'):
             self._last_bar_center_x = None
-        
         # Handle missing arrow
         if arrow_centroid_x is None:
             # Return last known positions if available
             if self._last_bar_center_x is not None:
                 return self._last_bar_center_x, self._last_bar_left_x, self._last_bar_right_x
             return None, None, None
-        
         # Get last known values
         last_center = self._last_bar_center_x
         box_size = self._last_bar_box_size
-        
         # If we have previous bar data, determine which side the arrow is on
         if last_center is not None and box_size is not None and box_size > 0:
             last_left = self._last_bar_left_x
             last_right = self._last_bar_right_x
-            
             # Determine which side based on center comparison
             arrow_on_left_side = arrow_centroid_x < last_center
-            
             # SMART VALIDATION: Check if arrow is actually near the bar we think it is
             # Calculate distances to both last known bars
             dist_to_left = abs(arrow_centroid_x - last_left) if last_left is not None else float('inf')
             dist_to_right = abs(arrow_centroid_x - last_right) if last_right is not None else float('inf')
-            
             # Self-correction: If arrow is much closer to the opposite bar, we detected wrong side!
             # Threshold: arrow should be within reasonable distance (box_size / 4) of expected bar
             proximity_threshold = box_size / 4
-            
             if arrow_on_left_side:
                 # We think arrow is on LEFT, but verify it's actually near left bar
                 if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
                     # Arrow is actually closer to RIGHT bar - we were wrong!
                     arrow_on_left_side = False  # Flip the decision
-            
             else:
                 # We think arrow is on RIGHT, but verify it's actually near right bar
                 if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
                     # Arrow is actually closer to LEFT bar - we were wrong!
                     arrow_on_left_side = True  # Flip the decision
-            
             # Now apply the corrected decision
             if arrow_on_left_side:
                 # Arrow is on the LEFT side - update left bar, keep right bar from memory
                 bar_left_x = arrow_centroid_x
                 bar_right_x = self._last_bar_right_x
-                
                 if bar_right_x is None:
                     # If no right bar in memory, calculate from box size
                     bar_right_x = bar_left_x + box_size
-                
                 # Validate: ensure left < right
                 if bar_left_x < bar_right_x:
                     self._last_bar_left_x = bar_left_x
@@ -1891,11 +1899,9 @@ class Api:
                 # Arrow is on the RIGHT side - update right bar, keep left bar from memory
                 bar_right_x = arrow_centroid_x
                 bar_left_x = self._last_bar_left_x
-                
                 if bar_left_x is None:
                     # If no left bar in memory, calculate from box size
                     bar_left_x = bar_right_x - box_size
-                
                 # Validate: ensure left < right
                 if bar_left_x < bar_right_x:
                     self._last_bar_left_x = bar_left_x
@@ -1907,11 +1913,9 @@ class Api:
         elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
             box_size = self._last_bar_right_x - self._last_bar_left_x
             last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
-            
             if box_size > 0:
                 self._last_bar_box_size = box_size
                 self._last_bar_center_x = last_center
-                
                 # Determine side based on arrow position relative to last center
                 if arrow_centroid_x < last_center:
                     bar_left_x = arrow_centroid_x
@@ -1919,7 +1923,6 @@ class Api:
                 else:
                     bar_right_x = arrow_centroid_x
                     bar_left_x = bar_right_x - box_size
-                
                 self._last_bar_left_x = bar_left_x
                 self._last_bar_right_x = bar_right_x
                 bar_center_x = (bar_left_x + bar_right_x) / 2.0
@@ -1930,33 +1933,26 @@ class Api:
                 default_box_size = capture_width // 2
                 bar_left_x = arrow_centroid_x
                 bar_right_x = bar_left_x + default_box_size
-                
                 self._last_bar_left_x = bar_left_x
                 self._last_bar_right_x = bar_right_x
                 self._last_bar_box_size = default_box_size
-                
                 bar_center_x = (bar_left_x + bar_right_x) / 2.0
                 self._last_bar_center_x = bar_center_x
                 return bar_center_x, bar_left_x, bar_right_x
-        
         else:
             # No previous data - assume a default box size based on capture width
             default_box_size = capture_width // 2
-            
             # Start with arrow as left bar, calculate right from default size
             bar_left_x = arrow_centroid_x
             bar_right_x = bar_left_x + default_box_size
-            
             # Clamp to capture bounds
             if bar_right_x > capture_width:
                 bar_right_x = float(capture_width)
                 bar_left_x = max(0.0, bar_right_x - default_box_size)
-            
             # Save these initial estimates
             self._last_bar_left_x = bar_left_x
             self._last_bar_right_x = bar_right_x
             self._last_bar_box_size = default_box_size
-            
             bar_center_x = (bar_left_x + bar_right_x) / 2.0
             self._last_bar_center_x = bar_center_x
             return bar_center_x, bar_left_x, bar_right_x
@@ -2166,7 +2162,7 @@ class Api:
             right_x = right_bar_x
             return fish_x, left_x, right_x
         except Exception as e:
-            print(f"    Error in line detection: {e}")
+            self.set_status(f"    Error in line detection: {e}")
             return None, None, None
     # PID control
     def _reset_pid_state(self):
@@ -2224,12 +2220,9 @@ class Api:
         kd       = self._get_var_number("kd", 0.07)
         # Derivative
         derivative = (error - self.prev_error) / dt
-        
         output = (kp * error + kd * derivative)
-        
         self.prev_error = error
         self.last_time = now
-        
         return output
     def _steady_control(self, error, bar_center):
         """
@@ -2618,7 +2611,7 @@ class Api:
         sun_img  = cv2.imread(sun_path)
         moon_img = cv2.imread(moon_path)
         if sun_img is None or moon_img is None:
-            print("Totem detection: sun.png or moon.png missing.")
+            self.set_status("Totem detection: sun.png or moon.png missing.")
             return None, 0.0
         sun_mask  = white_mask(sun_img)
         moon_mask = white_mask(moon_img)
@@ -2672,7 +2665,7 @@ class Api:
                         self._click_at(dialogue_left + dialogue_x, dialogue_top + dialogue_y)
                     time.sleep(1.2)
                 except Exception as e:
-                    print(e)
+                    self.set_status(e)
                     self.stop_macro(f"Angler/Quest failed: {e}")
                     break
             else:
@@ -2695,7 +2688,7 @@ class Api:
             required_fish = lines[-1] if lines else ""
             self.set_status(f"Quest fish: {required_fish}")
             if not required_fish:
-                print("Could not read fish name")
+                self.set_status("Could not read fish name")
                 time.sleep(angler_cd)
                 continue
             # 
@@ -2863,7 +2856,7 @@ class Api:
                         self._click_at(screen_x, screen_y)
                         time.sleep(1.2)
                     except Exception as e:
-                        print(e)
+                        self.set_status(e)
                         self.stop_macro(f"Appraisal failed: {e}")
                 else:
                     self._click_at(appraisal_x, appraisal_y)
@@ -3766,6 +3759,20 @@ class Api:
                 deadzone_action = 0
             else:
                 deadzone_action = deadzone_action + 1
+            # Bar Validation
+            if right_x > left_x:
+                # Validate: right must be greater than left
+                self._last_bar_right_x = right_x
+                bar_center_x = (left_x + right_x) / 2.0
+                self._last_bar_center_x = bar_center_x
+                bar_center_found = True
+            else:
+                pass # Invalid: right <= left, reject this detection
+                right_x = self._last_bar_right_x  # Keep old position
+                if right_x is not None:
+                    bar_center_x = (left_x + right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                    bar_center_found = True
             thresh = (1 - round((bar_size / fish_width), 2)) * 0.8
             # Step 4: Restart Method — Friend Area (green present = minigame ended)
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
@@ -3774,9 +3781,13 @@ class Api:
                 time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
                 return
-            if fish_x == None:
+            # Use cached coordinates if current detection is None or bar bounds are invalid
+            if fish_x is None:
                 fish_x = self.last_fish_x
-            if left_x == None or right_x == None:
+            if left_x is None or right_x is None:
+                left_x = self._last_bar_left_x
+                right_x = self._last_bar_right_x
+            elif right_x <= left_x:
                 left_x = self._last_bar_left_x
                 right_x = self._last_bar_right_x
             # Position Bar Based On State
@@ -3893,6 +3904,7 @@ class Api:
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False
         self._fish_overlay_cast_bounds = None
+        self._stop_active_capture()
         self._set_fish_overlay_mode("idle")
         self.set_status(text)
         try:
@@ -3902,7 +3914,6 @@ class Api:
 # Check if index.html exists
 if not os.path.exists(os.path.join(UI_PATH, "index.html")):
     # Create and show a tkinter messagebox
-    from tkinter import messagebox
     result = messagebox.askyesno("How to set up", """
 Step 1. Open configs folder (click Yes to open)\n
 Step 2. Place the configs, images and ui folder in the configs folder\n
