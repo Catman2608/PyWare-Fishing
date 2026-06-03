@@ -22,6 +22,22 @@ window.setStatus = (message) => {
             }
         }
     }
+
+    // Update Topbar Start/Stop Button
+    const topbarBtn = document.getElementById("topbar-start-btn");
+    if (topbarBtn) {
+        const lowerMsg = message.toLowerCase();
+        const isRunning = (lowerMsg.includes("scan") || lowerMsg.includes("active") || lowerMsg.includes("running") || lowerMsg.includes("fishing") || lowerMsg.includes("appraisal") || lowerMsg.includes("enchant") || lowerMsg.includes("angler")) && 
+                          !lowerMsg.includes("stop") && !lowerMsg.includes("closed") && !lowerMsg.includes("ready");
+                          
+        if (isRunning) {
+            topbarBtn.className = "topbar-btn stop";
+            topbarBtn.innerHTML = `<span class="btn-icon">■</span> Stop Macro`;
+        } else {
+            topbarBtn.className = "topbar-btn start";
+            topbarBtn.innerHTML = `<span class="btn-icon">▶</span> Start Macro`;
+        }
+    }
 };
 window.addEventListener("pywebviewready", checkVersion);
 window.addEventListener("pywebviewready", async () => {
@@ -62,6 +78,17 @@ function switchTab(tabId) {
     });
     document.getElementById(tabId).classList.add("active");
     event.target.classList.add("active");
+
+    // Update breadcrumb
+    const breadcrumbTitle = document.getElementById("active-tab-title");
+    if (breadcrumbTitle) {
+        const titleMap = {
+            basic: "Basic",
+            automation: "Automation",
+            utilities: "Utilities"
+        };
+        breadcrumbTitle.textContent = titleMap[tabId] || "Settings";
+    }
 }
 // =========================
 // PERFECT CAST CARD
@@ -143,6 +170,7 @@ async function syncSettings() {
     await pywebview.api.update_settings(
         getSettings()
     );
+    updateTopbarInfo();
 }
 function bindSettingsSync() {
     document.querySelectorAll("input, select").forEach(element => {
@@ -671,3 +699,37 @@ function updateButtonContrast() {
 }
 updateAccentColor();
 updateButtonContrast();
+
+// =========================
+// TOP BAR HELPERS
+// =========================
+function updateTopbarInfo() {
+    const configSelect = document.getElementById("config-select");
+    const macroModeSelect = document.getElementById("macro_mode");
+    
+    const configNameEl = document.getElementById("topbar-config-name");
+    const macroModeEl = document.getElementById("topbar-macro-mode");
+    
+    if (configNameEl && configSelect) {
+        configNameEl.textContent = configSelect.value || "Default";
+    }
+    if (macroModeEl && macroModeSelect) {
+        const val = macroModeSelect.value;
+        macroModeEl.textContent = val ? val.charAt(0).toUpperCase() + val.slice(1) : "None";
+    }
+}
+
+async function toggleMacroFromTopbar() {
+    const btn = document.getElementById("topbar-start-btn");
+    if (btn) {
+        if (btn.classList.contains("start")) {
+            btn.className = "topbar-btn stop";
+            btn.innerHTML = `<span class="btn-icon">■</span> Stop Macro`;
+            await startMacro();
+        } else {
+            btn.className = "topbar-btn start";
+            btn.innerHTML = `<span class="btn-icon">▶</span> Start Macro`;
+            await pywebview.api.stop_macro();
+        }
+    }
+}

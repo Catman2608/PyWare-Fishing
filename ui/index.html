@@ -12,10 +12,6 @@
             <div class="logo">
                 PyWare Fishing V4.0
             </div>
-            <div class="status-container">
-                <span class="status-dot"></span>
-                <span id="status-label" class="status-text">Ready</span>
-            </div>
             <button class="tab-button active" onclick="switchTab('basic')">
                 Basic
             </button>
@@ -41,11 +37,21 @@
                 <button onclick="openSupportTab()"> Support </button>
             </div>
         </div>
-        <!-- Main Content -->
-        <div class="content">
+        <div class="main-area">
+            <!-- Top Bar -->
+            <div class="topbar">
+                <div class="topbar-left">
+                    <span class="breadcrumb-current" id="active-tab-title">Basic</span>
+                    <div class="status-container">
+                        <span class="status-dot"></span>
+                        <span id="status-label" class="status-text">Ready</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Main Content -->
+            <div class="content">
             <!-- Basic Tab -->
             <div id="basic" class="tab-content active">
-                <h1>Basic</h1>
                 <div class="card">
                     <h3>Hotkeys</h3>
                     <div class="text">
@@ -136,7 +142,6 @@
             </div>
             <!-- Automation Tab -->
             <div id="automation" class="tab-content">
-                <h1>Automation</h1>
                 <div class="card">
                     <h3>Basic Options</h3>
                     <div class="switch2">
@@ -388,7 +393,6 @@
             </div>
             <!-- Utilities Tab -->
             <div id="utilities" class="tab-content">
-                <h1>Utilities</h1>
                 <div class="card">
                     <h3>Logging</h3>
                     <div class="dropdown">
@@ -546,6 +550,7 @@
             </div>
         </div>
     </div>
+</div>
     <!-- Config Manager Modal -->
     <div id="config-modal-overlay" class="modal-overlay">
         <div class="modal-window">

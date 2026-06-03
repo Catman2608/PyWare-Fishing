@@ -1225,6 +1225,26 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
+    def export_config(self, settings):
+        try:
+            path = webview.windows[0].create_file_dialog(
+                webview.FileDialog.SAVE,
+                save_filename="config.json"
+            )
+
+            if not path:
+                return {"success": False, "error": "Cancelled"}
+
+            if isinstance(path, (list, tuple)):
+                path = path[0]
+
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(settings, f, indent=4)
+
+            return {"success": True, "path": path}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     def open_link(self, url):
         """Open a URL in the default web browser."""
         try:
