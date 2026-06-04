@@ -1,5 +1,5 @@
 {
-    "config-select": "Masterline Rod",
+    "config-select": "Default",
     "macro_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -58,7 +58,7 @@
     "minigame_scan_delay": "0.01",
     "restart_delay": "2.5",
     "bar_ratio_from_side": "0.5",
-    "controller_mode": "normal",
+    "controller_mode": "steady",
     "position_alpha": "0.8",
     "fish_vel_alpha": "0.4",
     "bar_vel_alpha": "0.4",

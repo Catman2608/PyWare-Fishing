@@ -128,15 +128,22 @@ elif sys.platform == "darwin":
         loc = Quartz.CGEventGetLocation(event)
         return loc.x, loc.y
     def _move_mouse(x, y):
-        point = Quartz.CGPointMake(float(x), float(y))
+        # CGWarpMouseCursorPosition expects logical points, not physical pixels.
+        # All callers pass physical-pixel coordinates (ratio × SCREEN_WIDTH), so
+        # divide by the Retina scale factor before handing off to CG.
+        scale = get_scale_factor()
+        point = Quartz.CGPointMake(float(x) / scale, float(y) / scale)
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
     def _mouse_event(event_type, x=None, y=None):
         scale = get_scale_factor()
-        if x == None or y == None:
+        if x is None or y is None:
+            # CGEventGetLocation returns logical points — no further scaling needed.
             x, y = get_mouse_position()
-        x = int(x / scale)
-        y = int(y / scale)
+        else:
+            # Caller supplied physical-pixel coordinates; convert to logical points.
+            x = float(x) / scale
+            y = float(y) / scale
         event = Quartz.CGEventCreateMouseEvent(
             None,
             event_type,
@@ -773,7 +780,6 @@ class Api:
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         self.current_rod_name = "Basic Rod"
-        # Calculate scaling factors
         self.scale_x_1440 = self.SCREEN_WIDTH / 2560
         self.scale_y_1440 = self.SCREEN_HEIGHT / 1440
         # Screen capture variables — MSS instances are per-thread (see _thread_local)
@@ -792,6 +798,30 @@ class Api:
         self._fish_overlay_mode = "idle"
         self._fish_overlay_cast_bounds = None
         self.load_misc_settings()
+    def _refresh_screen_dimensions(self):
+        """
+        Re-query mss for the primary monitor's current resolution and update all
+        screen-dimension instance variables.  Call this whenever the capture monitor
+        changes (hot-plug, resolution switch, etc.) so that _get_areas, _grab_screen_full,
+        and the fish-overlay layout all use the correct pixel dimensions.
+        Invalidating _thread_local forces _grab_screen_full to rebuild its cached
+        monitor dict on the next capture call.
+        """
+        with mss.mss() as _sct:
+            if len(_sct.monitors) > 1:
+                _m = _sct.monitors[1]
+            else:
+                _m = _sct.monitors[0]
+        self.SCREEN_WIDTH  = _m["width"]
+        self.SCREEN_HEIGHT = _m["height"]
+        self.SCREEN_LEFT   = _m["left"]
+        self.SCREEN_TOP    = _m["top"]
+        self.SCREEN_SCALE  = ((self.SCREEN_WIDTH / 1920) + (self.SCREEN_HEIGHT / 1080)) / 2
+        self.scale_x_1440  = self.SCREEN_WIDTH  / 2560
+        self.scale_y_1440  = self.SCREEN_HEIGHT / 1440
+        # Force _grab_screen_full to rebuild the thread-local monitor dict.
+        self._thread_local = threading.local()
+
     def start_eyedropper(self):
         # Toggle Off If Already Open
         if hasattr(self, "eyedropper") and self.eyedropper and self.eyedropper.is_open():
@@ -1481,7 +1511,8 @@ class Api:
         else:
             if not hasattr(thread_local, "sct"):
                 thread_local.sct = mss.mss()
-            if not hasattr(thread_local, "monitor"):
+            cached = getattr(thread_local, "monitor", None)
+            if cached is None or cached["width"] != width or cached["height"] != height:
                 thread_local.monitor = {
                     "left": 0,
                     "top": 0,
@@ -1599,12 +1630,12 @@ class Api:
             left, top, right, bottom = self._get_default_areas(area_key)
             width  = right - left
             height = bottom - top
-        left2   = int(left * scale * SCREEN_WIDTH)
-        top2    = int(top * scale * SCREEN_HEIGHT)
-        right2  = int(right * scale * SCREEN_WIDTH)
-        bottom2 = int(bottom * scale * SCREEN_HEIGHT)
-        width2  = int(width * scale * SCREEN_WIDTH)
-        height2 = int(height * scale * SCREEN_HEIGHT)
+        left2   = int(left * scale * self.SCREEN_WIDTH)
+        top2    = int(top * scale * self.SCREEN_HEIGHT)
+        right2  = int(right * scale * self.SCREEN_WIDTH)
+        bottom2 = int(bottom * scale * self.SCREEN_HEIGHT)
+        width2  = int(width * scale * self.SCREEN_WIDTH)
+        height2 = int(height * scale * self.SCREEN_HEIGHT)
         return left2, top2, right2, bottom2, width2, height2
     def _get_default_areas(self, area):
         if area == "shake":
@@ -3780,19 +3811,22 @@ class Api:
             else:
                 deadzone_action = deadzone_action + 1
             # Bar Validation
-            if right_x > left_x:
-                # Validate: right must be greater than left
-                self._last_bar_right_x = right_x
-                bar_center_x = (left_x + right_x) / 2.0
-                self._last_bar_center_x = bar_center_x
-                bar_center_found = True
-            else:
-                pass # Invalid: right <= left, reject this detection
-                right_x = self._last_bar_right_x  # Keep old position
-                if right_x is not None:
+            try:
+                if right_x > left_x:
+                    # Validate: right must be greater than left
+                    self._last_bar_right_x = right_x
                     bar_center_x = (left_x + right_x) / 2.0
                     self._last_bar_center_x = bar_center_x
                     bar_center_found = True
+                else:
+                    pass # Invalid: right <= left, reject this detection
+                    right_x = self._last_bar_right_x  # Keep old position
+                    if right_x is not None:
+                        bar_center_x = (left_x + right_x) / 2.0
+                        self._last_bar_center_x = bar_center_x
+                        bar_center_found = True
+            except:
+                pass
             thresh = (1 - round((bar_size / fish_width), 2)) * 0.8
             # Step 4: Restart Method — Friend Area (green present = minigame ended)
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
@@ -3947,7 +3981,7 @@ else:
     # =========================
     api = Api()
     window = webview.create_window(
-        "PyWare Fishing V4",
+        "PyWare Fishing V4.1",
         os.path.join(UI_PATH, "index.html"),
         js_api=api,
         width=1000,
