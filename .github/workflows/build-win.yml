@@ -20,7 +20,7 @@ jobs:
             - name: Install dependencies
               run: |
                   python -m pip install --upgrade pip
-                  pip install webview numpy mss pytesseract pynput requests opencv-python
+                  pip install pywebview numpy mss pytesseract pynput requests opencv-python pyinstaller
 
             - name: Build EXE with PyInstaller
               shell: cmd
@@ -29,14 +29,12 @@ jobs:
 
             - name: List dist contents
               run: |
-                  echo "Files in dist folder:"
                   dir dist
-                  echo "Size of executable:"
-                  dir dist\PyWareFishingV4
+                  dir dist\PyWareFishingV4.exe
 
             - name: Upload EXE artifact
               uses: actions/upload-artifact@v4
               with:
                   name: Windows-EXE
-                  path: dist/PyWareFishingV4/
+                  path: dist/PyWareFishingV4.exe
                   if-no-files-found: error
