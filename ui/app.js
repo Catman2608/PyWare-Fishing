@@ -501,7 +501,7 @@ async function openLink(link) {
         );
     }
 }
-const APP_VERSION = "4.1";
+const APP_VERSION = "4.11";
 
 async function checkVersion() {
     try {

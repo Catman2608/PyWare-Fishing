@@ -529,6 +529,15 @@ button {
     margin-bottom: 10px;
 }
 /* Config Modal ── */
+.button-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.button-row button {
+    flex: 1;
+}
 .modal-overlay {
     position: fixed;
     inset: 0;

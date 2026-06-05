@@ -10,7 +10,7 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
-                PyWare Fishing V4.1
+                PyWare Fishing V4.11
             </div>
             <button class="tab-button active" onclick="switchTab('basic')">
                 Basic
@@ -550,27 +550,37 @@
                 <button onclick="newConfig()">
                     New Config
                 </button>
+
                 <button onclick="deleteConfig()">
                     Delete Config
                 </button>
-                <button onclick="importConfig()">
-                    Import Config
-                </button>
-                <button onclick="exportConfig()">
-                    Export Config
-                </button>
+
+                <div class="button-row">
+                    <button onclick="importConfig()">
+                        Import Config
+                    </button>
+                    <button onclick="exportConfig()">
+                        Export Config
+                    </button>
+                </div>
+
                 <button onclick="refreshConfigs()">
                     Refresh Configs
                 </button>
+
                 <button onclick="openConfigsFolder()">
                     Open Configs Folder
                 </button>
-                <button onclick="resetSettings()">
-                    Reset Settings
-                </button>
-                <button onclick="resetColors()">
-                    Reset Colors
-                </button>
+
+                <div class="button-row">
+                    <button onclick="resetSettings()">
+                        Reset Settings
+                    </button>
+                    <button onclick="resetColors()">
+                        Reset Colors
+                    </button>
+                </div>
+
                 <button onclick="resetAreas()">
                     Reset Areas
                 </button>

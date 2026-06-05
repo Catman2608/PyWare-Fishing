@@ -20,12 +20,12 @@ jobs:
             - name: Install dependencies
               run: |
                   python -m pip install --upgrade pip
-                  pip install pyinstaller customtkinter pynput opencv-python numpy mss requests gdown
+                  pip install webview numpy mss pytesseract pynput requests opencv-python
 
             - name: Build EXE with PyInstaller
               shell: cmd
               run: |
-                  pyinstaller --onedir --windowed PyWareFishingV4.py --name PyWareFishingV4 --icon="icon.ico" --add-data "ui;ui" --add-data "C:\Users\NC\AppData\Local\Programs\Python\Python313\Lib\site-packages\pythonnet\runtime"
+                  pyinstaller --onefile --windowed PyWareFishingV4.py --name PyWareFishingV4 --icon="icon.ico"
 
             - name: List dist contents
               run: |

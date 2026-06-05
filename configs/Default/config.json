@@ -1,5 +1,5 @@
 {
-    "config-select": "Default",
+    "config-select": "Castbound",
     "macro_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -59,8 +59,8 @@
     "restart_delay": "2.5",
     "bar_ratio_from_side": "0.7",
     "controller_mode": "steady",
-    "kp": "0.93",
-    "kd": "0.07",
+    "kp": "0.4",
+    "kd": "0.6",
     "stopping_distance": "1.4",
     "velocity_smoothing": "0.07",
     "pinion_note_ratio": "0.3",

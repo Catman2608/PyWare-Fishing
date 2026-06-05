@@ -180,16 +180,16 @@ def get_base_path():
             return os.path.join(
                 os.path.expanduser("~"),
                 "Library", "Application Support",
-                "PyWareFishingV3"
+                "PyWareFishingV4"
             ), compiled
         elif sys.platform == "win32":
             return os.path.join(
                 os.path.expanduser("~"),
                 "AppData", "Roaming",
-                "PyWareFishingV3"
+                "PyWareFishingV4"
             ), compiled
         else:
-            return os.path.join(os.path.expanduser("~"), "PyWareFishingV3"), compiled
+            return os.path.join(os.path.expanduser("~"), "PyWareFishingV4"), compiled
     compiled = False
     # Dev Mode → Project Directory
     return os.path.dirname(os.path.abspath(__file__)), compiled
@@ -277,7 +277,7 @@ CONFIG_DIR = CONFIGS_FOLDER
 IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 CONFIG_PATH = LAST_CONFIG_FILE
-APP_VERSION = "4.1"
+APP_VERSION = "4.11"
 # Area Selector — pywebview-based (no tkinter)
 class AreaSelector:
     """
@@ -777,11 +777,6 @@ class Api:
         self._last_bar_box_size = None
         self._last_bar_center_x = None
         self.last_arrow_delta = None
-        # PD position smoothing
-        self._prev_fish_x = None
-        self._prev_bar_center = None
-        self._fish_v_ema = 0.0
-        self._bar_v_ema = 0.0
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         self.current_rod_name = "Basic Rod"
@@ -2379,11 +2374,13 @@ class Api:
         self._prev_bar_center = None
         self._fish_v_ema = 0.0
         self._bar_v_ema = 0.0
-    def _normal_control(self, error):
+    def _normal_control(self, error2):
         """
         Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
         """
+        # Initialization
         now = time.perf_counter()
+        error = min(100, error2)
         if self.last_time is None:
             self.last_time = now
             self.prev_error = error
@@ -2395,11 +2392,12 @@ class Api:
         kd       = self._get_var_number("kd", 0.07)
         # Derivative
         derivative = (error - self.prev_error) / dt
+        derivative = min(100, derivative)
         output = (kp * error + kd * derivative)
         self.prev_error = error
         self.last_time = now
         return output
-    def _steady_control(self, error, bar_center):
+    def _steady_control(self, error2, bar_center):
         """
         Asymmetric PD controller.
         Args:
@@ -2411,7 +2409,7 @@ class Api:
         # Gains and clamp from GUI settings
         kp       = self._get_var_number("kp", 0.93)
         kd       = self._get_var_number("kd", 0.07)
-        pd_clamp = self._get_var_number("pid_clamp", 100.0)
+        error = min(100, error2)
         # Reconstruct fish_x (target position) from error and bar_center
         bar_center_x   = bar_center
         target_line_last_x = bar_center_x + error  # fish_x = bar_center + error
@@ -2441,13 +2439,14 @@ class Api:
                 else:
                     # CHASING – light damping to allow fast movement
                     d_term = -kd * 0.2 * bar_velocity
+        d_term = min(100, d_term)
         # Update state for next frame
         self._pid_last_error      = error
         self._pid_last_target_x   = target_line_last_x
         self._pid_last_scan_time  = current_time
         # Combined and clamped control signal
         control_signal = p_term + d_term
-        control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
+        control_signal = max(-100, min(100, control_signal))
         return control_signal
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
@@ -2540,14 +2539,14 @@ class Api:
                 should_hold = True
         return should_hold
     # Utility Functions
-    def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status):
+    def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status, catch_rate):
         """Worker function to send text webhook."""
         logging_name = self.vars["logging_name"]
         webhook_url2 = self.vars["logging_url"]
         try:
             if show_status == True:
                 payload = {
-                    'content': f'{message_prefix}🎣 Cycle completed\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                    'content': f'{message_prefix}🎣 Cycle completed\n🔄 {loop_count}\nCatch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
                     'username': logging_name,
                     'embeds': [{
                         'description': f'{loop_count}',
@@ -2558,7 +2557,7 @@ class Api:
                 response = requests.post(webhook_url, json=payload, timeout=10)
             else:
                 payload = {
-                    'content': f'{message_prefix}🎣 Cycle failed\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                    'content': f'{message_prefix}🎣 Cycle failed\n🔄 {loop_count}\nCatch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
                     'username': logging_name,
                     'embeds': [{
                         'description': f'{loop_count}',
@@ -2574,7 +2573,7 @@ class Api:
                 self.set_status(f"Error: Discord text failed: {response.status_code}")
         except Exception as e:
             self.set_status(f"Error sending Discord text: {e}")
-    def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status):
+    def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status, catch_rate):
         logging_name = self.vars["logging_name"]
         webhook_url2 = self.vars["logging_url"]
         try:
@@ -2587,13 +2586,13 @@ class Api:
             files = {'file': ('screenshot.png', img_byte_arr, 'image/png')}
             if show_status == True:
                 payload = {
-                    'content': f'{message_prefix}🎣 **Cycle completed**\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                    'content': f'{message_prefix}🎣 **Cycle completed**\n🔄 {loop_count}\nCatch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
                     'username': logging_name
                 }
                 response = requests.post(webhook_url, data=payload, files=files, timeout=10)
             else:
                 payload = {
-                    'content': f'{message_prefix}🎣 **Cycle failed**\n🔄 {loop_count}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                    'content': f'{message_prefix}🎣 **Cycle failed**\n🔄 {loop_count}\nCatch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
                     'username': logging_name
                 }
                 response = requests.post(webhook_url2, data=payload, files=files, timeout=10)
@@ -2604,7 +2603,7 @@ class Api:
                 self.set_status(f"Error: Discord screenshot failed: {response.status_code}")
         except Exception as e:
             self.set_status(f"Error: sending Discord screenshot: {e}")
-    def _debug_log_worker(self, text, loop_count, show_status=False):
+    def _debug_log_worker(self, text, loop_count, show_status, catch_rate):
         """Write debug logs to a text file."""
         try:
             # Use base path for logs
@@ -2621,6 +2620,7 @@ class Api:
                 f"🎣 {text}\n"
                 f"🔄 {loop_count}\n"
                 f"🕐 {timestamp}\n"
+                f"Catch rate: {catch_rate}\n"
                 "==========\n\n"
             )
             with open(log_file, "a", encoding="utf-8") as f:
@@ -2694,7 +2694,7 @@ class Api:
                 self.set_status(f"Error: Bug report failed: {response.status_code}")
         except Exception as e:
             self.set_status(f"Error sending bug report: {e}")
-    def send_logging(self, text, loop_count, show_status=True):
+    def send_logging(self, text, loop_count, catch_rate=-1, show_status=True):
         logging_mode = self.vars["logging_mode"]
         if logging_mode == "Disabled":
             self.set_status("⚠ Logging is disabled.")
@@ -2710,19 +2710,19 @@ class Api:
         if logging_mode == "Screenshot":
             thread = threading.Thread(
                 target=self._discord_screenshot_worker,
-                args=(webhook_url, f"{text}\n", loop_count, show_status),
+                args=(webhook_url, f"{text}\n", loop_count, show_status, catch_rate),
                 daemon=True
             )
         elif logging_mode == "File":
             thread = threading.Thread(
                 target=self._debug_log_worker,
-                args=(text, loop_count, show_status),
+                args=(text, loop_count, show_status, catch_rate),
                 daemon=True
             )
         else:
             thread = threading.Thread(
                 target=self._discord_text_worker,
-                args=(webhook_url, f"{text}\n", loop_count, show_status),
+                args=(webhook_url, f"{text}\n", loop_count, show_status, catch_rate),
                 daemon=True
             )
         thread.start()
@@ -2821,6 +2821,8 @@ class Api:
         backpack_x = int(dialogue_width * backpack_x_ratio) + dialogue_left
         backpack_y = int(dialogue_height * backpack_y_ratio) + dialogue_top
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        # Check for utilities
+        self._check_logging_trigger(-1)
         # Main loop
         while self.macro_running:
             time.sleep(0.1)
@@ -2976,6 +2978,9 @@ class Api:
         y = float(self.vars["appraisal_enchant_y"])
         x_scaled = int(dialogue_width * x) + dialogue_left
         y_scaled = int(dialogue_height * y) + dialogue_top
+        # Check for utilities
+        self._check_logging_trigger(-1)
+        # Main loop
         time.sleep(0.1)
         while self.macro_running:
             time.sleep(0.1)
@@ -3012,6 +3017,9 @@ class Api:
         appraisal_y_ratio = self.vars["appraisal_enchant_y"]
         appraisal_x = int(dialogue_width * appraisal_x_ratio) + dialogue_left
         appraisal_y = int(dialogue_height * appraisal_y_ratio) + dialogue_top
+        # Check for utilities
+        self._check_logging_trigger(-1)
+        # Main loop
         time.sleep(0.1)
         keyboard_controller.press("e")
         time.sleep(0.05)
@@ -3050,6 +3058,11 @@ class Api:
     def start_fishing(self):
         self._stop_active_capture()
         self.macro_running = True
+        cycle = 0
+        catch_success = 0
+        catch_rate = 1
+        catch_rate_show = 100
+        successful_catches = 0
         rod_slot = str(self.vars["rod_slot"])
         bag_slot = str(self.vars["bag_slot"])
         shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self._get_areas("shake")
@@ -3068,6 +3081,7 @@ class Api:
             time.sleep(0.1)
         while self.macro_running:
             # Misc / Utilities
+            cycle = cycle + 1
             # Select Rod
             if auto_refresh == "on":
                 bag_delay = self._get_var_number("select_rod_duration", self._get_var_number("bag_delay", 0.36, float), float)
@@ -3083,7 +3097,7 @@ class Api:
                 keyboard_controller.release(rod_slot)
                 time.sleep(0.2)
             # Logging
-            self._check_logging_trigger()
+            self._check_logging_trigger(catch_rate_show)
             # Totem
             self._check_totem_trigger(shake_x, shake_y)
             if self.vars["auto_reconnect"] == "on":
@@ -3102,10 +3116,14 @@ class Api:
             if macro_mode == "tranquility" or macro_mode == "Tranquility":
                 self._enter_minigame_tranquility()
             else:
-                self._enter_minigame()
+                catch_success = self._enter_minigame()
+            successful_catches = successful_catches + 1 if catch_success == True else successful_catches
+            catch_rate = (successful_catches / cycle)
+            catch_rate_show = round(catch_rate * 100)
     # Utilities
-    def _check_logging_trigger(self):
-        """Check whether the Logging should fire based on the selected mode.
+    def _check_logging_trigger(self, catch_rate=-1):
+        """
+        Check whether the Logging should fire based on the selected mode.
         Modes (logging_trigger):
           Cycles  – fire every N completed cycles (configurable via logging_cycle)
           Time    – fire every N seconds elapsed  (configurable via logging_time)
@@ -3126,13 +3144,13 @@ class Api:
             self.webhook_cycle_counter += 1
             if trigger_every > 0 and self.webhook_cycle_counter % trigger_every == 0:
                 label = f"Cycle #{self.webhook_cycle_counter}"
-                self.send_logging("**Cycle Checkpoint**", label, show_status=False)
+                self.send_logging("**Cycle Checkpoint**", label, catch_rate, show_status=False)
         elif cd_mode == "Time":
             self.webhook_cycle_counter += 1  # still count cycles for the message label
             elapsed = time.time() - self.webhook_start_time
             if trigger_secs > 0 and elapsed >= trigger_secs:
                 label = f"Cycle #{self.webhook_cycle_counter} | {int(elapsed)}s elapsed"
-                self.send_logging("**Time Checkpoint**", label, show_status=False)
+                self.send_logging("**Time Checkpoint**", label, catch_rate, show_status=False)
                 # Reset the timer so it fires again after another trigger_secs seconds
                 self.webhook_start_time = time.time()
     def _check_totem_trigger(self, shake_x, shake_y):
@@ -3787,6 +3805,7 @@ class Api:
         self._pred_prev_fish_x = None
         self._pred_prev_bar_x = None
         self._pred_prev_time = None
+        catch_success = True
         self._pred_filtered_vel = 0.0
         self._set_fish_overlay_mode("fishing")
         # Load Values From Gui
@@ -3851,7 +3870,7 @@ class Api:
             if frame is None:
                 _minigame_stop.set()
                 self._set_fish_overlay_mode("idle")
-                return
+                return catch_success
             img = frame[fish_top:fish_bottom, fish_left:fish_right]
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
@@ -3913,14 +3932,14 @@ class Api:
             if detection_source == 0:
                 self._last_bar_left_x = left_x
                 self._last_bar_right_x = right_x
-                # Completed: Cache Real Box Size
+                # Cache bar variables
                 if left_x is not None and right_x is not None:
                     bar_size = abs(right_x - left_x)
                     if bar_size > 0:
                         self.last_cached_box_length = bar_size
                         # Sync Arrow Estimation Immediately
                         self.estimated_box_length = bar_size
-                        # Completed: Sync Hydra-style tracking variables for improved arrow estimation
+                        # Cache arrow variables
                         self._last_bar_left_x = left_x
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size
@@ -3945,14 +3964,12 @@ class Api:
                     self._last_bar_right_x = right_x
                     bar_center_x = (left_x + right_x) / 2.0
                     self._last_bar_center_x = bar_center_x
-                    bar_center_found = True
                 else:
                     pass # Invalid: right <= left, reject this detection
                     right_x = self._last_bar_right_x  # Keep old position
                     if right_x is not None:
                         bar_center_x = (left_x + right_x) / 2.0
                         self._last_bar_center_x = bar_center_x
-                        bar_center_found = True
             except:
                 pass
             thresh = (1 - round((bar_size / fish_width), 2)) * 0.8
@@ -3962,7 +3979,7 @@ class Api:
                 release_mouse()
                 time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
-                return
+                return catch_success
             # Use cached coordinates if current detection is None or bar bounds are invalid
             if fish_x is None:
                 fish_x = self.last_fish_x
@@ -3994,6 +4011,12 @@ class Api:
                 # Compute Bar Left And Bar Right (Screen Coords)
                 bar_left_screen  = left_x  + fish_left if not left_x == None else None
                 bar_right_screen = right_x + fish_left if not right_x == None else None
+                # Important: Bar left and right check is moved below the calculation
+                try:
+                    if not bar_left_screen <= fish_x <= bar_right_screen:
+                        catch_success = False
+                except:
+                    pass
                 # Check Max Left And Max Right
                 if fish_x == None:
                     fish_x = 0
@@ -4109,7 +4132,7 @@ else:
     # =========================
     api = Api()
     window = webview.create_window(
-        "PyWare Fishing V4.1",
+        "PyWare Fishing V4.11",
         os.path.join(UI_PATH, "index.html"),
         js_api=api,
         width=1000,
