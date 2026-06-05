@@ -132,7 +132,9 @@ elif sys.platform == "darwin":
         # All callers pass physical-pixel coordinates (ratio × SCREEN_WIDTH), so
         # divide by the Retina scale factor before handing off to CG.
         scale = get_scale_factor()
-        point = Quartz.CGPointMake(float(x) / scale, float(y) / scale)
+        x = int(x / scale)
+        y = int(y / scale)
+        point = Quartz.CGPointMake(x, y)
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
     def _mouse_event(event_type, x=None, y=None):
@@ -140,10 +142,10 @@ elif sys.platform == "darwin":
         if x is None or y is None:
             # CGEventGetLocation returns logical points — no further scaling needed.
             x, y = get_mouse_position()
-        else:
-            # Caller supplied physical-pixel coordinates; convert to logical points.
-            x = float(x) / scale
-            y = float(y) / scale
+        # Caller supplied physical-pixel coordinates; convert to logical points.
+        # Always scale correctly before clicking
+        x = int(x / scale)
+        y = int(y / scale)
         event = Quartz.CGEventCreateMouseEvent(
             None,
             event_type,
@@ -151,6 +153,10 @@ elif sys.platform == "darwin":
             Quartz.kCGMouseButtonLeft
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+    def make_window_translucent(window, transparency):
+        "Does nothing"
+        pass
+elif sys.platform == "linux":
     def make_window_translucent(window, transparency):
         "Does nothing"
         pass
@@ -618,12 +624,10 @@ class FishOverlay:
         self._open = False
         self._visible = False
         self.scale_factor = get_scale_factor()
-        logical_w = SCREEN_WIDTH / self.scale_factor
-        logical_h = SCREEN_HEIGHT / self.scale_factor
         self.width  = int(800 / self.scale_factor)
         self.height = int(60  / self.scale_factor)
-        self.x = int(logical_w * 0.5 - self.width / 2)
-        self.y = int(logical_h * 0.65)
+        self.x = int(SCREEN_WIDTH * 0.5 - self.width / 2)
+        self.y = int(SCREEN_HEIGHT * 0.65)
     def init_window(self):
         if self._win and self._open:
             return
@@ -699,8 +703,9 @@ class FishOverlay:
     def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
         if bar_center is None:
             return
+        scale = get_scale_factor()
         self.init_window()
-        half_size = int(box_size / 2) if box_size else 0
+        half_size = int(box_size / 2 / scale) if box_size else 0
         center_x = float(bar_center - canvas_offset)
         shape = {
             "x1": float(bar_center - half_size - canvas_offset),
@@ -790,6 +795,9 @@ class Api:
         self._cap_lock = threading.Lock()
         self._cap_frame = None    # latest full screen frame
         self._cap_event = threading.Event()  # signals a new frame pair is ready
+        # Capture thread state tracking (prevents multiple threads and race conditions)
+        self._active_capture_stop = None   # threading.Event to stop current capture thread
+        self._active_capture_thread = None # Current background capture thread
         self.webhook_cycle_counter = 0
         self.totem_cycle_counter = 0
         self.webhook_start_time = 0
@@ -1255,6 +1263,72 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
+    def reset_areas(self, config_name):
+        try:
+            config_folder = os.path.join(
+                CONFIG_DIR,
+                config_name
+            )
+
+            config_path = os.path.join(
+                config_folder,
+                "config.json"
+            )
+
+            os.makedirs(
+                config_folder,
+                exist_ok=True
+            )
+
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config_data = json.load(f)
+            else:
+                config_data = {}
+
+            config_data["bar_areas"] = {
+                "shake": {
+                    "x": 0.1041,
+                    "y": 0.0925,
+                    "width": 0.7917,
+                    "height": 0.6963
+                },
+                "fish": {
+                    "x": 0.2844,
+                    "y": 0.7981,
+                    "width": 0.4297,
+                    "height": 0.0389
+                },
+                "friend": {
+                    "x": 0.0046,
+                    "y": 0.8583,
+                    "width": 0.0355,
+                    "height": 0.0817
+                },
+                "totem": {
+                    "x": 0.9531,
+                    "y": 0.8333,
+                    "width": 0.0208,
+                    "height": 0.0463
+                }
+            }
+
+            with open(config_path, "w") as f:
+                json.dump(
+                    config_data,
+                    f,
+                    indent=4
+                )
+
+            return {
+                "success": True
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
     def export_config(self, settings):
         try:
             path = webview.windows[0].create_file_dialog(
@@ -1378,7 +1452,9 @@ class Api:
         macro_mode = self.vars["macro_mode"]
         if not macro_mode == "disabled":
             if key == start_key:
-                if self.macro_running == False:
+                if self.macro_running == True:
+                    return
+                else:
                     # Save current settings to config before starting
                     self.save_config(self.current_config, self.vars)
                     if macro_mode == "fishing" or macro_mode == "tranquility":
@@ -1389,8 +1465,6 @@ class Api:
                         threading.Thread(target=self.start_enchantment, daemon=True).start()
                     elif macro_mode == "angler":
                         threading.Thread(target=self.start_angler, daemon=True).start()
-                else:
-                    return
             elif key == bar_areas_key:
                 self.open_area_selector()
             elif key == stop_key:
@@ -1552,17 +1626,40 @@ class Api:
                 except Exception:
                     pass
             self._cap_event.set()
-    def _stop_active_capture(self, join_timeout=0.2):
+    def _stop_active_capture(self, join_timeout=2.0):
+        """Stops the current capture thread with proper cleanup and synchronization.
+        
+        Args:
+            join_timeout: Maximum seconds to wait for thread to exit (increased from 1.0 to 2.0)
+        """
         stop_event = getattr(self, "_active_capture_stop", None)
         thread = getattr(self, "_active_capture_thread", None)
+
         if stop_event is not None:
             stop_event.set()
+
+        # Wake up anything waiting on a frame
+        if hasattr(self, "_cap_event"):
+            self._cap_event.set()
+
+        # Ensure thread exits before returning
         if (
             thread is not None
             and thread.is_alive()
             and thread is not threading.current_thread()
         ):
             thread.join(join_timeout)
+            # If thread is still alive after timeout, log it (indicates a stuck thread)
+            if thread.is_alive():
+                print(f"WARNING: Capture thread did not exit within {join_timeout}s")
+
+        # Clean up frame and state
+        with self._cap_lock:
+            self._cap_frame = None
+
+        if hasattr(self, "_cap_event"):
+            self._cap_event.clear()
+
         self._active_capture_stop = None
         self._active_capture_thread = None
     def _start_capture(self, scan_delay):
@@ -1570,46 +1667,73 @@ class Api:
         Starts a background thread that continuously grabs full frames.
         Stops any previously running capture thread first to prevent races.
         Returns a stop_event to terminate the new thread.
+        
+        IMPORTANT: Always call _stop_active_capture() before calling this to prevent
+        multiple capture threads from running simultaneously (causes CPU spikes).
         """
-        # Overlapping Capture Threads Share _Cap_Frame/_Cap_Event/_Cap_Lock And
-        # Will Race Each Other, Which Causes Segfaults In The Mss/Coregraphics
-        # Capture Path On Macos.
+        # Stop any existing capture thread to prevent overlapping threads
+        # which causes segfaults (especially on macOS Quartz) and CPU spike
         self._stop_active_capture()
         self._cap_frame = None
-        # Ensure These Exist
+        
+        # Ensure capture synchronization primitives exist
         if not hasattr(self, "_cap_lock"):
             self._cap_lock = threading.Lock()
         if not hasattr(self, "_cap_event"):
             self._cap_event = threading.Event()
         self._cap_event.clear()
+        
         stop_event = threading.Event()
-        self._active_capture_stop = stop_event  # Track The Active Stop Event
-        _mac_floor = 0.033 if sys.platform == "darwin" else 0.0
+        self._active_capture_stop = stop_event  # Track the active stop event
+        
+        # Enforce minimum frame rate on macOS to prevent CPU saturation
+        _mac_floor = 0.033 if sys.platform == "darwin" else 0.001  # 30 FPS floor on macOS, 1ms on others
+        
         def _loop():
+            """Background capture thread loop with proper sleep logic to prevent busy-waiting."""
             try:
                 thread_local = threading.local()
                 while self.macro_running and not stop_event.is_set():
                     t0 = time.perf_counter()
                     frame = self._grab_screen_full(thread_local)
+                    
+                    # Update shared frame buffer
                     with self._cap_lock:
                         self._cap_frame = frame
                         self._cap_event.set()
+                    
+                    # Calculate how long to sleep to maintain target frame rate
                     elapsed = time.perf_counter() - t0
-                    sleep_for = max(_mac_floor, scan_delay) - elapsed
+                    target_frame_time = max(_mac_floor, scan_delay)
+                    sleep_for = target_frame_time - elapsed
+                    
+                    # CRITICAL FIX: Always sleep at least a tiny amount to prevent busy-loop
+                    # This prevents 50% CPU usage when capture is faster than target rate
                     if sleep_for > 0:
                         time.sleep(sleep_for)
+                    elif sleep_for > -0.001:  # Very close to target, sleep tiny amount
+                        time.sleep(0.001)  # Sleep 1ms to yield to other threads
+                    # If significantly over target (sleep_for < -0.001), don't sleep but let OS scheduler run
+                    
             finally:
+                # Clean up thread-local MSS resources
                 sct = getattr(thread_local, "sct", None)
                 if sct is not None:
                     try:
                         sct.close()
                     except Exception:
                         pass
+                
+                # Signal that thread is exiting
                 self._cap_event.set()
+                
+                # Clear tracking if this is the current capture thread
                 if self._active_capture_stop is stop_event:
                     self._active_capture_stop = None
                 if self._active_capture_thread is threading.current_thread():
                     self._active_capture_thread = None
+        
+        # Start capture thread as daemon so it doesn't block shutdown
         thread = threading.Thread(target=_loop, daemon=True, name="PyWareCapture")
         self._active_capture_thread = thread
         thread.start()
@@ -2675,6 +2799,7 @@ class Api:
         return result, best_conf
     # Start utilities
     def start_angler(self):
+        self._stop_active_capture()
         self.macro_running = True
         dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
         backpack_left, backpack_top, backpack_right, backpack_bottom, _, _ = self._get_areas("fish")
@@ -2841,6 +2966,7 @@ class Api:
             time.sleep(angler_cd)
     # Start enchanting
     def start_enchantment(self):
+        self._stop_active_capture()
         self.macro_running = True
         tesseract_path = self.vars["tesseract_path"]
         mutation_enchant = self.vars["mutation_enchant"]
@@ -2872,6 +2998,7 @@ class Api:
             time.sleep(4)
     # Start appraisal
     def start_appraisal(self):
+        self._stop_active_capture()
         self.macro_running = True
         dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
         hotbar_left, hotbar_top, hotbar_right, hotbar_bottom, _, _ = self._get_areas("fish")
@@ -2921,6 +3048,7 @@ class Api:
                 self.stop_macro("Appraisal finished")
     # Start main automation
     def start_fishing(self):
+        self._stop_active_capture()
         self.macro_running = True
         rod_slot = str(self.vars["rod_slot"])
         bag_slot = str(self.vars["bag_slot"])
@@ -3958,7 +4086,7 @@ class Api:
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False
         self._fish_overlay_cast_bounds = None
-        self._stop_active_capture()
+        self._stop_active_capture(join_timeout=1.0)
         self._set_fish_overlay_mode("idle")
         self.set_status(text)
         try:

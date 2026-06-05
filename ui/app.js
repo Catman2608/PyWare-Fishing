@@ -397,6 +397,33 @@ async function resetColors() {
         );
     }
 }
+async function resetAreas() {
+    const configName =
+        document.getElementById(
+            "config-select"
+        ).value;
+
+    if (!configName) return;
+
+    const confirmed =
+        confirm(
+            `Reset areas for "${configName}"?`
+        );
+
+    if (!confirmed) return;
+
+    const result =
+        await pywebview.api.reset_areas(
+            configName
+        );
+
+    if (result.success) {
+        await loadConfig(configName);
+        setStatus("Areas reset");
+    } else {
+        setStatus("Reset failed");
+    }
+}
 async function exportConfig() {
     try {
         const settings = getSettings();

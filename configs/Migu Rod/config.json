@@ -1,5 +1,5 @@
 {
-    "config-select": "Rod Of Shadow",
+    "config-select": "Default",
     "macro_mode": "enchant",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -59,10 +59,6 @@
     "restart_delay": "1.5",
     "bar_ratio_from_side": "0.5",
     "controller_mode": "normal",
-    "position_alpha": "0.8",
-    "fish_vel_alpha": "0.4",
-    "bar_vel_alpha": "0.4",
-    "control_alpha": "0.6",
     "kp": "0.93",
     "kd": "0.07",
     "stopping_distance": "1.4",
