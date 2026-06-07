@@ -1,3 +1,5 @@
+const APP_VERSION = "4.2";
+
 let currentConfig = null;
 window.setStatus = (message) => {
     const statusLabel = document.getElementById("status-label");
@@ -39,7 +41,6 @@ window.setStatus = (message) => {
         }
     }
 };
-window.addEventListener("pywebviewready", checkVersion);
 window.addEventListener("pywebviewready", async () => {
     await refreshConfigs();
     await loadStartupConfig();
@@ -483,6 +484,10 @@ async function testLogging() {
 async function startEyedropper() {
     await pywebview.api.start_eyedropper();
 }
+async function takeScreenshot() {
+    setStatus("Saved debug screenshots (JavaScript)");
+    await pywebview.api.take_debug_screenshot();
+}
 async function openLink(link) {
     if (!link) {
         setStatus(
@@ -501,35 +506,7 @@ async function openLink(link) {
         );
     }
 }
-const APP_VERSION = "4.11";
 
-async function checkVersion() {
-    try {
-        const pythonVersion = await pywebview.api.get_macro_version();
-        const jsVersion = APP_VERSION;
-
-        const py = parseFloat(pythonVersion);
-        const js = parseFloat(jsVersion);
-
-        if (js > py) {
-            alert(
-                `Version mismatch.\n\n` +
-                `Python version: ${pythonVersion}\n` +
-                `UI version: ${jsVersion}\n\n` +
-                `Please update PyWare Fishing.`
-            );
-        }
-        else if (js < py) {
-            alert(
-                `You have updated from version ${jsVersion} to ${pythonVersion}.\n\n` +
-                `Go to Manage -> Open Configs Folder to complete the update process.`
-            );
-        }
-    }
-    catch (e) {
-        console.error("Version check failed:", e);
-    }
-}
 function showErrorModal(traceback) {
     document.getElementById("error-traceback").value = traceback;
     document.getElementById("error-modal-overlay").style.display = "flex";

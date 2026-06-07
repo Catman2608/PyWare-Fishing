@@ -2207,7 +2207,7 @@ class App(CTk):
             elif pressed_key == self._normalize_hotkey_value(self.hotkey_change_areas):
                 self.open_area_selector()
             elif pressed_key == self._normalize_hotkey_value(self.hotkey_screenshot):
-                self._take_debug_screenshot()
+                self.take_debug_screenshot()
             elif pressed_key == self._normalize_hotkey_value(self.hotkey_stop):
                 self.stop_macro()
         else:
@@ -2464,7 +2464,7 @@ class App(CTk):
             )
         thread.start()
     # Take debug screenshot
-    def _take_debug_screenshot(self):
+    def take_debug_screenshot(self):
         """
         Capture all relevant areas (shake, fish, friend, totem)
         and save debug images.

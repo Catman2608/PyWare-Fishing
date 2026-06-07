@@ -1149,7 +1149,7 @@ class App(CTk):
         CTkLabel(color_settings, text="Color Settings", font=CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=12, pady=8, sticky="w")
 
         CTkButton(color_settings, text="Pick Colors", corner_radius=10, width=120, command=self.eyedropper.start).grid(row=0, column=1, padx=12, pady=12, sticky="w")
-        CTkButton(color_settings, text="Take Screenshot", corner_radius=10, width=120, command=self._take_debug_screenshot).grid(row=0, column=3, padx=12, pady=12, sticky="w")
+        CTkButton(color_settings, text="Take Screenshot", corner_radius=10, width=120, command=self.take_debug_screenshot).grid(row=0, column=3, padx=12, pady=12, sticky="w")
 
         CTkLabel(color_settings, text="Left Bar:").grid(row=2, column=0, padx=12, pady=10, sticky="w") # Left/Right Bar
         left_color_var = StringVar(value="#F1F1F1")
@@ -2549,7 +2549,7 @@ class App(CTk):
             )
         thread.start()
     # Take Debug Screenshot
-    def _take_debug_screenshot(self):
+    def take_debug_screenshot(self):
         """
         Capture all relevant areas (shake, fish, friend, totem)
         and save debug images.

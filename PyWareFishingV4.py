@@ -7,7 +7,7 @@ import time
 import sys
 import webbrowser
 # Error handling
-from tkinter import messagebox
+import customtkinter as ctk
 # OCR
 import pytesseract
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
@@ -142,7 +142,6 @@ elif sys.platform == "darwin":
         point = Quartz.CGPointMake(x, y)
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
-        print("Mouse:", x, y)
     def _mouse_event(event_type, right=False, x=None, y=None):
         # Expects logical points (already converted by the caller).
         if x is None or y is None:
@@ -154,7 +153,6 @@ elif sys.platform == "darwin":
             Quartz.kCGMouseButtonRight if right else Quartz.kCGMouseButtonLeft
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-        print("Mouse:", x, y)
     def _send_key(key, delay=0.05):
         keycode = MAC_KEY_MAP.get(str(key).lower())
         if keycode is None:
@@ -300,7 +298,7 @@ CONFIG_DIR = CONFIGS_FOLDER
 IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 CONFIG_PATH = LAST_CONFIG_FILE
-APP_VERSION = "4.11"
+APP_VERSION = "4.2"
 # Area Selector — pywebview-based (no tkinter)
 class AreaSelector:
     """
@@ -645,8 +643,8 @@ class FishOverlay:
         self._open = False
         self._visible = False
         self.scale_factor = get_scale_factor()
-        self.width  = int(800 / self.scale_factor)
-        self.height = int(60  / self.scale_factor)
+        self.width  = int(800)
+        self.height = int(60)
         self.x = int(SCREEN_WIDTH * 0.5 - self.width / 2)
         self.y = int(SCREEN_HEIGHT * 0.65)
     def init_window(self):
@@ -685,10 +683,10 @@ class FishOverlay:
         height = max(1, int(height))
         x = max(0, min(int(x), max(0, self.parent_app.SCREEN_WIDTH - width)))
         y = max(0, min(int(y), max(0, self.parent_app.SCREEN_HEIGHT - height)))
-        self.x = int(x / self.scale_factor)
-        self.y = int(y / self.scale_factor)
-        self.width = int(width / self.scale_factor)
-        self.height = int(height / self.scale_factor)
+        self.x = int(x)
+        self.y = int(y)
+        self.width = int(width)
+        self.height = int(height)
         self.init_window()
         if not self._win:
             return
@@ -726,6 +724,7 @@ class FishOverlay:
             return
         scale = get_scale_factor()
         self.init_window()
+        canvas_offset = int(canvas_offset / scale)
         half_size = int(box_size / 2 / scale) if box_size else 0
         center_x = float(bar_center - canvas_offset)
         shape = {
@@ -751,6 +750,93 @@ class FishOverlay:
                 pass
     def is_open(self):
         return self._open
+class SetupGuide(ctk.CTk):
+    def __init__(self, error):
+        super().__init__()
+
+        self.geometry("600x550")
+        self.title("PyWare Fishing Setup Guide")
+        self.configure(fg_color="#05051b")
+
+        ctk.CTkLabel(
+            self,
+            text="PyWare Fishing Setup Guide",
+            font=("Arial", 24, "bold")
+        ).pack(pady=(20, 10))
+
+        ctk.CTkLabel(
+            self,
+            text=(error),
+            wraplength=500
+        ).pack(pady=(0, 20))
+
+        ctk.CTkLabel(
+            self,
+            text=(
+                "Before starting the macro, grant permissions and "
+                "copy the required folders into the PyWare Fishing directory."
+            ),
+            wraplength=500
+        ).pack(pady=(0, 20))
+
+        ctk.CTkButton(
+            self,
+            text="Accessibility Permissions",
+            command=self.open_accessibility
+        ).pack(pady=5)
+
+        ctk.CTkButton(
+            self,
+            text="Input Monitoring",
+            command=self.open_input_monitoring
+        ).pack(pady=5)
+
+        ctk.CTkButton(
+            self,
+            text="Screen Recording",
+            command=self.open_screen_recording
+        ).pack(pady=5)
+
+        ctk.CTkLabel(
+            self,
+            text=(
+                "\nRequired folders:\n\n"
+                "✓ configs\n"
+                "✓ images\n"
+                "✓ ui"
+            ),
+            justify="left"
+        ).pack(pady=20)
+
+        ctk.CTkButton(
+            self,
+            text="Open PyWare Fishing Folder",
+            command=open_base_folder
+        ).pack(pady=5)
+
+        ctk.CTkButton(
+            self,
+            text="Continue",
+            command=self.destroy
+        ).pack(side="bottom", pady=20)
+
+    def open_accessibility(self):
+        subprocess.Popen([
+            "open",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ])
+
+    def open_input_monitoring(self):
+        subprocess.Popen([
+            "open",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+        ])
+
+    def open_screen_recording(self):
+        subprocess.Popen([
+            "open",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        ])
 class Api:
     GENERIC_PLACEHOLDERS = {
         "tolerance",
@@ -1778,6 +1864,41 @@ class Api:
         self._active_capture_thread = thread
         thread.start()
         return stop_event
+    # Take Debug Screenshot (no _)
+    def take_debug_screenshot(self):
+        """
+        Capture all relevant areas (shake, fish, friend, totem)
+        and save debug images.
+        """
+        self.set_status("Saved debug screenshots (fish, shake, friend, totem, full)")
+        # Define Areas (Same As Minigame) 
+        shake = self._get_areas("shake")
+        fish = self._get_areas("fish")
+        friend = self._get_areas("friend")
+        totem = self._get_areas("totem")
+        # Capture Full Screen (Better For Overlay Debugging) 
+        full_img = self._grab_screen_full()
+        if full_img is None:
+            self.set_status("Failed to grab full screen")
+            return
+        # Save full screenshot for debugging
+        try:
+            cv2.imwrite(os.path.join(BASE_PATH, "debug_full.png"), full_img)
+        except Exception as e:
+            self.set_status(f"Error saving full screenshot: {e}")
+        # Helper To Crop 
+        def crop(img, rect):
+            l, t, r, b = rect
+            return img[t:b, l:r]
+        # Save Individual Regions
+        try:
+            cv2.imwrite(os.path.join(BASE_PATH, "debug_fish.png"), crop(full_img, fish))
+            cv2.imwrite(os.path.join(BASE_PATH, "debug_shake.png"), crop(full_img, shake))
+            cv2.imwrite(os.path.join(BASE_PATH, "debug_friend.png"), crop(full_img, friend))
+            cv2.imwrite(os.path.join(BASE_PATH, "debug_totem.png"), crop(full_img, totem))
+        except Exception as e:
+            self.set_status(f"Error saving region screenshots: {e}")
+            return
     # Get values (with fallback)
     def _get_areas(self, area_key):
         # Apply Scale Factor
@@ -2447,50 +2568,69 @@ class Api:
         Asymmetric PD controller.
         Args:
             error:      fish_x - bar_center  (positive = target is right of bar)
-            bar_center: current bar centre in screen coordinates
+            bar_center: current bar centre in local/screen coordinates
         Returns:
             Clamped control signal (float).  Positive → hold, negative → release.
         """
         # Gains and clamp from GUI settings
         kp       = self._get_var_number("kp", 0.93)
         kd       = self._get_var_number("kd", 0.07)
+        
         # Reconstruct fish_x (target position) from error and bar_center
-        bar_center_x   = bar_center
+        bar_center_x = bar_center
         target_line_last_x = bar_center_x + error  # fish_x = bar_center + error
         current_time = time.perf_counter()
+        
         # P term – proportional to distance
         p_term = kp * error
+        
         # D term – asymmetric damping
         d_term = 0.0
+        
         if (
             self._pid_last_scan_time is not None
             and self._pid_last_target_x is not None
             and self._pid_last_error is not None
         ):
             time_delta = current_time - self._pid_last_scan_time
-            if time_delta > 0.001:
-                # Bar velocity: how fast the bar centre moved since last frame
-                last_bar_x   = self._pid_last_target_x - self._pid_last_error
-                bar_velocity = (error - self._pid_last_error) / time_delta
+            
+            # Extract previous bar center to find TRUE bar movement
+            last_bar_x = self._pid_last_target_x - self._pid_last_error
+            bar_delta = bar_center_x - last_bar_x
+            
+            # Frame skipping / long pause safety guard
+            if 0.001 < time_delta < 0.5:
+                # FIXED: Calculate actual bar velocity across time delta
+                bar_velocity = bar_delta / time_delta
+                
+                # Sane tracking guard: If the bar magically jumped more than 80px in 1 frame,
+                # it's an OCR/CV mismatch frame. Drop the D-term spike.
+                if abs(bar_delta) > 80:
+                    bar_velocity = 0.0
+                
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
                 bar_moving_toward_target = (
                     (bar_velocity > 0 and error > 0)
                     or (bar_velocity < 0 and error < 0)
                 )
+                
                 if error_magnitude_decreasing and bar_moving_toward_target:
                     # APPROACHING – strong damping to prevent overshoot
                     d_term = -kd * 5.0 * bar_velocity
                 else:
                     # CHASING – light damping to allow fast movement
                     d_term = -kd * 0.2 * bar_velocity
+                    
         # Update state for next frame
         self._pid_last_error      = error
         self._pid_last_target_x   = target_line_last_x
         self._pid_last_scan_time  = current_time
+        
         # Combined and clamped control signal
         control_signal = p_term + d_term
         control_signal = max(-100, min(100, control_signal))
-        print("KP: ", p_term, " KD: ", d_term, " Signal: ", control_signal)
+        
+        print(f"KP: {p_term:.2f} | KD: {d_term:.2f} | Signal: {control_signal:.2f}")
         return control_signal
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
@@ -3823,6 +3963,7 @@ class Api:
         shake_y = int((shake_top + shake_bottom) / 2)
         fish_area_center = int((fish_right - fish_left) / 2) + fish_left
         scale = self._get_scale_factor()
+        deadzone_action = 0
         # Helper Functions
         def hold_mouse(mouse_state=False):
             nonlocal mouse_down
@@ -3855,7 +3996,7 @@ class Api:
                 fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
-            # Step 2: Detection (Image coordinates)
+            # Step 2: Detection (Local coordinates)
             # Right Side (Only Triggers If dual_fishing Is True)
             if dual_fishing == "on":
                 if fishing_mode == "Line":
@@ -3877,12 +4018,10 @@ class Api:
                 arrow_indicator_x = arrow_indicator_x[0]
             except:
                 arrow_indicator_x = None
-            # Clear overlay
-            self.fish_overlay.clear()
             # Step 3: Calculations
             self.fish_overlay.clear()
             any_bar_detected_this_frame = left_x is not None and right_x is not None # Check 1
-            if any_bar_detected_this_frame:
+            if any_bar_detected_this_frame == True:
                 detection_source = 0
             else:
                 bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, fish_width)
@@ -3890,12 +4029,12 @@ class Api:
                 detection_source = 1
             if any_bar_detected_this_frame and not (left_x == None or right_x == None): # Bar Or Arrows Found
                 bar_size = abs(right_x - left_x)
-                bar_center = (left_x + bar_size / 2.0) + fish_left # Add Fish Left Here (float to preserve sub-pixel precision for velocity)
+                bar_center = (left_x + bar_size / 2.0) # Do not convert to screen coordinates
                 left_deadzone = bar_size * bar_ratio
                 right_deadzone = bar_size * bar_ratio
-                # Calculate max left and max right
-                max_left = fish_left + left_deadzone
-                max_right = fish_right - right_deadzone
+                # Calculate max left and max right (local coordinates)
+                max_left  = left_deadzone
+                max_right = (fish_right - fish_left) - right_deadzone
             else:
                 bar_size = 0
                 bar_center = None
@@ -3952,27 +4091,24 @@ class Api:
                 right_x = left_x + bar_size if not left_x == None else None
             else:
                 left_x = right_x - bar_size if not right_x == None else None
-            # Step 5: Check controller mode condition and convert everything to screen coordinates
+            # Step 5: Check controller mode condition
             if any_bar_detected_this_frame and bar_center is not None: # Bar Found
                 if note_coords is not None:
-                    # Direct Mapping (Already In Fish Space)
-                    note_screen_x = note_coords[0] + fish_left
+                    # Note X use local coordinates and note Y uses ratio coordinates
+                    note_screen_x = note_coords[0]
                     note_screen_y = note_coords[1]
                     note_screen_y_ratio = note_screen_y / (fish_bottom - fish_top)
                 else:
                     note_screen_x = None
+                    note_screen_y_ratio = None
                 if note_coords is not None and track_notes == "on":
                     if note_screen_y_ratio >= note_track_ratio:
                         fish_x = note_screen_x
                 elif track_notes == "off":
                     pass
-                # Compute Bar Left And Bar Right (Screen Coords)
-                bar_left_screen  = left_x  + fish_left if not left_x == None else None
-                bar_right_screen = right_x + fish_left if not right_x == None else None
-                fish_x_screen = fish_x + fish_left if not fish_x == None else None
                 # Important: Bar left and right check is moved below the calculation
                 try:
-                    if not bar_left_screen <= fish_x_screen <= bar_right_screen:
+                    if not left_x <= fish_x <= right_x:
                         catch_success = False
                 except:
                     pass
@@ -3988,9 +4124,8 @@ class Api:
                         controller_mode = 1
                     elif minigame_controller_mode == "predictive":
                         controller_mode = 5
-                    if track_notes == "on" or minigame_controller_mode == "predictive":
-                        if not bar_left_screen <= fish_x <= bar_right_screen:
-                            controller_mode = 2
+                    if (track_notes == "on" or minigame_controller_mode == "predictive") and not left_x <= fish_x <= right_x:
+                        controller_mode = 2
             # Step 6: Detect fish overlay and draw (image coordinates scaled with fish left)
             if self._is_fish_overlay_enabled():
                 self.fish_overlay.draw(
@@ -4012,8 +4147,11 @@ class Api:
                 )
             # Step 7: Controller (Image coordinates)
             error = (fish_x - bar_center) if bar_center is not None and fish_x is not None else 0.0
-            if controller_mode == 0 and bar_center is not None: # PID (Steady)
+            print("Bar Center: ", bar_center, " Fish X: ", fish_x)
+            print("Controller Mode: ", controller_mode, " Type: ", type(controller_mode))
+            if controller_mode == 0 and not bar_center == None: # PID (Steady)
                 control = self._steady_control(error, bar_center)
+                print("Control: ", control)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
                 # Stabilize Deadzone Checker
                 if -thresh <= error <= thresh:
@@ -4052,12 +4190,14 @@ class Api:
                         release_mouse()
             elif controller_mode == 3:
                 hold_mouse()
+                print("Max Right")
             elif controller_mode == 4:
                 release_mouse()
+                print("Max Left")
             elif controller_mode == 5 and bar_center is not None:
                 should_hold = self._predictive_control(fish_x, bar_center, 
                                                     fish_left, fish_right, 
-                                                    bar_left_screen, bar_right_screen)
+                                                    left_x, right_x)
                 if should_hold:
                     hold_mouse()
                 else:
@@ -4073,23 +4213,35 @@ class Api:
             window.show()
         except Exception:
             pass
-# Check if index.html exists
-if not os.path.exists(os.path.join(UI_PATH, "index.html")):
-    # Create and show a tkinter messagebox
-    result = messagebox.askyesno("How to set up", """
-Step 1. Open configs folder (click Yes to open)\n
-Step 2. Place the configs, images and ui folder in the configs folder\n
-Do you want to open configs folder?
-""")
-    if result == True:
-        open_base_folder()
+# Check for version
+cleaned = 0 # Failsafe
+error_message = "You have downloaded PyWare Fishing for the first time."
+try:
+    with open(os.path.join(UI_PATH, "app.js"), "r") as file:
+        first_line = file.readline().strip()
+        cleaned = first_line.replace("const APP_VERSION = ", "").replace('"', "").replace(";", "")
+    if cleaned == APP_VERSION:
+        show_setup_guide = False
+    else:
+        show_setup_guide = True
+        if APP_VERSION > cleaned:
+            error_message = f"You have updated from version {cleaned} to version {APP_VERSION}."
+        else:
+            error_message = f"""
+The macro automatically updated from version {APP_VERSION} to version {cleaned}. 
+Please redownload the EXE from the Google Drive."""
+except:
+    show_setup_guide = True
+if show_setup_guide == True:
+    dialogue = SetupGuide(error_message)
+    dialogue.mainloop()
 else:
     # =========================
     # WINDOW
     # =========================
     api = Api()
     window = webview.create_window(
-        "PyWare Fishing V4.11",
+        "PyWare Fishing V4.2",
         os.path.join(UI_PATH, "index.html"),
         js_api=api,
         width=1000,
