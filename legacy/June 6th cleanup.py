@@ -45,8 +45,6 @@ if sys.platform == "win32":
     MOUSEEVENTF_MOVE = 0x0001
     MOUSEEVENTF_LEFTDOWN = 0x0002
     MOUSEEVENTF_LEFTUP = 0x0004
-    MOUSEEVENTF_RIGHTDOWN = 0x0008
-    MOUSEEVENTF_RIGHTUP = 0x0010
     # Ctypes windows
     GWL_EXSTYLE = -20
     WS_EX_LAYERED = 0x00080000
@@ -137,28 +135,36 @@ elif sys.platform == "darwin":
         loc = Quartz.CGEventGetLocation(event)
         return loc.x, loc.y
     def _move_mouse(x, y):
-        # Expects logical points (already converted by the caller).
-        # CGWarpMouseCursorPosition works in logical coordinate space.
+        # CGWarpMouseCursorPosition expects logical points, not physical pixels.
+        # All callers pass physical-pixel coordinates (ratio × SCREEN_WIDTH), so
+        # divide by the Retina scale factor before handing off to CG.
+        scale = get_scale_factor()
+        x = int(x / scale)
+        y = int(y / scale)
         point = Quartz.CGPointMake(x, y)
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
-        print("Mouse:", x, y)
-    def _mouse_event(event_type, right=False, x=None, y=None):
-        # Expects logical points (already converted by the caller).
+    def _mouse_event(event_type, x=None, y=None):
+        scale = get_scale_factor()
         if x is None or y is None:
+            # CGEventGetLocation returns logical points — no further scaling needed.
             x, y = get_mouse_position()
+        # Caller supplied physical-pixel coordinates; convert to logical points.
+        # Always scale correctly before clicking
+        x = int(x / scale)
+        y = int(y / scale)
         event = Quartz.CGEventCreateMouseEvent(
             None,
             event_type,
             Quartz.CGPointMake(float(x), float(y)),
-            Quartz.kCGMouseButtonRight if right else Quartz.kCGMouseButtonLeft
+            Quartz.kCGMouseButtonLeft
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-        print("Mouse:", x, y)
     def _send_key(key, delay=0.05):
         keycode = MAC_KEY_MAP.get(str(key).lower())
         if keycode is None:
             return
+
         Quartz.CGEventPost(
             Quartz.kCGHIDEventTap,
             Quartz.CGEventCreateKeyboardEvent(
@@ -167,7 +173,9 @@ elif sys.platform == "darwin":
                 True
             )
         )
+
         time.sleep(delay)
+
         Quartz.CGEventPost(
             Quartz.kCGHIDEventTap,
             Quartz.CGEventCreateKeyboardEvent(
@@ -528,7 +536,9 @@ class AreaSelector:
                     "h": pixels["height"],
                 }
             self.save_areas(canvas_pixels)
+# 
 # Eyedropper class
+# 
 class Eyedropper:
     """
     Fullscreen transparent overlay for color picking using pywebview.
@@ -845,6 +855,7 @@ class Api:
         self.scale_y_1440  = self.SCREEN_HEIGHT / 1440
         # Force _grab_screen_full to rebuild the thread-local monitor dict.
         self._thread_local = threading.local()
+
     def start_eyedropper(self):
         # Toggle Off If Already Open
         if hasattr(self, "eyedropper") and self.eyedropper and self.eyedropper.is_open():
@@ -1284,19 +1295,23 @@ class Api:
                 CONFIG_DIR,
                 config_name
             )
+
             config_path = os.path.join(
                 config_folder,
                 "config.json"
             )
+
             os.makedirs(
                 config_folder,
                 exist_ok=True
             )
+
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config_data = json.load(f)
             else:
                 config_data = {}
+
             config_data["bar_areas"] = {
                 "shake": {
                     "x": 0.1041,
@@ -1323,15 +1338,18 @@ class Api:
                     "height": 0.0463
                 }
             }
+
             with open(config_path, "w") as f:
                 json.dump(
                     config_data,
                     f,
                     indent=4
                 )
+
             return {
                 "success": True
             }
+
         except Exception as e:
             return {
                 "success": False,
@@ -1343,13 +1361,18 @@ class Api:
                 webview.FileDialog.SAVE,
                 save_filename="config.json"
             )
+
             if not path:
                 return {"success": False, "error": "Cancelled"}
+
             if isinstance(path, (list, tuple)):
                 path = path[0]
+
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(settings, f, indent=4)
+
             return {"success": True, "path": path}
+
         except Exception as e:
             return {"success": False, "error": str(e)}
     def open_link(self, url):
@@ -1483,33 +1506,21 @@ class Api:
         return key_string
     # Keyboard/Mouse Functions (Platform-specific)
     # Hold Mouse
-    def hold_mouse(self, mouse=False):
+    def hold_mouse(self):
         if sys.platform == "win32":
-            if mouse:
-                windll.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-            else:
-                windll.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+            windll.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
         elif sys.platform == "darwin":
-            if mouse:
-                _mouse_event(Quartz.kCGEventRightMouseDown,right=True)
-            else:
-                _mouse_event(Quartz.kCGEventLeftMouseDown)
+            _mouse_event(Quartz.kCGEventLeftMouseDown)
         else:
-            mouse_controller.press( Button.right if mouse else Button.left )
+            mouse_controller.press(Button.left)
     # Release Mouse
-    def release_mouse(self, mouse=False):
+    def release_mouse(self):
         if sys.platform == "win32":
-            if mouse:
-                windll.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
-            else:
-                windll.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            windll.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
         elif sys.platform == "darwin":
-            if mouse:
-                _mouse_event(Quartz.kCGEventRightMouseUp,right=True)
-            else:
-                _mouse_event(Quartz.kCGEventLeftMouseUp)
+            _mouse_event(Quartz.kCGEventLeftMouseUp)
         else:
-            mouse_controller.release( Button.right if mouse else Button.left )
+            mouse_controller.release(Button.left)
     # Click At
     def _click_at(self, x, y, click_count=1):
         if sys.platform == "win32":
@@ -1523,18 +1534,14 @@ class Api:
                 if i < click_count - 1:
                     time.sleep(0.03)
         elif sys.platform == "darwin":
-            # _get_areas returns physical pixels (ratio × scale × SCREEN_W/H).
-            # CGWarp and CGEventCreate both expect logical points, so divide once here.
             scale = self._get_scale_factor()
-            lx = int(x / scale)
-            ly = int(y / scale)
             # Move cursor
-            _move_mouse(lx, ly)
+            _move_mouse(x, y)
             # Tiny movement (Roblox trick)
-            _move_mouse(lx, ly + 1)
+            _move_mouse(x, y + 1)
             for i in range(click_count):
-                _mouse_event(Quartz.kCGEventLeftMouseDown, x=lx, y=ly)
-                _mouse_event(Quartz.kCGEventLeftMouseUp, x=lx, y=ly)
+                _mouse_event(Quartz.kCGEventLeftMouseDown, x, y)
+                _mouse_event(Quartz.kCGEventLeftMouseUp, x, y)
                 if i < click_count - 1:
                     time.sleep(0.03)
         else:
@@ -1611,10 +1618,9 @@ class Api:
             if image is None:
                 return None
             frame = cgimage_to_srgb_numpy(image)
-            # Crop manually for coordinate consistency.
-            # cgimage_to_srgb_numpy already returns an owned copy, so no second
-            # .copy() is needed here — the slice is just a view into that buffer.
-            return frame[0:height, 0:width]
+            # Crop manually for coordinate consistency
+            frame = frame[0:height, 0:width]
+            return frame.copy()
         else:
             if not hasattr(thread_local, "sct"):
                 thread_local.sct = mss.mss()
@@ -1661,16 +1667,20 @@ class Api:
             self._cap_event.set()
     def _stop_active_capture(self, join_timeout=2.0):
         """Stops the current capture thread with proper cleanup and synchronization.
+        
         Args:
             join_timeout: Maximum seconds to wait for thread to exit (increased from 1.0 to 2.0)
         """
         stop_event = getattr(self, "_active_capture_stop", None)
         thread = getattr(self, "_active_capture_thread", None)
+
         if stop_event is not None:
             stop_event.set()
+
         # Wake up anything waiting on a frame
         if hasattr(self, "_cap_event"):
             self._cap_event.set()
+
         # Ensure thread exits before returning
         if (
             thread is not None
@@ -1681,11 +1691,14 @@ class Api:
             # If thread is still alive after timeout, log it (indicates a stuck thread)
             if thread.is_alive():
                 print(f"WARNING: Capture thread did not exit within {join_timeout}s")
+
         # Clean up frame and state
         with self._cap_lock:
             self._cap_frame = None
+
         if hasattr(self, "_cap_event"):
             self._cap_event.clear()
+
         self._active_capture_stop = None
         self._active_capture_thread = None
     def _start_capture(self, scan_delay):
@@ -1693,6 +1706,7 @@ class Api:
         Starts a background thread that continuously grabs full frames.
         Stops any previously running capture thread first to prevent races.
         Returns a stop_event to terminate the new thread.
+        
         IMPORTANT: Always call _stop_active_capture() before calling this to prevent
         multiple capture threads from running simultaneously (causes CPU spikes).
         """
@@ -1700,64 +1714,46 @@ class Api:
         # which causes segfaults (especially on macOS Quartz) and CPU spike
         self._stop_active_capture()
         self._cap_frame = None
+        
         # Ensure capture synchronization primitives exist
         if not hasattr(self, "_cap_lock"):
             self._cap_lock = threading.Lock()
         if not hasattr(self, "_cap_event"):
             self._cap_event = threading.Event()
         self._cap_event.clear()
-        # Back-pressure: producer skips a capture cycle if the consumer hasn't
-        # processed the previous frame yet.  Both counters are plain ints written
-        # under _cap_lock; no atomics needed because only one producer thread
-        # writes _cap_frame_id and consumers are expected to bump _cap_consumed_id.
-        self._cap_frame_id = 0
-        self._cap_consumed_id = 0
+        
         stop_event = threading.Event()
         self._active_capture_stop = stop_event  # Track the active stop event
+        
         # Enforce minimum frame rate on macOS to prevent CPU saturation
         _mac_floor = 0.033 if sys.platform == "darwin" else 0.001  # 30 FPS floor on macOS, 1ms on others
+        
         def _loop():
-            """Background capture thread loop.
-
-            Key design decisions:
-            - Back-pressure via _cap_frame_id / _cap_consumed_id: the producer skips
-              a capture cycle when the consumer hasn't yet processed the previous frame.
-              This prevents the producer and consumer from doing numpy/C work simultaneously
-              across two cores (the GIL releases during CGWindowListCreateImage / numpy
-              memcpy, so both threads genuinely run in parallel).
-            - stop_event.wait() instead of time.sleep(): wakes immediately when the
-              macro is stopped, so the thread exits without waiting out a full sleep interval.
-            """
+            """Background capture thread loop with proper sleep logic to prevent busy-waiting."""
             try:
                 thread_local = threading.local()
-                target_frame_time = max(_mac_floor, scan_delay)
                 while self.macro_running and not stop_event.is_set():
-                    # Back-pressure: skip this cycle if the consumer hasn't cleared
-                    # the previous frame yet.  We still sleep to avoid a busy-spin.
-                    with self._cap_lock:
-                        producer_ahead = (self._cap_frame_id != self._cap_consumed_id)
-                    if producer_ahead:
-                        stop_event.wait(0.005)  # 5 ms yield; wakes early on stop
-                        continue
-
                     t0 = time.perf_counter()
                     frame = self._grab_screen_full(thread_local)
+                    
+                    # Update shared frame buffer
                     with self._cap_lock:
                         self._cap_frame = frame
-                        self._cap_frame_id += 1
                         self._cap_event.set()
-
-                    # Sleep for the remainder of the target frame interval.
-                    # stop_event.wait() wakes immediately if stop is requested,
-                    # unlike time.sleep() which cannot be interrupted.
+                    
+                    # Calculate how long to sleep to maintain target frame rate
                     elapsed = time.perf_counter() - t0
+                    target_frame_time = max(_mac_floor, scan_delay)
                     sleep_for = target_frame_time - elapsed
+                    
+                    # CRITICAL FIX: Always sleep at least a tiny amount to prevent busy-loop
+                    # This prevents 50% CPU usage when capture is faster than target rate
                     if sleep_for > 0:
-                        stop_event.wait(sleep_for)
-                    else:
-                        # Over budget - yield briefly so the OS scheduler can run
-                        # the consumer and the game process.
-                        stop_event.wait(0.001)
+                        time.sleep(sleep_for)
+                    elif sleep_for > -0.001:  # Very close to target, sleep tiny amount
+                        time.sleep(0.001)  # Sleep 1ms to yield to other threads
+                    # If significantly over target (sleep_for < -0.001), don't sleep but let OS scheduler run
+                    
             finally:
                 # Clean up thread-local MSS resources
                 sct = getattr(thread_local, "sct", None)
@@ -1766,13 +1762,16 @@ class Api:
                         sct.close()
                     except Exception:
                         pass
-                # Wake any consumer blocked on _cap_event so it can detect the stop
+                
+                # Signal that thread is exiting
                 self._cap_event.set()
-                # Clear tracking references
+                
+                # Clear tracking if this is the current capture thread
                 if self._active_capture_stop is stop_event:
                     self._active_capture_stop = None
                 if self._active_capture_thread is threading.current_thread():
                     self._active_capture_thread = None
+        
         # Start capture thread as daemon so it doesn't block shutdown
         thread = threading.Thread(target=_loop, daemon=True, name="PyWareCapture")
         self._active_capture_thread = thread
@@ -1887,7 +1886,7 @@ class Api:
     def _on_fish_overlay_toggle(self, *args):
         self._apply_fish_overlay_state()
     def _get_var_number(self, key, default, cast=float):
-        """Returns a key from the GUI with Exception handling"""
+        """Read a numeric GUI setting with a safe fallback."""
         try:
             value = self.vars.get(key)
             if value is None:
@@ -2442,7 +2441,7 @@ class Api:
         self.prev_error = error
         self.last_time = now
         return output
-    def _steady_control(self, error, bar_center):
+    def _steady_control(self, error2, bar_center):
         """
         Asymmetric PD controller.
         Args:
@@ -2454,6 +2453,7 @@ class Api:
         # Gains and clamp from GUI settings
         kp       = self._get_var_number("kp", 0.93)
         kd       = self._get_var_number("kd", 0.07)
+        error = min(100, error2)
         # Reconstruct fish_x (target position) from error and bar_center
         bar_center_x   = bar_center
         target_line_last_x = bar_center_x + error  # fish_x = bar_center + error
@@ -2471,7 +2471,7 @@ class Api:
             if time_delta > 0.001:
                 # Bar velocity: how fast the bar centre moved since last frame
                 last_bar_x   = self._pid_last_target_x - self._pid_last_error
-                bar_velocity = (error - self._pid_last_error) / time_delta
+                bar_velocity = (bar_center_x - last_bar_x) / time_delta
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
                 bar_moving_toward_target = (
                     (bar_velocity > 0 and error > 0)
@@ -2483,6 +2483,7 @@ class Api:
                 else:
                     # CHASING – light damping to allow fast movement
                     d_term = -kd * 0.2 * bar_velocity
+        d_term = min(100, d_term)
         # Update state for next frame
         self._pid_last_error      = error
         self._pid_last_target_x   = target_line_last_x
@@ -2490,7 +2491,6 @@ class Api:
         # Combined and clamped control signal
         control_signal = p_term + d_term
         control_signal = max(-100, min(100, control_signal))
-        print("KP: ", p_term, " KD: ", d_term, " Signal: ", control_signal)
         return control_signal
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
@@ -2870,7 +2870,9 @@ class Api:
         # Main loop
         while self.macro_running:
             time.sleep(0.1)
+            # 
             # STEP 1: CLICK E → OPEN QUEST DIALOGUE
+            # 
             _send_key("e")
             time.sleep(1.2)
             img = self._grab_screen_full()
@@ -2888,7 +2890,9 @@ class Api:
                     break
             else:
                 self._click_at(angler_click_x, angler_click_y)
+            # 
             # STEP 2: OCR QUEST AREA — GET REQUIRED FISH TEXT
+            # 
             time.sleep(2)
             img = self._grab_screen_full()
             quest = img[quest_top:quest_bottom, quest_left:quest_right]
@@ -2907,10 +2911,14 @@ class Api:
                 self.set_status("Could not read fish name")
                 time.sleep(angler_cd)
                 continue
+            # 
             # STEP 3: OPEN BACKPACK
+            # 
             _send_key(backpack_key)
             time.sleep(0.5)
+            # 
             # STEP 4: CLICK SEARCH BAR + TYPE FISH NAME
+            # 
             self._click_at(backpack_x, backpack_y)
             time.sleep(0.25)
             # Clear previous search
@@ -2926,7 +2934,9 @@ class Api:
             for char in required_fish:
                 _send_key(char)
             time.sleep(0.5)
+            # 
             # STEP 5: LOCATE quest_text IN QUEST AREA VIA OCR AND CLICK IT
+            # 
             img = self._grab_screen_full()
             quest_region = img[quest_top:quest_bottom, quest_left:quest_right]
             gray_q = cv2.cvtColor(quest_region, cv2.COLOR_BGR2GRAY)
@@ -2966,10 +2976,14 @@ class Api:
                     f"Quest text '{required_fish}' not found via OCR, skipping click"
                 )
             time.sleep(0.25)
+            # 
             # STEP 6: CLOSE BACKPACK
+            # 
             _send_key(backpack_key)
             time.sleep(0.5)
+            # 
             # STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)
+            # 
             _send_key("e")
             time.sleep(1.2)
             img = self._grab_screen_full()
@@ -2982,7 +2996,9 @@ class Api:
                 time.sleep(1.2)
             else:
                 self._click_at(angler_click_x, angler_click_y)
+            # 
             # STEP 8: COOLDOWN
+            # 
             time.sleep(angler_cd)
     # Start enchanting
     def start_enchantment(self):
@@ -3339,7 +3355,6 @@ class Api:
                 continue
             with self._cap_lock:
                 frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id  # back-pressure release
                 self._cap_event.clear()
             if frame is None:
                 stop_event.set()
@@ -3561,7 +3576,6 @@ class Api:
                 continue
             with self._cap_lock:
                 frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id  # back-pressure release
                 self._cap_event.clear()
             if frame is None:
                 stop_event.set()
@@ -3635,7 +3649,6 @@ class Api:
                     continue
                 with self._cap_lock:
                     frame = self._cap_frame
-                    self._cap_consumed_id = self._cap_frame_id  # back-pressure release
                     self._cap_event.clear()
                 if frame is None:
                     stop_event.set()
@@ -3692,7 +3705,6 @@ class Api:
                 continue
             with self._cap_lock:
                 frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id  # back-pressure release
                 self._cap_event.clear()
             if frame is None:
                 _minigame_stop.set()
@@ -3782,59 +3794,93 @@ class Api:
             elif tranquility_mode == "Rapid" or tranquility_mode == "rapid":
                 if left_ratio is not None and left_ratio > target:
                     time.sleep(target_delay)
-                    self._send_key("d")
+                    keyboard_controller.press("d")
+                    time.sleep(0.02)
+                    keyboard_controller.release("d")
                 if right_ratio is not None and right_ratio > target:
                     time.sleep(target_delay)
-                    self._send_key("f")
+                    keyboard_controller.press("f")
+                    time.sleep(0.02)
+                    keyboard_controller.release("f")
                 if arrow_ratio is not None and arrow_ratio > target:
                     time.sleep(target_delay)
-                    self._send_key("j")
+                    keyboard_controller.press("j")
+                    time.sleep(0.02)
+                    keyboard_controller.release("j")
                 if fish_ratio is not None and fish_ratio > target:
                     time.sleep(target_delay)
-                    self._send_key("k")
+                    keyboard_controller.press("k")
+                    time.sleep(0.02)
+                    keyboard_controller.release("k")
             time.sleep(scan_delay)
     def _enter_minigame(self):
-        # Areas
+        # Get All 3 Areas
         shake_left, shake_top, shake_right, shake_bottom, _, _ = self._get_areas("shake")
+        shake_x = int((shake_left + shake_right) / 2)
+        shake_y = int((shake_top + shake_bottom) / 2)
         fish_left, fish_top, fish_right, fish_bottom, fish_width, _ = self._get_areas("fish")
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
         self._reset_pid_state()
         mouse_down = False
-        # Colors
+        minigame_controller_mode = self.vars["controller_mode"].lower()
+        controller_mode = 0
+        self._pred_prev_fish_x = None
+        self._pred_prev_bar_x = None
+        self._pred_prev_time = None
+        catch_success = True
+        self._pred_filtered_vel = 0.0
+        self._set_fish_overlay_mode("fishing")
+        # Load Values From Gui
         arrow_hex = self.vars["arrow_color"]
-        note_box_hex = self.vars["tracking_color"]
-        note_track_ratio = float(self.vars["pinion_note_ratio"] or 0.1)
-        friend_color = self.vars["friends_color"]
-        friend_tol = int(self.vars["friends_tolerance"])
-        note_box_tol = self._get_var_number("tracking_tolerance", 8)
-        arrow_tol = self._get_var_number("arrow_tolerance", 8)
-        # Minigame Settings
         bar_ratio = float(self.vars["bar_ratio_from_side"] or 0.5)
         restart_delay = float(self.vars["restart_delay"])
         track_notes = self.vars["track_notes"]
+        note_box_hex = self.vars["tracking_color"]
+        note_track_ratio = float(self.vars["pinion_note_ratio"] or 0.1)
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
         lock_cursor = (self.vars["lock_cursor"])
-        dual_fishing = (self.vars["dual_fishing"]).lower()
         fishing_mode = (self.vars["fishing_mode"])
-        minigame_controller_mode = self.vars["controller_mode"].lower()
-        # Utility Settings
-        catch_success = True
-        shake_x = int((shake_left + shake_right) / 2)
-        shake_y = int((shake_top + shake_bottom) / 2)
-        fish_area_center = int((fish_right - fish_left) / 2) + fish_left
-        scale = self._get_scale_factor()
-        # Helper Functions
-        def hold_mouse(mouse_state=False):
+        friend_color = self.vars["friends_color"]
+        friend_tol = int(self.vars["friends_tolerance"])
+        if fishing_mode == "Line":
+            line_lost_timeout = restart_delay
+            self._line_state = {
+                'initial_target_gap': None,
+                'last_target_left_x': None,
+                'last_target_right_x': None,
+                'last_left_bar_x': None,
+                'last_right_bar_x': None,
+                'is_initial_run': True
+            }
+        else:
+            line_lost_timeout = 0.0
+        try:
+            note_box_tol = int(self.vars["tracking_tolerance"])
+            arrow_tol = int(self.vars["arrow_tolerance"])
+        except:
+            note_box_tol = 8
+            arrow_tol = 8
+        self.last_bar_size = None
+        self.scan_height_ratio = None
+        self._last_should_hold = False
+        self._last_input_time = 0
+        deadzone_action = 0
+        last_line_seen_time = time.perf_counter()
+        # Hold And Release Mouse
+        def hold_mouse():
             nonlocal mouse_down
             if not mouse_down:
-                self.hold_mouse(mouse_state)
+                self.hold_mouse()
+                # Keyboard_Controller.Press(Key.Space)
                 mouse_down = True
-        def release_mouse(mouse_state=False):
+        def release_mouse():
             nonlocal mouse_down
             if mouse_down:
-                self.release_mouse(mouse_state)
+                self.release_mouse()
+                # Keyboard_Controller.Release(Key.Space)
                 mouse_down = False
-        # Start Capture Thread (with failsafe)
+        # Start Screen Capture Thread (via _start_capture so it's tracked and
+        # any previously running capture thread is stopped before this one begins)
         _minigame_stop = self._start_capture(scan_delay)
         while self.macro_running:
             # Step 1: Grab Full Screen Then Crop (Better On Macos)
@@ -3842,43 +3888,48 @@ class Api:
                 continue
             with self._cap_lock:
                 frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id  # back-pressure release
                 self._cap_event.clear()
             if frame is None:
                 _minigame_stop.set()
                 self._set_fish_overlay_mode("idle")
                 return catch_success
-            if dual_fishing == "on":
-                fish_img = frame[fish_top:fish_bottom, fish_left:fish_area_center]
-                fish_img2 = frame[fish_top:fish_bottom, fish_area_center:fish_right]
-            else:
-                fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
+            img = frame[fish_top:fish_bottom, fish_left:fish_right]
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
-            # Step 2: Detection (Image coordinates)
-            # Right Side (Only Triggers If dual_fishing Is True)
-            if dual_fishing == "on":
-                if fishing_mode == "Line":
-                    fish_x2, left_x2, right_x2 = self._do_line_search(fish_img2)
-                else:
-                    fish_x2, left_x2, right_x2 = self._do_pixel_search(fish_img2)
-                arrow_indicator_x2 = self._find_first_pixel(fish_img2, arrow_hex, arrow_tol)
-            # Left Side / Main Image
+            # cv2.imwrite("screenshot.png", frame)
+            if lock_cursor == "on": # Lock cursor if enabled
+                mouse_controller.position = (shake_x, shake_y)
+            # Step 2: Detection
             if fishing_mode == "Line":
-                fish_x, left_x, right_x = self._do_line_search(fish_img)
+                fish_x, left_x, right_x = self._do_line_search(img)
             else:
-                fish_x, left_x, right_x = self._do_pixel_search(fish_img)
-            arrow_indicator_x = self._find_first_pixel(fish_img, arrow_hex, arrow_tol)
+                fish_x, left_x, right_x = self._do_pixel_search(img)
             if track_notes == "on":
                 note_coords = self._find_color_center(note_img, note_box_hex, note_box_tol)
             else:
                 note_coords = None
+            arrow_indicator_x = self._find_first_pixel(img, arrow_hex, arrow_tol)
             try:
                 arrow_indicator_x = arrow_indicator_x[0]
             except:
                 arrow_indicator_x = None
-            # Clear overlay
-            self.fish_overlay.clear()
+            # Convert Fish X From Tuple To Int
+            if fish_x is None:
+                pass
+            elif isinstance(fish_x, (list, tuple)):
+                fish_x = fish_x[0] + fish_left
+            else:
+                fish_x = fish_x + fish_left
+            if fishing_mode == "Line":
+                line_has_full_detection = fish_x is not None and left_x is not None and right_x is not None
+                if line_has_full_detection:
+                    last_line_seen_time = time.perf_counter()
+                elif time.perf_counter() - last_line_seen_time <= line_lost_timeout:
+                    if fish_x is None and self.last_fish_x is not None:
+                        fish_x = self.last_fish_x
+                    if (left_x is None or right_x is None) and self._last_bar_left_x is not None and self._last_bar_right_x is not None:
+                        left_x = self._last_bar_left_x
+                        right_x = self._last_bar_right_x
             # Step 3: Calculations
             self.fish_overlay.clear()
             any_bar_detected_this_frame = left_x is not None and right_x is not None # Check 1
@@ -3893,21 +3944,58 @@ class Api:
                 bar_center = (left_x + bar_size / 2.0) + fish_left # Add Fish Left Here (float to preserve sub-pixel precision for velocity)
                 left_deadzone = bar_size * bar_ratio
                 right_deadzone = bar_size * bar_ratio
-                # Calculate max left and max right
                 max_left = fish_left + left_deadzone
                 max_right = fish_right - right_deadzone
             else:
                 bar_size = 0
                 bar_center = None
-                # Max left and right changed from None to 0 to prevent TypeError
                 max_left = fish_left
                 max_right = fish_right
+            if detection_source == 0:
+                self._last_bar_left_x = left_x
+                self._last_bar_right_x = right_x
+                # Cache bar variables
+                if left_x is not None and right_x is not None:
+                    bar_size = abs(right_x - left_x)
+                    if bar_size > 0:
+                        self.last_cached_box_length = bar_size
+                        # Sync Arrow Estimation Immediately
+                        self.estimated_box_length = bar_size
+                        # Cache arrow variables
+                        self._last_bar_left_x = left_x
+                        self._last_bar_right_x = right_x
+                        self._last_bar_box_size = bar_size
+                        self._last_bar_center_x = (left_x + right_x) / 2.0
+            # Fish Direction-Jump Rejection
+            if fish_x is not None:
+                if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:
+                    # Outlier Frame — Discard And Reuse Cached Value
+                    fish_x = self.last_fish_x
+                else:
+                    # Accept This Frame And Update Cache
+                    self.last_fish_x = fish_x
+                self.last_fish_x = fish_x
             if deadzone_action == 3:
                 deadzone_action = 0
             else:
                 deadzone_action = deadzone_action + 1
-            thresh = (1 - round((bar_size / fish_width), 2)) * 8 * scale
-            # Step 4: Restart and Cache (using Friend Area)
+            # Bar Validation
+            try:
+                if right_x > left_x:
+                    # Validate: right must be greater than left
+                    self._last_bar_right_x = right_x
+                    bar_center_x = (left_x + right_x) / 2.0
+                    self._last_bar_center_x = bar_center_x
+                else:
+                    pass # Invalid: right <= left, reject this detection
+                    right_x = self._last_bar_right_x  # Keep old position
+                    if right_x is not None:
+                        bar_center_x = (left_x + right_x) / 2.0
+                        self._last_bar_center_x = bar_center_x
+            except:
+                pass
+            thresh = (1 - round((bar_size / fish_width), 2)) * 0.8
+            # Step 4: Restart Method — Friend Area (green present = minigame ended)
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
             if friend_x is not None:
                 release_mouse()
@@ -3915,44 +4003,20 @@ class Api:
                 self._set_fish_overlay_mode("idle")
                 return catch_success
             # Use cached coordinates if current detection is None or bar bounds are invalid
-            bar_valid = True
-            try:
-                if abs(self._last_bar_left_x - left_x) > 100 or abs(self._last_bar_right_x - right_x) > 100:
-                    bar_valid = False
-            except:
-                pass
-            if left_x is None or right_x is None:
-                bar_valid = False
-            elif right_x <= left_x:
-                bar_valid = False
-            if bar_valid == False:
-                left_x = self._last_bar_left_x if self._last_bar_left_x is not None else 0
-                right_x = self._last_bar_right_x if self._last_bar_right_x is not None else 0
-                bar_center = (left_x + right_x) / 2.0
-            if bar_valid == True:
-                self.last_cached_box_length = bar_size
-                self.estimated_box_length = bar_size
-                self._last_bar_left_x = left_x
-                self._last_bar_right_x = right_x
-                self._last_bar_box_size = bar_size
-                self._last_bar_center_x = (left_x + right_x) / 2.0 if left_x is not None and right_x is not None else 0
-            # Fish Direction-Jump Rejection
-            fish_valid = True
-            if (self.last_fish_x is not None and fish_x is not None):
-                if abs(self.last_fish_x - fish_x) > 100:
-                    fish_valid = False
             if fish_x is None:
-                fish_x = self.last_fish_x if self.last_fish_x is not None else 0
-            if fish_valid == False:
-                fish_x = self.last_fish_x if self.last_fish_x is not None else 0
-            if fish_valid == True:
-                self.last_fish_x = fish_x if fish_x is not None else 0
+                fish_x = self.last_fish_x
+            if left_x is None or right_x is None:
+                left_x = self._last_bar_left_x
+                right_x = self._last_bar_right_x
+            elif right_x <= left_x:
+                left_x = self._last_bar_left_x
+                right_x = self._last_bar_right_x
             # Position Bar Based On State
             if not mouse_down:
                 right_x = left_x + bar_size if not left_x == None else None
             else:
                 left_x = right_x - bar_size if not right_x == None else None
-            # Step 5: Check controller mode condition and convert everything to screen coordinates
+            # Step 5: Apply Max Left/Right Calculations
             if any_bar_detected_this_frame and bar_center is not None: # Bar Found
                 if note_coords is not None:
                     # Direct Mapping (Already In Fish Space)
@@ -3969,29 +4033,30 @@ class Api:
                 # Compute Bar Left And Bar Right (Screen Coords)
                 bar_left_screen  = left_x  + fish_left if not left_x == None else None
                 bar_right_screen = right_x + fish_left if not right_x == None else None
-                fish_x_screen = fish_x + fish_left if not fish_x == None else None
                 # Important: Bar left and right check is moved below the calculation
                 try:
-                    if not bar_left_screen <= fish_x_screen <= bar_right_screen:
+                    if not bar_left_screen <= fish_x <= bar_right_screen:
                         catch_success = False
                 except:
                     pass
-                # Check controller mode
+                # Check Max Left And Max Right
+                if fish_x == None:
+                    fish_x = 0
                 if max_left and fish_x <= max_left: # Max Left And Right Check (Inside Bar)
                     controller_mode = 4
                 elif max_right and fish_x >= max_right:
                     controller_mode = 3
                 else:
-                    if minigame_controller_mode == "steady":
-                        controller_mode = 0
-                    elif minigame_controller_mode == "normal":
-                        controller_mode = 1
-                    elif minigame_controller_mode == "predictive":
-                        controller_mode = 5
-                    if track_notes == "on" or minigame_controller_mode == "predictive":
-                        if not bar_left_screen <= fish_x <= bar_right_screen:
+                    if bar_left_screen <= fish_x <= bar_right_screen:
+                        if minigame_controller_mode == "steady":
+                            controller_mode = 0
+                        elif minigame_controller_mode == "normal":
+                            controller_mode = 1
+                        elif minigame_controller_mode == "predictive":
+                            controller_mode = 5
+                    else:
+                        if track_notes == "on" or minigame_controller_mode == "predictive":
                             controller_mode = 2
-            # Step 6: Detect fish overlay and draw (image coordinates scaled with fish left)
             if self._is_fish_overlay_enabled():
                 self.fish_overlay.draw(
                     bar_center=bar_center, box_size=bar_size,
@@ -4010,21 +4075,21 @@ class Api:
                     bar_center=fish_x, box_size=10,
                     color="red", canvas_offset=fish_left
                 )
-            # Step 7: Controller (Image coordinates)
+            # Step 7: Controller
             error = (fish_x - bar_center) if bar_center is not None and fish_x is not None else 0.0
             if controller_mode == 0 and bar_center is not None: # PID (Steady)
                 control = self._steady_control(error, bar_center)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
                 # Stabilize Deadzone Checker
-                if -thresh <= error <= thresh:
+                if control > thresh:
+                    hold_mouse()
+                elif control < -thresh:
+                    release_mouse()
+                else:
                     if not deadzone_action == 0:
                         hold_mouse()
                     else:
                         release_mouse()
-                elif control > thresh:
-                    hold_mouse()
-                elif control < -thresh:
-                    release_mouse()
             elif controller_mode == 1 and bar_center is not None: # PID (Normal)
                 control = self._normal_control(error)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
@@ -4056,8 +4121,8 @@ class Api:
                 release_mouse()
             elif controller_mode == 5 and bar_center is not None:
                 should_hold = self._predictive_control(fish_x, bar_center, 
-                                                    fish_left, fish_right, 
-                                                    bar_left_screen, bar_right_screen)
+                                                   fish_left, fish_right, 
+                                                   bar_left_screen, bar_right_screen)
                 if should_hold:
                     hold_mouse()
                 else:
