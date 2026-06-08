@@ -825,18 +825,42 @@ class SetupGuide(ctk.CTk):
             "open",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         ])
+        try:
+            return Quartz.AXIsProcessTrusted()
+        except:
+            pass
 
     def open_input_monitoring(self):
         subprocess.Popen([
             "open",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
         ])
+        try:
+            listener = keyboard.Listener(
+                on_press=lambda key: None
+            )
 
+            listener.start()
+            listener.stop()
+            return True
+        except:
+            return False
     def open_screen_recording(self):
         subprocess.Popen([
             "open",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         ])
+        try:
+            with mss.mss() as sct:
+                sct.grab({
+                    "left": 0,
+                    "top": 0,
+                    "width": 10,
+                    "height": 10
+                })
+            return True
+        except:
+            return False
 class Api:
     GENERIC_PLACEHOLDERS = {
         "tolerance",
@@ -4225,7 +4249,9 @@ try:
     else:
         show_setup_guide = True
         if APP_VERSION > cleaned:
-            error_message = f"You have updated from version {cleaned} to version {APP_VERSION}."
+            error_message = f"""
+You have updated from version {cleaned} to version {APP_VERSION}.
+By default, macOS automatically resets the permissions after you update."""
         else:
             error_message = f"""
 The macro automatically updated from version {APP_VERSION} to version {cleaned}. 

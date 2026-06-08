@@ -20,7 +20,7 @@ jobs:
             - name: Install dependencies
               run: |
                   python -m pip install --upgrade pip
-                  pip install pywebview numpy mss pytesseract pynput requests opencv-python pyinstaller
+                  pip install pywebview customtkinter numpy mss pytesseract pynput requests opencv-python pyinstaller
 
             - name: Build EXE with PyInstaller
               shell: cmd
