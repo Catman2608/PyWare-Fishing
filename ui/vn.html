@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PyWare Fishing V4</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <script src="app.js"></script>
+    <div class="app">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                PyWare Fishing V4.2
+            </div>
+            <button class="tab-button active" onclick="switchTab('basic')">
+                Nền tảng
+            </button>
+            <button class="tab-button" onclick="switchTab('automation')">
+                Tự động hóa
+            </button>
+            <button class="tab-button" onclick="switchTab('utilities')">
+                Tiện ích
+            </button>
+            <div class="config-section">
+                <select id="config-select" onchange="switchConfig(this.value)"></select>
+                <div class="dropdown">
+                    <select name="macro_mode" id="macro_mode">
+                    <option value="fishing">Fishing</option>
+                    <option value="tranquility">Fishing (Tranquility)</option>
+                    <option value="appraisal">Appraisal</option>
+                    <option value="enchant">Enchant</option>
+                    <option value="angler">Angler</option>
+                    <option value="disabled">Disabled</option>
+                    </select>
+                </div>
+                <button onclick="openConfigManager()"> Manage </button>
+                <button onclick="openSupportTab()"> Support </button>
+            </div>
+        </div>
+        <div class="main-area">
+            <!-- Top Bar -->
+            <div class="topbar">
+                <div class="topbar-left">
+                    <span class="breadcrumb-current" id="active-tab-title">Basic</span>
+                    <div class="status-container">
+                        <span class="status-dot"></span>
+                        <span id="status-label" class="status-text">Ready</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Main Content -->
+            <div class="content">
+            <!-- Basic Tab -->
+            <div id="basic" class="tab-content active">
+                <div class="card">
+                    <h3>Phím tắt</h3>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Phím Khởi động</p>
+                            <input id="start_stop" type="text" placeholder="F5">
+                        </div>
+                        <div class="simple-box">
+                            <p>Phím chọn khu vực</p>
+                            <input id="change_areas" type="text" placeholder="F6">
+                        </div>
+                        <div class="simple-box">
+                            <p>Phím dừng</p>
+                            <input id="force_stop" type="text" placeholder="F7">
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Khe cần câu</p>
+                            <input id="rod_slot" type="text" placeholder="1">
+                        </div>
+                        <div class="simple-box">
+                            <p>Khe túi đựng trang bị</p>
+                            <input id="bag_slot" type="text" placeholder="2">
+                        </div>
+                        <div class="simple-box">
+                            <p>Khe đồng hồ mặt trời</p>
+                            <input id="sundial_slot" type="text" placeholder="6">
+                        </div>
+                        <div class="simple-box">
+                            <p>Khe Totem</p>
+                            <input id="target_slot" type="text" placeholder="7">
+                        </div>
+                        <div class="simple-box">
+                            <p>Khe Gương Thần Bí</p>
+                            <input id="mirror_slot" type="text" placeholder="8">
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Tùy chọn màu sắc</h3>
+                    <button onclick="startEyedropper()">Chọn màu</button>
+                    <button onclick="takeScreenshot()">Chụp ảnh màn hình</button>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Thanh bên trái</p>
+                            <input id="left_color" type="text" placeholder="#FFFFFF">
+                            <input id="left_tolerance" type="number" placeholder="8">
+                        </div>
+                        <div class="simple-box">
+                            <p>Thanh bên phải</p>
+                            <input id="right_color" type="text" placeholder="#FFFFFF">
+                            <input id="right_tolerance" type="number" placeholder="8">
+                        </div>
+                        <div class="simple-box">
+                            <p>Mũi tên</p>
+                            <input id="arrow_color" type="text" placeholder="#848587">
+                            <input id="arrow_tolerance" type="number" placeholder="8">
+                        </div>
+                        <div class="simple-box">
+                            <p>Cá</p>
+                            <input id="fish_color" type="text" placeholder="#5B4B43">
+                            <input id="fish_tolerance" type="number" placeholder="4">
+                        </div>
+                        <div class="simple-box">
+                            <p>Lắc</p>
+                            <input id="shake_color" type="text" placeholder="#FFFFFF">
+                            <input id="shake_tolerance" type="number" placeholder="5">
+                        </div>
+                        <div class="simple-box">
+                            <p>Màu xanh lá cây</p>
+                            <input id="green_cast_color" type="text" placeholder="#64a04c">
+                            <input id="green_cast_tolerance" type="number" placeholder="16">
+                        </div>
+                        <div class="simple-box">
+                            <p>Màu trắng</p>
+                            <input id="white_cast_color" type="text" placeholder="#d4d3ca">
+                            <input id="white_cast_tolerance" type="number" placeholder="20">
+                        </div>
+                        <div class="simple-box">
+                            <p>Nốt nhạc</p>
+                            <input id="tracking_color" type="text" placeholder="#149604">
+                            <input id="tracking_tolerance" type="number" placeholder="5">
+                        </div>
+                        <div class="simple-box">
+                            <p>Khu vực bạn bè</p>
+                            <input id="friends_color" type="text" placeholder="#9BFF9B">
+                            <input id="friends_tolerance" type="number" placeholder="5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Automation Tab -->
+            <div id="automation" class="tab-content">
+                <div class="card">
+                    <h3>Tùy chọn cơ bản</h3>
+                    <div class="switch2">
+                        <p>Tự động thu phóng</p>
+                        <label class="switch">
+                            <input id="auto_zoom" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Tự động làm mới</p>
+                        <label class="switch">
+                            <input id="auto_refresh" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Lớp phủ câu cá</p>
+                        <label class="switch">
+                            <input id="fish_overlay" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Lớp phủ trạng thái</p>
+                        <label class="switch">
+                            <input id="status_overlay" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Khóa con trỏ</p>
+                        <label class="switch">
+                            <input id="lock_cursor" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <hr>
+                    <div class="switch2">
+                        <p>Theo dõi nốt nhạc</p>
+                        <label class="switch">
+                            <input id="track_notes" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Câu cá kép</p>
+                        <label class="switch">
+                            <input id="dual_fishing" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <hr>
+                    <div class="text">
+                        <label>Thời gian chọn cần câu</label>
+                        <input id="select_rod_duration" type="text" placeholder="0,35">
+                    </div>
+                    <div class="dropdown">
+                        <label for="casting_mode">Chế độ đúc que:</label>
+                        <select name="casting_mode" id="casting_mode" onchange="updateCastingMode()">
+                        <option value="normal">Bình thường</option>
+                        <option value="perfect">Hoàn hảo</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="shake_mode">Chế độ lắc:</label>
+                        <select name="shake_mode" id="shake_mode">
+                        <option value="pixel">Pixel</option>
+                        <option value="circle">Vòng tròn</option>
+                        <option value="navigation">Điều hướng</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="fishing_mode">Chế độ câu cá:</label>
+                        <select name="fishing_mode" id="fishing_mode">
+                        <option value="line">Đường kẻ</option>
+                        <option value="color">Màu sắc</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card" id="perfect-cast-card">
+                    <h3>Cài đặt đúc hoàn hảo</h3>
+                    <div class="text">
+                        <label>Hết thời gian đúc</label>
+                        <input id="fall_scan_timeout" type="text" placeholder="5">
+                    </div>
+                    <div class="text">
+                        <label>Độ trễ quét</label>
+                        <input id="cast_scan_delay" type="text" placeholder="0,01">
+                    </div>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Dưới 700px/giây</p>
+                            <input id="perfect_cast_timing_700" type="text" placeholder="0,1">
+                        </div>
+                        <div class="simple-box">
+                            <p>700-800 px/giây</p>
+                            <input id="perfect_cast_timing_800" type="text" placeholder="0,08">
+                        </div>
+                        <div class="simple-box">
+                            <p>800-900 px/giây</p>
+                            <input id="perfect_cast_timing_900" type="text" placeholder="0,06">
+                        </div>
+                        <div class="simple-box">
+                            <p>900-1000 px/giây</p>
+                            <input id="perfect_cast_timing_1000" type="text" placeholder="0,04">
+                        </div>
+                        <div class="simple-box">
+                            <p>1000-1100 px/giây</p>
+                            <input id="perfect_cast_timing_1100" type="text" placeholder="0,02">
+                        </div>
+                        <div class="simple-box">
+                            <p>1100-1200 px/giây</p>
+                            <input id="perfect_cast_timing_1200" type="text" placeholder="0">
+                        </div>
+                        <div class="simple-box">
+                            <p>1200-1300 px/giây</p>
+                            <input id="perfect_cast_timing_1300" type="text" placeholder="-0,02">
+                        </div>
+                        <div class="simple-box">
+                            <p>1300-1400 px/giây</p>
+                            <input id="perfect_cast_timing_1400" type="text" placeholder="-0,04">
+                        </div>
+                        <div class="simple-box">
+                            <p>1400-1500 px/giây</p>
+                            <input id="perfect_cast_timing_1500" type="text" placeholder="-0,06">
+                        </div>
+                        <div class="simple-box">
+                            <p>1500-1600 px/giây</p>
+                            <input id="perfect_cast_timing_1600" type="text" placeholder="-0,08">
+                        </div>
+                        <div class="simple-box">
+                            <p>Trên 1600 pixel/giây</p>
+                            <input id="perfect_cast_timing_1600_plus" type="text" placeholder="-0.1">
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Cài đặt đúc</h3>
+                    <div class="text">
+                        <label>Trì hoãn</label>
+                        <input id="delay_before_cating" type="text" placeholder="0,5">
+                    </div>
+                    <div class="arrow">↓</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Khoảng thời gian</label>
+                        <input id="cast_duration" type="text" placeholder="0,5">
+                    </div>
+                    <div class="arrow">↓</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Trì hoãn</label>
+                        <input id="delay_after_casting" type="text" placeholder="1">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Rung lắc</h3>
+                    <div class="text">
+                        <label>Độ trễ rung (giây)</label>
+                        <input id="shake_scan_delay" type="text" placeholder="0,08">
+                    </div>
+                    <div class="text">
+                        <label>Lắc dự phòng (các lần thử)</label>
+                        <input id="shake_failsafe" type="text" placeholder="80">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Trò chơi nhỏ</h3>
+                    <div class="text">
+                        <label>Độ trễ quét trò chơi nhỏ (giây)</label>
+                        <input id="minigame_scan_delay" type="text" placeholder="0,01">
+                    </div>
+                    <div class="text">
+                        <label>Độ trễ khởi động lại</label>
+                        <input id="restart_delay" type="text" placeholder="2,5">
+                    </div>
+                    <div class="text">
+                        <label>Tỷ lệ thanh từ phía bên</label>
+                        <input id="bar_ratio_from_side" type="text" placeholder="0,5">
+                    </div>
+                    <div class="dropdown">
+                        <label for="controller_mode">Chế độ điều khiển:</label>
+                        <select name="controller_mode" id="controller_mode" onchange="updateControllerMode()">
+                        <option value="normal">Bình thường</option>
+                        <option value="steady">Từ từ</option>
+                        <option value="predictive">Dự đoán</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card" id="controller-normal-card">
+                    <h3>Bộ điều khiển (bình thường)</h3>
+                    <div class="text">
+                        <label>KP (Tỷ lệ thuận)</label>
+                        <input id="kp" type="text" placeholder="0,4">
+                    </div>
+                    <div class="text">
+                        <label>KD (Đạo hàm)</label>
+                        <input id="kd" type="text" placeholder="0,5">
+                    </div>
+                </div>
+                <div class="card" id="controller-steady-card" style="display:none;">
+                    <h3>Bộ điều khiển (từ từ)</h3>
+                    <div class="text">
+                        <label>KP (Tỷ lệ thuận)</label>
+                        <input id="kp" type="text" placeholder="0,4">
+                    </div>
+                    <div class="text">
+                        <label>KD (Đạo hàm)</label>
+                        <input id="kd" type="text" placeholder="0,5">
+                    </div>
+                </div>
+                <div class="card" id="controller-predictive-card" style="display:none;">
+                    <h3>Bộ điều khiển (Dự đoán)</h3>
+                    <div class="text">
+                        <label>Khoảng cách dừng</label>
+                        <input id="stopping_distance" type="text" placeholder="1.4">
+                    </div>
+                    <div class="text">
+                        <label>Làm mịn vận tốc</label>
+                        <input id="velocity_smoothing" type="text" placeholder="0,07">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Cần câu đặc biệt</h3>
+                    <div class="text">
+                        <label>Tỷ số truyền động (nốt nhạc)</label>
+                        <input id="pinion_note_ratio" type="text" placeholder="0,3">
+                    </div>
+                    <div class="dropdown">
+                        <label for="tranquility_mode">Chế độ cây gậy yên tĩnh:</label>
+                        <select name="tranquility_mode" id="tranquility_mode">
+                        <option value="rapid">Nhanh</option>
+                        <option value="steady">Vững chắc</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Tỷ lệ mục tiêu ghi chú (cây gậy yên tĩnh)</label>
+                        <input id="tranquility_note_ratio" type="text" placeholder="0,8">
+                    </div>
+                    <div class="text">
+                        <label>Lưu ý độ trễ mục tiêu (cây gậy yên tĩnh)</label>
+                        <input id="target_delay" type="text" placeholder="0">
+                    </div>
+                </div>
+            </div>
+            <!-- Utilities Tab -->
+            <div id="utilities" class="tab-content">
+                <div class="card">
+                    <h3>Đầu ra</h3>
+                    <div class="dropdown">
+                        <label for="logging_mode">Chế độ đầu ra:</label>
+                        <select name="logging_mode" id="logging_mode">
+                        <option value="Screenshot">Ảnh chụp màn hình</option>
+                        <option value="Text">Chữ</option>
+                        <option value="Disabled">Tắt</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="logging_trigger">Kích hoạt đầu ra:</label>
+                        <select name="logging_trigger" id="logging_trigger">
+                        <option value="Time">Thời gian</option>
+                        <option value="Cycles">Chu kỳ</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>URL đầu ra</label>
+                        <input id="logging_url" type="text" placeholder="___]">
+                    </div>
+                    <div class="text">
+                        <label>Tên đầu ra</label>
+                        <input id="logging_name" type="text" placeholder="Câu cá PyWare V4">
+                    </div>
+                    <div class="text">
+                        <label>Chu kỳ</label>
+                        <input id="logging_cycle" type="text" placeholder="10">
+                    </div>
+                    <div class="text">
+                        <label>Thời gian (giây)</label>
+                        <input id="logging_time" type="text" placeholder="150">
+                    </div>
+                    <button onclick="testLogging()">Kiểm tra đầu ra</button>
+                </div>
+                <div class="card">
+                    <h3>Auto Totem</h3>
+                    <div class="dropdown">
+                        <label for="auto_totem_mode">Chế độ Totem:</label>
+                        <select name="auto_totem_mode" id="auto_totem_mode">
+                        <option value="Time">Thời gian</option>
+                        <option value="Cycles">Chu kỳ</option>
+                        <option value="Disabled">Loại bỏ</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="use_sundial_mode_when">Kích hoạt đồng hồ mặt trời vào:</label>
+                        <select name="use_sundial_mode_when" id="use_sundial_mode_when">
+                        <option value="Day">Ngày</option>
+                        <option value="Night">Đêm</option>
+                        <option value="Disabled">Loại bỏ</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Chu kỳ</label>
+                        <input id="totem_cycles" type="text" placeholder="3">
+                    </div>
+                    <div class="text">
+                        <label>Thời gian (giây)</label>
+                        <input id="totem_delay" type="text" placeholder="60">
+                    </div>
+                    <div class="text">
+                        <label>Hồi chiêu đồng hồ mặt trời (giây)</label>
+                        <input id="sundial_delay" type="text" placeholder="15">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Tự động kết nối lại</h3>
+                    <div class="switch2">
+                        <p>Tự động kết nối lại</p>
+                        <label class="switch">
+                            <input id="auto_reconnect" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="text">
+                        <label>Ngưỡng kết nối</label>
+                        <input id="reconnect_threshold" type="text" placeholder="3">
+                    </div>
+                    <div class="arrow">↓</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Thời gian hồi chiêu (giây)</label>
+                        <input id="reconnect_wait_time" type="text" placeholder="60">
+                    </div>
+                    <div class="arrow">↓</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Gương X (Tỷ lệ)</label>
+                        <input id="mirror_ratio" type="text" placeholder="60">
+                    </div>
+                    <div class="text">
+                        <label>Gương Y (Tỷ lệ)</label>
+                        <input id="mirror_ratio2" type="text" placeholder="60">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Đánh giá/Phù phép (bật/tắt trong tab Cơ bản)</h3>
+                    <div class="text">
+                        <label>Đường đi Tesseract</label>
+                        <input id="tesseract_path" type="text" placeholder="/opt/homebrew/bin/tesseract">
+                    </div>
+                    <div class="dropdown">
+                        <label for="appraisal_enchant_mode">Chế độ bấm:</label>
+                        <select name="appraisal_enchant_mode" id="appraisal_enchant_mode">
+                        <option value="search">Tìm kiếm (màu lắc)</option>
+                        <option value="ratio">Tỷ lệ</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Đột biến/Phép thuật</label>
+                        <input id="mutation_enchant" type="text" placeholder="Tối màu">
+                    </div>
+                    <div class="text">
+                        <label>Nhấp chuột X (Tỷ lệ)</label>
+                        <input id="appraisal_enchant_x" type="text" placeholder="0,5">
+                    </div>
+                    <div class="text">
+                        <label>Nhấp chuột Y (Tỷ lệ)</label>
+                        <input id="appraisal_enchant_y" type="text" placeholder="0,5">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Câu cá/Nhiệm vụ (bật/tắt trong tab Cơ bản)</h3>
+                    <div class="dropdown">
+                        <label for="angler_click_mode">Chế độ bấm (nhiệm vụ):</label>
+                        <select name="angler_click_mode" id="angler_click_mode">
+                        <option value="search">Tìm kiếm (màu lắc)</option>
+                        <option value="ratio">Tỷ lệ</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Nhấp chuột X (Tỷ lệ)</label>
+                        <input id="angler_click_x" type="text" placeholder="0,5">
+                    </div>
+                    <div class="text">
+                        <label>Nhấp chuột vào Y (Tỷ lệ)</label>
+                        <input id="angler_click_y" type="text" placeholder="0,5">
+                    </div>
+                    <div class="text">
+                        <label>Chìa khóa ba lô</label>
+                        <input id="backpack_key" type="text" placeholder="G">
+                    </div>
+                    <div class="text">
+                        <label>Ba lô X (Tỷ lệ)</label>
+                        <input id="backpack_x" type="text" placeholder="0,5">
+                    </div>
+                    <div class="text">
+                        <label>Ba lô Y (Tỷ lệ)</label>
+                        <input id="backpack_y" type="text" placeholder="0,5">
+                    </div>
+                    <div class="text">
+                        <label>Thời gian hồi chiêu (giây)</label>
+                        <input id="angler_cd" type="text" placeholder="0,5">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    <!-- Config Manager Modal -->
+    <div id="config-modal-overlay" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h1>Trình quản lý cấu hình</h1>
+                <button class="modal-close" onclick="closeConfigManager()">
+                    ×
+                </button>
+            </div>
+            <div class="modal-content">
+                <button onclick="newConfig()">
+                    Cấu hình mới
+                </button>
+
+                <button onclick="deleteConfig()">
+                    Xóa cấu hình
+                </button>
+
+                <div class="button-row">
+                    <button onclick="importConfig()">
+                        Nhập cấu hình
+                    </button>
+                    <button onclick="exportConfig()">
+                        Xuất cấu hình
+                    </button>
+                </div>
+
+                <button onclick="refreshConfigs()">
+                    Làm mới cấu hình
+                </button>
+
+                <button onclick="openConfigsFolder()">
+                    Mở thư mục cấu hình
+                </button>
+
+                <div class="button-row">
+                    <button onclick="resetSettings()">
+                        Đặt lại cài đặt
+                    </button>
+                    <button onclick="resetColors()">
+                        Đặt lại màu sắc
+                    </button>
+                </div>
+
+                <button onclick="resetAreas()">
+                    Đặt lại khu vực
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- Support Modal -->
+    <div id="support-modal-overlay" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h2>Community Support</h2>
+                <button
+                    class="modal-close"
+                    onclick="closeSupportTab()">
+                    ×
+                </button>
+            </div>
+            <div class="modal-content">
+                <button onclick="openLink('https://www.youtube.com/@HexaTitanGaming')">
+                    YouTube Channel
+                </button>
+                <button onclick="openLink('https://discord.gg/aMZY8yrF8r')">
+                    Discord Community
+                </button>
+                <button onclick="openLink('https://sites.google.com/view/icf-automation-network/')">
+                    Official Website
+                </button>
+                <button onclick="openLink('https://docs.google.com/document/d/1WwWWMR-eN-R-GO42IioToHpWTgiXkLoiNE_4NeE-GsU/edit?tab=t.0')">
+                    Upcoming Features
+                </button>
+                <button onclick="openLink('https://docs.google.com/document/d/1PLYlNH6GKZ_A3XQTN8sVqUvJgx9mFxtpqKq43CocEls/edit?usp=drive_link')">
+                    Settings Explanation
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- Error Modal -->
+    <div id="error-modal-overlay" class="modal-overlay">
+        <div class="modal-window" style="max-width:900px;">
+            <div class="modal-header">
+                <h2>Macro Crashed</h2>
+                <button class="modal-close" onclick="closeErrorModal()">×</button>
+            </div>
+
+            <div class="modal-content">
+                <p>
+                    An unexpected error occurred. Please copy this traceback and
+                    send it in the bug reports channel.
+                </p>
+
+                <textarea
+                    id="error-traceback"
+                    style="
+                        width:100%;
+                        height:300px;
+                        font-family:monospace;
+                        resize:vertical;
+                    "
+                    readonly></textarea>
+
+                <br><br>
+
+                <button onclick="copyTraceback()">
+                    Copy Traceback
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

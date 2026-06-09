@@ -54,86 +54,90 @@
             <div id="basic" class="tab-content active">
                 <div class="card">
                     <h3>Hotkeys</h3>
-                    <div class="text">
-                        <label>Start Key</label>
-                        <input id=start_stop type="text" placeholder="F5">
-                    </div>
-                    <div class="text">
-                        <label>Area Selector Key</label>
-                        <input id=change_areas type="text" placeholder="F6">
-                    </div>
-                    <div class="text">
-                        <label>Stop Key</label>
-                        <input id=force_stop type="text" placeholder="F7">
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Start Key</p>
+                            <input id="start_stop" type="text" placeholder="F5">
+                        </div>
+                        <div class="simple-box">
+                            <p>Area Selector Key</p>
+                            <input id="change_areas" type="text" placeholder="F6">
+                        </div>
+                        <div class="simple-box">
+                            <p>Stop Key</p>
+                            <input id="force_stop" type="text" placeholder="F7">
+                        </div>
                     </div>
                     <hr>
-                    <div class="text">
-                        <label>Fishing Rod Slot</label>
-                        <input id=rod_slot type="text" placeholder="1">
-                    </div>
-                    <div class="text">
-                        <label>Equipment Bag Slot</label>
-                        <input id=bag_slot type="text" placeholder="2">
-                    </div>
-                    <div class="text">
-                        <label>Sundial Slot</label>
-                        <input id=sundial_slot type="text" placeholder="6">
-                    </div>
-                    <div class="text">
-                        <label>Totem Slot</label>
-                        <input id=target_slot type="text" placeholder="7">
-                    </div>
-                    <div class="text">
-                        <label>Mystic Mirror Slot</label>
-                        <input id=mirror_slot type="text" placeholder="8">
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Fishing Rod Slot</p>
+                            <input id="rod_slot" type="text" placeholder="1">
+                        </div>
+                        <div class="simple-box">
+                            <p>Equipment Bag Slot</p>
+                            <input id="bag_slot" type="text" placeholder="2">
+                        </div>
+                        <div class="simple-box">
+                            <p>Sundial Slot</p>
+                            <input id="sundial_slot" type="text" placeholder="6">
+                        </div>
+                        <div class="simple-box">
+                            <p>Totem Slot</p>
+                            <input id="target_slot" type="text" placeholder="7">
+                        </div>
+                        <div class="simple-box">
+                            <p>Mystic Mirror Slot</p>
+                            <input id="mirror_slot" type="text" placeholder="8">
+                        </div>
                     </div>
                 </div>
                 <div class="card">
                     <h3>Color Options</h3>
                     <button onclick="startEyedropper()"> Pick Colors </button>
                     <button onclick="takeScreenshot()"> Take Screenshot </button>
-                    <div class="color-grid">
-                        <div class="color-box">
+                    <div class="box-grid">
+                        <div class="simple-box">
                             <p>Left Bar</p>
                             <input id="left_color" type="text" placeholder="#FFFFFF">
                             <input id="left_tolerance" type="number" placeholder="8">
                         </div>
-                        <div class="color-box">
+                        <div class="simple-box">
                             <p>Right Bar</p>
                             <input id="right_color" type="text" placeholder="#FFFFFF">
                             <input id="right_tolerance" type="number" placeholder="8">
                         </div>
-                        <div class="color-box">
+                        <div class="simple-box">
                             <p>Arrows</p>
                             <input id="arrow_color" type="text" placeholder="#848587">
                             <input id="arrow_tolerance" type="number" placeholder="8">
                         </div>
-                        <div class="color-box">
+                        <div class="simple-box">
                             <p>Fish</p>
                             <input id="fish_color" type="text" placeholder="#5B4B43">
                             <input id="fish_tolerance" type="number" placeholder="4">
                         </div>
-                        <div class="color-box">
+                        <div class="simple-box">
                             <p>Shake</p>
                             <input id="shake_color" type="text" placeholder="#FFFFFF">
                             <input id="shake_tolerance" type="number" placeholder="5">
                         </div>
-                        <div class="color-box">
+                        <div class="simple-box">
                             <p>Green Cast</p>
                             <input id="green_cast_color" type="text" placeholder="#64a04c">
                             <input id="green_cast_tolerance" type="number" placeholder="16">
                         </div>
-                        <div class="color-box">
+                        <div class="simple-box">
                             <p>White Cast</p>
                             <input id="white_cast_color" type="text" placeholder="#d4d3ca">
                             <input id="white_cast_tolerance" type="number" placeholder="20">
                         </div>
-                        <div class="color-box">
+                        <div class="simple-box">
                             <p>Tracking</p>
                             <input id="tracking_color" type="text" placeholder="#149604">
                             <input id="tracking_tolerance" type="number" placeholder="5">
                         </div>
-                        <div class="color-box">
+                        <div class="simple-box">
                             <p>Friends Area</p>
                             <input id="friends_color" type="text" placeholder="#9BFF9B">
                             <input id="friends_tolerance" type="number" placeholder="5">
@@ -233,51 +237,53 @@
                         <label>Cast Scan Delay</label>
                         <input id=cast_scan_delay type="text" placeholder="0.01">
                     </div>
-                    <div class="text">
-                        <label>Under 700px/s</label>
-                        <input id=perfect_cast_timing_700 type="text" placeholder="0.1">
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Under 700px/s</p>
+                            <input id="perfect_cast_timing_700" type="text" placeholder="0.1">
+                        </div>
+                        <div class="simple-box">
+                            <p>700-800 px/s</p>
+                            <input id="perfect_cast_timing_800" type="text" placeholder="0.08">
+                        </div>
+                        <div class="simple-box">
+                            <p>800-900 px/s</p>
+                            <input id="perfect_cast_timing_900" type="text" placeholder="0.06">
+                        </div>
+                        <div class="simple-box">
+                            <p>900-1000 px/s</p>
+                            <input id="perfect_cast_timing_1000" type="text" placeholder="0.04">
+                        </div>
+                        <div class="simple-box">
+                            <p>1000-1100 px/s</p>
+                            <input id="perfect_cast_timing_1100" type="text" placeholder="0.02">
+                        </div>
+                        <div class="simple-box">
+                            <p>1100-1200 px/s</p>
+                            <input id="perfect_cast_timing_1200" type="text" placeholder="0">
+                        </div>
+                        <div class="simple-box">
+                            <p>1200-1300 px/s</p>
+                            <input id="perfect_cast_timing_1300" type="text" placeholder="-0.02">
+                        </div>
+                        <div class="simple-box">
+                            <p>1300-1400 px/s</p>
+                            <input id="perfect_cast_timing_1400" type="text" placeholder="-0.04">
+                        </div>
+                        <div class="simple-box">
+                            <p>1400-1500 px/s</p>
+                            <input id="perfect_cast_timing_1500" type="text" placeholder="-0.06">
+                        </div>
+                        <div class="simple-box">
+                            <p>1500-1600 px/s</p>
+                            <input id="perfect_cast_timing_1600" type="text" placeholder="-0.08">
+                        </div>
+                        <div class="simple-box">
+                            <p>1600+ px/s</p>
+                            <input id="perfect_cast_timing_1600_plus" type="text" placeholder="-0.1">
+                        </div>
                     </div>
-                    <div class="text">
-                        <label>700-800 px/s</label>
-                        <input id=perfect_cast_timing_800 type="text" placeholder="0.08">
-                    </div>
-                    <div class="text">
-                        <label>800-900 px/s</label>
-                        <input id=perfect_cast_timing_900 type="text" placeholder="0.06">
-                    </div>
-                    <div class="text">
-                        <label>900-1000 px/s</label>
-                        <input id=perfect_cast_timing_1000 type="text" placeholder="0.04">
-                    </div>
-                    <div class="text">
-                        <label>1000-1100 px/s</label>
-                        <input id=perfect_cast_timing_1100 type="text" placeholder="0.02">
-                    </div>
-                    <div class="text">
-                        <label>1100-1200 px/s</label>
-                        <input id=perfect_cast_timing_1200 type="text" placeholder="0.0">
-                    </div>
-                    <div class="text">
-                        <label>1200-1300 px/s</label>
-                        <input id=perfect_cast_timing_1300 type="text" placeholder="-0.02">
-                    </div>
-                    <div class="text">
-                        <label>1300-1400 px/s</label>
-                        <input id=perfect_cast_timing_1400 type="text" placeholder="-0.04">
-                    </div>
-                    <div class="text">
-                        <label>1400-1500 px/s</label>
-                        <input id=perfect_cast_timing_1500 type="text" placeholder="-0.06">
-                    </div>
-                    <div class="text">
-                        <label>1500-1600 px/s</label>
-                        <input id=perfect_cast_timing_1600 type="text" placeholder="-0.08">
-                    </div>
-                    <div class="text">
-                        <label>1600+ px/s</label>
-                        <input id=perfect_cast_timing_1600_plus type="text" placeholder="-0.1">
-                    </div>
-                </div>   
+                </div>
                 <div class="card">
                     <h3>Casting</h3>
                     <div class="text">

@@ -562,7 +562,7 @@ document.addEventListener("click", (e) => {
     }
 });
 document.querySelectorAll(
-    '.color-box input[type="text"]'
+    '.simple-box input[type="text"]'
 ).forEach(input => {
     function updateColorPreview() {
         const value = input.value.trim();

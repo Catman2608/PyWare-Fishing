@@ -160,7 +160,7 @@ elif sys.platform == "darwin":
             Quartz.kCGMouseButtonLeft
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-    def _send_key(key, delay=0.05):
+    self._send_key(key, delay=0.05):
         keycode = MAC_KEY_MAP.get(str(key).lower())
         if keycode is None:
             return
@@ -1554,10 +1554,10 @@ class Api:
             time.sleep(0.04)
             mouse_controller.release(Button.left)
     # Keyboard
-    def _send_key(self, key2, delay=0.05):
+    self._send_key(self, key2, delay=0.05):
         key = str(key2)
         if sys.platform == "darwin":
-            _send_key(key, delay)
+            self._send_key(key, delay)
         else:
             try:
                 keyboard_controller.press(key)
@@ -2873,7 +2873,7 @@ class Api:
             # 
             # STEP 1: CLICK E → OPEN QUEST DIALOGUE
             # 
-            _send_key("e")
+            self._send_key("e")
             time.sleep(1.2)
             img = self._grab_screen_full()
             shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
@@ -2914,7 +2914,7 @@ class Api:
             # 
             # STEP 3: OPEN BACKPACK
             # 
-            _send_key(backpack_key)
+            self._send_key(backpack_key)
             time.sleep(0.5)
             # 
             # STEP 4: CLICK SEARCH BAR + TYPE FISH NAME
@@ -2932,7 +2932,7 @@ class Api:
             time.sleep(0.1)
             # Type fish name
             for char in required_fish:
-                _send_key(char)
+                self._send_key(char)
             time.sleep(0.5)
             # 
             # STEP 5: LOCATE quest_text IN QUEST AREA VIA OCR AND CLICK IT
@@ -2979,12 +2979,12 @@ class Api:
             # 
             # STEP 6: CLOSE BACKPACK
             # 
-            _send_key(backpack_key)
+            self._send_key(backpack_key)
             time.sleep(0.5)
             # 
             # STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)
             # 
-            _send_key("e")
+            self._send_key("e")
             time.sleep(1.2)
             img = self._grab_screen_full()
             shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
@@ -3018,7 +3018,7 @@ class Api:
         time.sleep(0.1)
         while self.macro_running:
             time.sleep(0.1)
-            _send_key("e")
+            self._send_key("e")
             time.sleep(0.5)
             self._click_at(x_scaled, y_scaled)
             time.sleep(1.2)
@@ -3120,9 +3120,9 @@ class Api:
                 self.set_status("Selecting rod")
                 # Sequence
                 time.sleep(bag_delay * 1.5)
-                _send_key(bag_slot)
+                self._send_key(bag_slot)
                 time.sleep(bag_delay)
-                _send_key(rod_slot)
+                self._send_key(rod_slot)
                 time.sleep(0.2)
             # Logging
             self._check_logging_trigger(catch_rate_show)
@@ -3238,7 +3238,7 @@ class Api:
         # Use Sundial (If Needed)
         if use_sundial:
             time.sleep(0.2)
-            _send_key(sundial_slot)
+            self._send_key(sundial_slot)
             time.sleep(0.2)
             mouse_controller.position = (shake_x, shake_y)
             time.sleep(0.05)
@@ -3247,13 +3247,13 @@ class Api:
             time.sleep(sundial_delay)
         # Use Target Totem
         time.sleep(0.2)
-        _send_key(target_slot)
+        self._send_key(target_slot)
         time.sleep(0.4)
         mouse_controller.position = (shake_x, shake_y)
         time.sleep(0.05)
         self._click_at(shake_x, shake_y)
         time.sleep(1)
-        _send_key(rod_slot)
+        self._send_key(rod_slot)
         totem_success = True
         # Webhook
         if totem_success:

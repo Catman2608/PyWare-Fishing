@@ -176,6 +176,7 @@ hr {
     margin-bottom: 6px;
     letter-spacing: 0.1px;
     background: linear-gradient(to right, var(--left-gradient), var(--right-gradient));
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     text-shadow: 0 0 18px var(--accent-glow);
@@ -248,13 +249,12 @@ hr {
     }
 }
 /* Sidebar Tabs ── */
-/* Sidebar Tabs ── */
 .tab-button {
     position: relative;
     background: transparent;
     border: none;
     color: rgba(255, 255, 255, 0.78);
-    padding: 12px 14px 12px 18px;
+    padding: 14px 12px 14px 18px;
     border-radius: 12px;
     text-align: left;
     font-size: 14px;
@@ -481,13 +481,13 @@ button {
     display: none;
 }
 /* Color Grid ─ */
-.color-grid {
+.box-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 16px;
     margin-top: 15px;
 }
-.color-box {
+.simple-box {
     background: #1e1e1e;
     border: 1px solid #2d2d2d;
     border-radius: 12px;
@@ -496,15 +496,19 @@ button {
     flex-direction: column;
     gap: 10px;
 }
-/* Merged duplicate .color-box h4 blocks */
-.color-box h4 {
+/* Merged duplicate .simple-box h4 blocks */
+.simple-box p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+}
+.simple-box h4 {
     margin: 0;
     font-size: 14px;
     font-weight: 600;
     color: var(--accent-color);
     text-shadow: 0 0 8px var(--accent-glow);
 }
-.color-box input {
+.simple-box input {
     width: 100%;
     padding: 10px;
     border-radius: 10px;
@@ -574,6 +578,7 @@ button {
             var(--left-gradient),
             var(--right-gradient)
         );
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -649,7 +654,7 @@ button {
 
     animation:
         gradientFlow 4s linear infinite;
-
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 

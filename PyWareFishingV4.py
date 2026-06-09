@@ -229,7 +229,6 @@ else:
 # =========================
 CONFIGS_FOLDER = os.path.join(BASE_PATH, "configs")
 LAST_CONFIG_FILE = os.path.join(BASE_PATH, "last_config.json")
-os.makedirs(CONFIGS_FOLDER, exist_ok=True)
 # Open base folder
 def open_base_folder():
     folder = BASE_PATH
@@ -679,20 +678,33 @@ class FishOverlay:
         except Exception:
             pass
     def set_layout(self, x, y, width, height):
+        scale = get_scale_factor()
+
+        x /= scale
+        y /= scale
+        width /= scale
+        height /= scale
+
         width = max(1, int(width))
         height = max(1, int(height))
-        x = max(0, min(int(x), max(0, self.parent_app.SCREEN_WIDTH - width)))
-        y = max(0, min(int(y), max(0, self.parent_app.SCREEN_HEIGHT - height)))
-        self.x = int(x)
-        self.y = int(y)
-        self.width = int(width)
-        self.height = int(height)
+
+        x = max( 0, min( int(x), max(0, int(self.parent_app.SCREEN_WIDTH) - width) ) )
+
+        y = max( 0, min( int(y), max(0, int(self.parent_app.SCREEN_HEIGHT) - height) ) )
+
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+
         self.init_window()
+
         if not self._win:
             return
+
         try:
-            self._win.resize(self.width, self.height)
-            self._win.move(self.x, self.y)
+            self._win.resize(width, height)
+            self._win.move(x, y)
         except Exception:
             pass
     def show(self):
@@ -719,23 +731,31 @@ class FishOverlay:
         self._visible = False
     def clear(self):
         self._eval("window.fishOverlay && window.fishOverlay.clear()")
-    def draw(self, bar_center, box_size, color, canvas_offset, show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
+    def draw(self, bar_center, box_size, color, canvas_offset,
+            show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
+
         if bar_center is None:
             return
+
         scale = get_scale_factor()
         self.init_window()
-        canvas_offset = int(canvas_offset / scale)
-        half_size = int(box_size / 2 / scale) if box_size else 0
-        center_x = float(bar_center - canvas_offset)
+
+        bar_center = float(bar_center) / scale
+        canvas_offset = float(canvas_offset) / scale
+        half_size = float(box_size) / (2 * scale) if box_size else 0
+
+        center_x = bar_center - canvas_offset
+
         shape = {
-            "x1": float(bar_center - half_size - canvas_offset),
-            "x2": float(bar_center + half_size - canvas_offset),
+            "x1": center_x - half_size,
+            "x2": center_x + half_size,
             "center_x": center_x,
             "color": str(color),
             "show_bar_center": bool(show_bar_center),
             "bar_y1": max(0.0, min(1.0, float(bar_y1))),
             "bar_y2": max(0.0, min(1.0, float(bar_y2))),
         }
+
         self._eval(
             "window.fishOverlay && window.fishOverlay.draw("
             + json.dumps(shape)
@@ -754,14 +774,23 @@ class SetupGuide(ctk.CTk):
     def __init__(self, error):
         super().__init__()
 
-        self.geometry("600x550")
+        # Check if running on Windows
+        is_windows = sys.platform == "win32"
+        ctk.set_appearance_mode("dark")
+        
+        # Set different window size for Windows
+        if is_windows:
+            self.geometry("500x400")
+        else:
+            self.geometry("600x550")
+        
         self.title("PyWare Fishing Setup Guide")
         self.configure(fg_color="#05051b")
 
         ctk.CTkLabel(
             self,
             text="PyWare Fishing Setup Guide",
-            font=("Arial", 24, "bold")
+            font=(ctk.CTkFont, 24, "bold")
         ).pack(pady=(20, 10))
 
         ctk.CTkLabel(
@@ -770,32 +799,44 @@ class SetupGuide(ctk.CTk):
             wraplength=500
         ).pack(pady=(0, 20))
 
-        ctk.CTkLabel(
-            self,
-            text=(
-                "Before starting the macro, grant permissions and "
-                "copy the required folders into the PyWare Fishing directory."
-            ),
-            wraplength=500
-        ).pack(pady=(0, 20))
+        # Only show permissions text and buttons on macOS
+        if not is_windows:
+            ctk.CTkLabel(
+                self,
+                text=(
+                    "Before starting the macro, grant permissions and "
+                    "copy the required folders into the PyWare Fishing directory."
+                ),
+                wraplength=500
+            ).pack(pady=(0, 20))
 
-        ctk.CTkButton(
-            self,
-            text="Accessibility Permissions",
-            command=self.open_accessibility
-        ).pack(pady=5)
+            ctk.CTkButton(
+                self,
+                text="Accessibility Permissions",
+                command=self.open_accessibility
+            ).pack(pady=5)
 
-        ctk.CTkButton(
-            self,
-            text="Input Monitoring",
-            command=self.open_input_monitoring
-        ).pack(pady=5)
+            ctk.CTkButton(
+                self,
+                text="Input Monitoring",
+                command=self.open_input_monitoring
+            ).pack(pady=5)
 
-        ctk.CTkButton(
-            self,
-            text="Screen Recording",
-            command=self.open_screen_recording
-        ).pack(pady=5)
+            ctk.CTkButton(
+                self,
+                text="Screen Recording",
+                command=self.open_screen_recording
+            ).pack(pady=5)
+        else:
+            # Windows-specific setup text
+            ctk.CTkLabel(
+                self,
+                text=(
+                    "Before starting the macro, copy the required "
+                    "folders into the PyWare Fishing directory."
+                ),
+                wraplength=400
+            ).pack(pady=(0, 20))
 
         ctk.CTkLabel(
             self,
@@ -821,46 +862,56 @@ class SetupGuide(ctk.CTk):
         ).pack(side="bottom", pady=20)
 
     def open_accessibility(self):
-        subprocess.Popen([
-            "open",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        ])
-        try:
-            return Quartz.AXIsProcessTrusted()
-        except:
-            pass
+        if sys.platform == "darwin":
+            subprocess.Popen([
+                "open",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            ])
+            try:
+                return Quartz.AXIsProcessTrusted()
+            except:
+                pass
+        else:
+            print(f"YOU'RE ON {sys.platform.upper()} IT'S ALREADY GRANTED")
 
     def open_input_monitoring(self):
-        subprocess.Popen([
-            "open",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
-        ])
-        try:
-            listener = keyboard.Listener(
-                on_press=lambda key: None
-            )
+        if sys.platform == "darwin":
+            subprocess.Popen([
+                "open",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+            ])
+            try:
+                listener = keyboard.Listener(
+                    on_press=lambda key: None
+                )
 
-            listener.start()
-            listener.stop()
-            return True
-        except:
-            return False
+                listener.start()
+                listener.stop()
+                return True
+            except:
+                return False
+        else:
+            print(f"YOU'RE ON {sys.platform.upper()} IT'S ALREADY GRANTED")
+            
     def open_screen_recording(self):
-        subprocess.Popen([
-            "open",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-        ])
-        try:
-            with mss.mss() as sct:
-                sct.grab({
-                    "left": 0,
-                    "top": 0,
-                    "width": 10,
-                    "height": 10
-                })
-            return True
-        except:
-            return False
+        if sys.platform == "darwin":
+            subprocess.Popen([
+                "open",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            ])
+            try:
+                with mss.mss() as sct:
+                    sct.grab({
+                        "left": 0,
+                        "top": 0,
+                        "width": 10,
+                        "height": 10
+                    })
+                return True
+            except:
+                return False
+        else:
+            print(f"YOU'RE ON {sys.platform.upper()} IT'S ALREADY GRANTED")
 class Api:
     GENERIC_PLACEHOLDERS = {
         "tolerance",
@@ -931,6 +982,8 @@ class Api:
         self.fish_overlay = FishOverlay(self)
         self._fish_overlay_mode = "idle"
         self._fish_overlay_cast_bounds = None
+        # Save settings (create folder if missing)
+        os.makedirs(CONFIGS_FOLDER, exist_ok=True)
         self.load_misc_settings()
     def _refresh_screen_dimensions(self):
         """
@@ -1660,7 +1713,22 @@ class Api:
     def _send_key(self, key2, delay=0.05):
         key = str(key2)
         if sys.platform == "darwin":
-            _send_key(key, delay)
+            keycode = MAC_KEY_MAP.get(key.lower())
+            if keycode is None:
+                print(f"_send_key: no macOS keycode for '{key}'")
+                return
+            try:
+                Quartz.CGEventPost(
+                    Quartz.kCGHIDEventTap,
+                    Quartz.CGEventCreateKeyboardEvent(None, keycode, True)
+                )
+                time.sleep(delay)
+                Quartz.CGEventPost(
+                    Quartz.kCGHIDEventTap,
+                    Quartz.CGEventCreateKeyboardEvent(None, keycode, False)
+                )
+            except Exception as e:
+                print(f"Error sending key '{key}': {e}")
         else:
             try:
                 keyboard_controller.press(key)
@@ -2027,6 +2095,7 @@ class Api:
         self.fish_overlay.set_layout(x, y, width, height)
         self.fish_overlay.show()
     def _set_fish_overlay_mode(self, mode):
+        "Set the fish overlay mode to either casting, fishing and tranquility"
         self._fish_overlay_mode = mode
         self._apply_fish_overlay_state()
     def _on_fish_overlay_toggle(self, *args):
@@ -2644,8 +2713,21 @@ class Api:
                 else:
                     # CHASING – light damping to allow fast movement
                     d_term = -kd * 0.2 * bar_velocity
-                    
+        # PID validation
+        derivative_valid = True
+        try:
+            if self.last_d_term == None:
+                self.last_d_term = d_term
+            if abs(self.last_d_term - d_term) > 80:
+                derivative_valid = False
+        except:
+            pass
         # Update state for next frame
+        if derivative_valid == False:
+            d_term = self.last_d_term * 0.6 + d_term * 0.4
+            derivative_valid = True
+        if derivative_valid == True:
+            self.last_d_term = d_term
         self._pid_last_error      = error
         self._pid_last_target_x   = target_line_last_x
         self._pid_last_scan_time  = current_time
@@ -2653,8 +2735,6 @@ class Api:
         # Combined and clamped control signal
         control_signal = p_term + d_term
         control_signal = max(-100, min(100, control_signal))
-        
-        print(f"KP: {p_term:.2f} | KD: {d_term:.2f} | Signal: {control_signal:.2f}")
         return control_signal
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
@@ -3035,7 +3115,7 @@ class Api:
         while self.macro_running:
             time.sleep(0.1)
             # STEP 1: CLICK E → OPEN QUEST DIALOGUE
-            _send_key("e")
+            self._send_key("e")
             time.sleep(1.2)
             img = self._grab_screen_full()
             shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
@@ -3072,7 +3152,7 @@ class Api:
                 time.sleep(angler_cd)
                 continue
             # STEP 3: OPEN BACKPACK
-            _send_key(backpack_key)
+            self._send_key(backpack_key)
             time.sleep(0.5)
             # STEP 4: CLICK SEARCH BAR + TYPE FISH NAME
             self._click_at(backpack_x, backpack_y)
@@ -3088,7 +3168,7 @@ class Api:
             time.sleep(0.1)
             # Type fish name
             for char in required_fish:
-                _send_key(char)
+                self._send_key(char)
             time.sleep(0.5)
             # STEP 5: LOCATE quest_text IN QUEST AREA VIA OCR AND CLICK IT
             img = self._grab_screen_full()
@@ -3131,10 +3211,10 @@ class Api:
                 )
             time.sleep(0.25)
             # STEP 6: CLOSE BACKPACK
-            _send_key(backpack_key)
+            self._send_key(backpack_key)
             time.sleep(0.5)
             # STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)
-            _send_key("e")
+            self._send_key("e")
             time.sleep(1.2)
             img = self._grab_screen_full()
             shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
@@ -3166,7 +3246,7 @@ class Api:
         time.sleep(0.1)
         while self.macro_running:
             time.sleep(0.1)
-            _send_key("e")
+            self._send_key("e")
             time.sleep(0.5)
             self._click_at(x_scaled, y_scaled)
             time.sleep(1.2)
@@ -3268,9 +3348,9 @@ class Api:
                 self.set_status("Selecting rod")
                 # Sequence
                 time.sleep(bag_delay * 1.5)
-                _send_key(bag_slot)
+                self._send_key(bag_slot)
                 time.sleep(bag_delay)
-                _send_key(rod_slot)
+                self._send_key(rod_slot)
                 time.sleep(0.2)
             # Logging
             self._check_logging_trigger(catch_rate_show)
@@ -3386,7 +3466,7 @@ class Api:
         # Use Sundial (If Needed)
         if use_sundial:
             time.sleep(0.2)
-            _send_key(sundial_slot)
+            self._send_key(sundial_slot)
             time.sleep(0.2)
             mouse_controller.position = (shake_x, shake_y)
             time.sleep(0.05)
@@ -3395,13 +3475,13 @@ class Api:
             time.sleep(sundial_delay)
         # Use Target Totem
         time.sleep(0.2)
-        _send_key(target_slot)
+        self._send_key(target_slot)
         time.sleep(0.4)
         mouse_controller.position = (shake_x, shake_y)
         time.sleep(0.05)
         self._click_at(shake_x, shake_y)
         time.sleep(1)
-        _send_key(rod_slot)
+        self._send_key(rod_slot)
         totem_success = True
         # Webhook
         if totem_success:
@@ -3946,16 +4026,16 @@ class Api:
             elif tranquility_mode == "Rapid" or tranquility_mode == "rapid":
                 if left_ratio is not None and left_ratio > target:
                     time.sleep(target_delay)
-                    self._send_key("d")
+                    self.self._send_key("d")
                 if right_ratio is not None and right_ratio > target:
                     time.sleep(target_delay)
-                    self._send_key("f")
+                    self.self._send_key("f")
                 if arrow_ratio is not None and arrow_ratio > target:
                     time.sleep(target_delay)
-                    self._send_key("j")
+                    self.self._send_key("j")
                 if fish_ratio is not None and fish_ratio > target:
                     time.sleep(target_delay)
-                    self._send_key("k")
+                    self.self._send_key("k")
             time.sleep(scan_delay)
     def _enter_minigame(self):
         # Areas
@@ -3964,6 +4044,7 @@ class Api:
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
         self._reset_pid_state()
         mouse_down = False
+        self._set_fish_overlay_mode("fishing")
         # Colors
         arrow_hex = self.vars["arrow_color"]
         note_box_hex = self.vars["tracking_color"]
@@ -3988,6 +4069,7 @@ class Api:
         fish_area_center = int((fish_right - fish_left) / 2) + fish_left
         scale = self._get_scale_factor()
         deadzone_action = 0
+        canvas_offset = 0
         # Helper Functions
         def hold_mouse(mouse_state=False):
             nonlocal mouse_down
@@ -4020,6 +4102,7 @@ class Api:
                 fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
+            cv2.imwrite("screenshot.png", fish_img)
             # Step 2: Detection (Local coordinates)
             # Right Side (Only Triggers If dual_fishing Is True)
             if dual_fishing == "on":
@@ -4054,11 +4137,10 @@ class Api:
             if any_bar_detected_this_frame and not (left_x == None or right_x == None): # Bar Or Arrows Found
                 bar_size = abs(right_x - left_x)
                 bar_center = (left_x + bar_size / 2.0) # Do not convert to screen coordinates
-                left_deadzone = bar_size * bar_ratio
-                right_deadzone = bar_size * bar_ratio
+                deadzone_size = bar_size * bar_ratio
                 # Calculate max left and max right (local coordinates)
-                max_left  = left_deadzone
-                max_right = (fish_right - fish_left) - right_deadzone
+                max_left  = deadzone_size
+                max_right = (fish_right - fish_left) - deadzone_size
             else:
                 bar_size = 0
                 bar_center = None
@@ -4080,7 +4162,7 @@ class Api:
             # Use cached coordinates if current detection is None or bar bounds are invalid
             bar_valid = True
             try:
-                if abs(self._last_bar_left_x - left_x) > 100 or abs(self._last_bar_right_x - right_x) > 100:
+                if abs(self._last_bar_left_x - left_x) > 150 or abs(self._last_bar_right_x - right_x) > 150:
                     bar_valid = False
             except:
                 pass
@@ -4089,9 +4171,11 @@ class Api:
             elif right_x <= left_x:
                 bar_valid = False
             if bar_valid == False:
-                left_x = self._last_bar_left_x if self._last_bar_left_x is not None else 0
-                right_x = self._last_bar_right_x if self._last_bar_right_x is not None else 0
-                bar_center = (left_x + right_x) / 2.0
+                left_x = self._last_bar_left_x * 0.93 + left_x * 0.07 if self._last_bar_left_x is not None else 0
+                right_x = self._last_bar_right_x * 0.93 + right_x * 0.07 if self._last_bar_right_x is not None else 0
+                bar_size = right_x - left_x
+                bar_center = (left_x + bar_size / 2.0)
+                bar_valid = True
             if bar_valid == True:
                 self.last_cached_box_length = bar_size
                 self.estimated_box_length = bar_size
@@ -4102,12 +4186,14 @@ class Api:
             # Fish Direction-Jump Rejection
             fish_valid = True
             if (self.last_fish_x is not None and fish_x is not None):
-                if abs(self.last_fish_x - fish_x) > 100:
+                if abs(self.last_fish_x - fish_x) > 450:
                     fish_valid = False
             if fish_x is None:
                 fish_x = self.last_fish_x if self.last_fish_x is not None else 0
             if fish_valid == False:
-                fish_x = self.last_fish_x if self.last_fish_x is not None else 0
+                if self.last_fish_x is not None:
+                    fish_x = self.last_fish_x * 0.93 + fish_x * 0.07
+                fish_valid = True
             if fish_valid == True:
                 self.last_fish_x = fish_x if fish_x is not None else 0
             # Position Bar Based On State
@@ -4154,28 +4240,25 @@ class Api:
             if self._is_fish_overlay_enabled():
                 self.fish_overlay.draw(
                     bar_center=bar_center, box_size=bar_size,
-                    color="green", canvas_offset=fish_left,
+                    color="green", canvas_offset=canvas_offset,
                     show_bar_center=True
                 )
                 self.fish_overlay.draw(
                     bar_center=max_left, box_size=15,
-                    color="lightblue", canvas_offset=fish_left
+                    color="lightblue", canvas_offset=canvas_offset
                 )
                 self.fish_overlay.draw(
                     bar_center=max_right, box_size=15,
-                    color="lightblue", canvas_offset=fish_left
+                    color="lightblue", canvas_offset=canvas_offset
                 )
                 self.fish_overlay.draw(
                     bar_center=fish_x, box_size=10,
-                    color="red", canvas_offset=fish_left
+                    color="red", canvas_offset=canvas_offset
                 )
             # Step 7: Controller (Image coordinates)
             error = (fish_x - bar_center) if bar_center is not None and fish_x is not None else 0.0
-            print("Bar Center: ", bar_center, " Fish X: ", fish_x)
-            print("Controller Mode: ", controller_mode, " Type: ", type(controller_mode))
             if controller_mode == 0 and not bar_center == None: # PID (Steady)
                 control = self._steady_control(error, bar_center)
-                print("Control: ", control)
                 # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
                 # Stabilize Deadzone Checker
                 if -thresh <= error <= thresh:
@@ -4214,10 +4297,8 @@ class Api:
                         release_mouse()
             elif controller_mode == 3:
                 hold_mouse()
-                print("Max Right")
             elif controller_mode == 4:
                 release_mouse()
-                print("Max Left")
             elif controller_mode == 5 and bar_center is not None:
                 should_hold = self._predictive_control(fish_x, bar_center, 
                                                     fish_left, fish_right, 
@@ -4238,30 +4319,34 @@ class Api:
         except Exception:
             pass
 # Check for version
-cleaned = 0 # Failsafe
-error_message = "You have downloaded PyWare Fishing for the first time."
-try:
-    with open(os.path.join(UI_PATH, "app.js"), "r") as file:
-        first_line = file.readline().strip()
-        cleaned = first_line.replace("const APP_VERSION = ", "").replace('"', "").replace(";", "")
-    if cleaned == APP_VERSION:
-        show_setup_guide = False
-    else:
-        show_setup_guide = True
-        if APP_VERSION > cleaned:
-            error_message = f"""
-You have updated from version {cleaned} to version {APP_VERSION}.
-By default, macOS automatically resets the permissions after you update."""
+def check_setup_guide():
+    cleaned = 0 # Failsafe
+    error_message = "You have downloaded PyWare Fishing for the first time."
+    try:
+        with open(os.path.join(UI_PATH, "app.js"), "r") as file:
+            first_line = file.readline().strip()
+            cleaned = first_line.replace("const APP_VERSION = ", "").replace('"', "").replace(";", "")
+        if cleaned == APP_VERSION:
+            show_setup_guide = False
         else:
-            error_message = f"""
-The macro automatically updated from version {APP_VERSION} to version {cleaned}. 
-Please redownload the EXE from the Google Drive."""
-except:
-    show_setup_guide = True
+            show_setup_guide = True
+            if APP_VERSION > cleaned:
+                error_message = f"""
+    You have updated from version {cleaned} to version {APP_VERSION}.
+    By default, macOS automatically resets the permissions after you update."""
+            else:
+                error_message = f"""
+    The macro automatically updated from version {APP_VERSION} to version {cleaned}. 
+    Please redownload the EXE from the Google Drive."""
+    except:
+        show_setup_guide = True
+    return show_setup_guide, error_message
+show_setup_guide, error_message = check_setup_guide()
 if show_setup_guide == True:
     dialogue = SetupGuide(error_message)
     dialogue.mainloop()
-else:
+show_setup_guide, error_message = check_setup_guide()
+if show_setup_guide == False:
     # =========================
     # WINDOW
     # =========================
