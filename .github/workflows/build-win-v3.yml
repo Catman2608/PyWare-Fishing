@@ -1,0 +1,40 @@
+name: Build Windows EXE (V3)
+
+on:
+    workflow_dispatch:
+
+jobs:
+    build-windows:
+        runs-on: windows-latest
+        env:
+            FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+        steps:
+            - name: Checkout repo
+              uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+
+            - name: Install dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install customtkinter pynput opencv-python numpy mss requests gdown
+
+            - name: Build EXE with PyInstaller
+              shell: cmd
+              run: |
+                  pyinstaller --onefile --windowed PyWareFishingV3.py --name PyWareFishingV3 --icon="icon.ico"
+
+            - name: List dist contents
+              run: |
+                  dir dist
+                  dir dist\PyWareFishingV3.exe
+
+            - name: Upload EXE artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: Windows-EXE
+                  path: dist/PyWareFishingV3.exe
+                  if-no-files-found: error

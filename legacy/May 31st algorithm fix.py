@@ -603,7 +603,7 @@ class Api:
         self.last_bar_left = None
         self.last_bar_right = None
         self.last_cached_box_length = None          self.last_cached_box_length = None  #Cached Bar Size From Minigame For Arrow Estimation        self.last_input_time = 0.0
-        self.cooldown_duration = 1.0          self.cooldown_duration = 1.0  #1 Second Cooldown                #P/D State Variables        self.prev_error = 0.0              self.prev_error = 0.0      #Previous Error Term        self.last_time = None              self.last_time = None      #Timestamp Of Last Pd Sample        self.prev_measurement = None
+        self.cooldown_duration = 1.0          self.cooldown_duration = 1.0  #1 Second Cooldown                #P/D State Variables        self._pid_last_error = 0.0              self._pid_last_error = 0.0      #Previous Error Term        self._pid_last_scan_time = None              self._pid_last_scan_time = None      #Timestamp Of Last Pd Sample        self.prev_measurement = None
         self.filtered_derivative = 0.0
         self.last_bar_size = None
         self.pid_source = None          self.pid_source = None  #"Bar" Or "Arrow"        self.pid_integral = 0.0         self.pid_integral = 0.0 #Used For Normal Pid        self.pid_last_time = 0
@@ -619,7 +619,7 @@ class Api:
                 #Arrow Estimation Tracking        self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
-        self._last_bar_center_x = None
+        self._last_bar_center = None
         self.last_arrow_delta = None
                 #Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)        self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         self.current_rod_name = "Basic Rod"
@@ -1947,11 +1947,11 @@ class Api:
         Arrow fallback logic: ONLY triggers if NO bar colors were detected in this frame
         If arrow is found, it updates ONE side (whichever is closer), OTHER side uses old position
         """
-        bar_center_x = None
+        bar_center = None
         bar_left_x = None
         bar_right_x = None
                 #Arrow Estimation Logic        if not any_bar_detected_this_frame and arrow_center_x is not None:
-            last_center = self._last_bar_center_x
+            last_center = self._last_bar_center
             box_size = self._last_bar_box_size
                         #If We Have Previous Bar Data, Determine Which Side The Arrow Is On            if last_center is not None and box_size is not None and box_size > 0:
                                 #Get Last Known Bar Positions For Validation                last_left = self._last_bar_left_x
@@ -1972,8 +1972,8 @@ class Api:
                                         #Validate: Ensure Left < Right                    if bar_left_x < bar_right_x:
                         self._last_bar_left_x = bar_left_x
                         self._last_bar_right_x = bar_right_x
-                        bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                        self._last_bar_center_x = bar_center_x
+                        bar_center = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center = bar_center
                         bar_center_found = True
                                                 #Print(f"🐟 Arrow Mode: Arrow LEFT Of Center - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (kept)")                    else:
                         pass                         pass #Print(f"🐟 Arrow Mode: Invalid - Arrow Left {bar_left_x:.0f} >= Right {bar_right_x:.0f}")                else:
@@ -1984,8 +1984,8 @@ class Api:
                                         #Validate: Ensure Left < Right                    if bar_left_x < bar_right_x:
                         self._last_bar_left_x = bar_left_x
                         self._last_bar_right_x = bar_right_x
-                        bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                        self._last_bar_center_x = bar_center_x
+                        bar_center = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center = bar_center
                         bar_center_found = True
                                                 #Print(f"🐟 Arrow Mode: Arrow RIGHT Of Center - L={bar_left_x:.0f} (kept), R={bar_right_x:.0f} (arrow)")                    else:
                         pass                         pass #Print(f"🐟 Arrow Mode: Invalid - Left {bar_left_x:.0f} >= Arrow Right {bar_right_x:.0f}")                        #Fallback: Try To Establish Initial Box Size From Previous Positions            elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
@@ -1993,7 +1993,7 @@ class Api:
                 last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
                 if box_size > 0:
                     self._last_bar_box_size = box_size
-                    self._last_bar_center_x = last_center
+                    self._last_bar_center = last_center
                                         #Determine Side Based On Arrow Position Relative To Last Center                    if arrow_center_x < last_center:
                         bar_left_x = arrow_center_x
                         bar_right_x = bar_left_x + box_size
@@ -2002,8 +2002,8 @@ class Api:
                         bar_left_x = bar_right_x - box_size
                                                 #Print(f"🐟 Arrow Mode: Initial RIGHT - L={bar_left_x:.0f} (size={box_size:.0f}), R={bar_right_x:.0f} (arrow)")                    self._last_bar_left_x = bar_left_x
                     self._last_bar_right_x = bar_right_x
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
+                    bar_center = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center = bar_center
                     bar_center_found = True
                 else:
                                         #Invalid Box Size (<=0) - Use Default Based On Fish Area Width                    default_box_size = width // 2
@@ -2012,10 +2012,10 @@ class Api:
                     self._last_bar_left_x = bar_left_x
                     self._last_bar_right_x = bar_right_x
                     self._last_bar_box_size = default_box_size
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
+                    bar_center = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center = bar_center
                     bar_center_found = True
-                                        #Print(f"🐟 Arrow Mode: Invalid Box Size (<=0), Using Fish Area Width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")        return bar_center_x, bar_left_x, bar_right_x
+                                        #Print(f"🐟 Arrow Mode: Invalid Box Size (<=0), Using Fish Area Width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")        return bar_center, bar_left_x, bar_right_x
         #Main Macro Functions    def normalize_key(self, key):
         try:
             return key.char.lower()              return key.char.lower()  #Letter Keys
@@ -2263,7 +2263,7 @@ class Api:
         self.last_bar_left = None
         self.last_bar_right = None
         self.last_cached_box_length = None          self.last_cached_box_length = None  #Cached Bar Size From Minigame For Arrow Estimation        self.last_input_time = 0.0
-        self.cooldown_duration = 1.0          self.cooldown_duration = 1.0  #1 Second Cooldown                #P/D State Variables        self.prev_error = 0.0              self.prev_error = 0.0      #Previous Error Term        self.last_time = None              self.last_time = None      #Timestamp Of Last Pd Sample        self.prev_measurement = None
+        self.cooldown_duration = 1.0          self.cooldown_duration = 1.0  #1 Second Cooldown                #P/D State Variables        self._pid_last_error = 0.0              self._pid_last_error = 0.0      #Previous Error Term        self._pid_last_scan_time = None              self._pid_last_scan_time = None      #Timestamp Of Last Pd Sample        self.prev_measurement = None
         self.filtered_derivative = 0.0
         self.last_bar_size = None
         self.pid_source = None          self.pid_source = None  #"Bar" Or "Arrow"        self.pid_integral = 0.0         self.pid_integral = 0.0 #Used For Normal Pid        self.pid_last_time = 0
@@ -2279,7 +2279,7 @@ class Api:
                 #Arrow Estimation Tracking        self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
-        self._last_bar_center_x = None
+        self._last_bar_center = None
         self.last_arrow_delta = None
                 #Predictive Controller        self._pred_prev_fish_x = None
         self._pred_prev_bar_x = None
@@ -2299,8 +2299,8 @@ class Api:
                 #Gains And Clamp From GUI Settings        kp       = self._get_var_number("kp", 0.93)
         kd       = self._get_var_number("kd", 0.07)
         pd_clamp = self._get_var_number("pid_clamp", 100.0)
-                #Reconstruct Fish_x (target Position) From Error And Bar_center        bar_center_x   = bar_center
-        target_line_last_x = bar_center_x + error          target_line_last_x = bar_center_x + error  #Fish_x = Bar_center + Error        current_time = time.perf_counter()
+                #Reconstruct Fish_x (target Position) From Error And Bar_center        bar_center   = bar_center
+        target_line_last_x = bar_center + error          target_line_last_x = bar_center + error  #Fish_x = Bar_center + Error        current_time = time.perf_counter()
                 #P Term – Proportional To Distance        p_term = kp * error
                 #D Term – Asymmetric Damping        d_term = 0.0
         if (
@@ -2311,7 +2311,7 @@ class Api:
             time_delta = current_time - self._pid_last_scan_time
             if time_delta > 0.001:
                                 #Bar Velocity: How Fast The Bar Centre Moved Since Last Frame                last_bar_x   = self._pid_last_target_x - self._pid_last_error
-                bar_velocity = (bar_center_x - last_bar_x) / time_delta
+                bar_velocity = (bar_center - last_bar_x) / time_delta
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
                 bar_moving_toward_target = (
                     (bar_velocity > 0 and error > 0)
@@ -3391,7 +3391,7 @@ class Api:
                                                 #Completed: Sync Hydra-style Tracking Variables For Improved Arrow Estimation                        self._last_bar_left_x = left_x
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size
-                        self._last_bar_center_x = (left_x + right_x) / 2.0
+                        self._last_bar_center = (left_x + right_x) / 2.0
                         #Fish Direction-Jump Rejection            if fish_x is not None:
                 if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:
                                         #Outlier Frame — Discard And Reuse Cached Value                    fish_x = self.last_fish_x

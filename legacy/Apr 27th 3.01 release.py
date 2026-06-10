@@ -889,8 +889,8 @@ class App(CTk):
         self.last_cached_box_length = None  # Cached bar size from minigame for arrow estimation
 
         # P/D state variables
-        self.prev_error = 0.0      # previous error term
-        self.last_time = None      # timestamp of last PD sample
+        self._pid_last_error = 0.0      # previous error term
+        self._pid_last_scan_time = None      # timestamp of last PD sample
         self.prev_measurement = None
         self.filtered_derivative = 0.0
         self.last_bar_size = None
@@ -3188,7 +3188,7 @@ class App(CTk):
             kd = 0.2
         return kp, kd
 
-    def _pid_control(self, error, bar_center_x=None):
+    def _pid_control(self, error, bar_center=None):
         """
         Compute PD output using proportional gain system from comet reference.
         Uses velocity-based derivative with asymmetric damping.
@@ -3197,14 +3197,14 @@ class App(CTk):
         now = time.perf_counter()
         pd_clamp = float(self.vars["pid_clamp"].get() or 100)
         # first sample: initialize state and return zero control
-        if self.last_time is None:
-            self.last_time = now
-            self.prev_error = error
-            if bar_center_x is not None:
-                self.last_bar_x = bar_center_x
+        if self._pid_last_scan_time is None:
+            self._pid_last_scan_time = now
+            self._pid_last_error = error
+            if bar_center is not None:
+                self.last_bar_x = bar_center
             return 0.0
 
-        dt = now - self.last_time
+        dt = now - self._pid_last_scan_time
         if dt <= 0:
             return 0.0
 
@@ -3215,26 +3215,26 @@ class App(CTk):
 
         # D term - asymmetric damping based on situation
         d_term = 0.0
-        if bar_center_x is not None and self.last_bar_x is not None and dt > 0:
-            bar_velocity = (bar_center_x - self.last_bar_x) / dt
-            error_magnitude_decreasing = abs(error) < abs(self.prev_error) if self.prev_error is not None else False
+        if bar_center is not None and self.last_bar_x is not None and dt > 0:
+            bar_velocity = (bar_center - self.last_bar_x) / dt
+            error_magnitude_decreasing = abs(error) < abs(self._pid_last_error) if self._pid_last_error is not None else False
             bar_moving_toward_target = (bar_velocity > 0 and error > 0) or (bar_velocity < 0 and error < 0)
             damping_multiplier = 2.0 if (error_magnitude_decreasing and bar_moving_toward_target) else 0.5
             d_term = -kd * damping_multiplier * bar_velocity
         else:
             # Fallback to standard derivative
-            if self.prev_error is not None and dt > 0:
-                d_term = kd * (error - self.prev_error) / dt
+            if self._pid_last_error is not None and dt > 0:
+                d_term = kd * (error - self._pid_last_error) / dt
 
         # Combined control signal (PD controller output)
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))  # Clamp output
 
         # update history
-        self.prev_error = error
-        self.last_time = now
-        if bar_center_x is not None:
-            self.last_bar_x = bar_center_x
+        self._pid_last_error = error
+        self._pid_last_scan_time = now
+        if bar_center is not None:
+            self.last_bar_x = bar_center
 
         return control_signal
 
@@ -3242,8 +3242,8 @@ class App(CTk):
         """Reset only PD/PID control memory without touching bar estimation state."""
 
         # Core PID error + timing state + state variables (all used by _pid_control method)
-        self.prev_error = 0.0          # prevents derivative kick
-        self.last_time = None          # forces fresh dt on next frame
+        self._pid_last_error = 0.0          # prevents derivative kick
+        self._pid_last_scan_time = None          # forces fresh dt on next frame
         self.pid_last_time = None      # forces fresh dt calculation
         self.pid_prev_error = 0.0      # prevents derivative kick
         self.pid_integral = 0.0        # resets accumulated integral term

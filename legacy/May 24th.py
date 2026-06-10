@@ -281,8 +281,8 @@ class Api:
         self.last_input_time = 0.0
         self.cooldown_duration = 1.0  # 1 second cooldown
         # P/D State Variables
-        self.prev_error = 0.0      # Previous Error Term
-        self.last_time = None      # Timestamp Of Last Pd Sample
+        self._pid_last_error = 0.0      # Previous Error Term
+        self._pid_last_scan_time = None      # Timestamp Of Last Pd Sample
         self.prev_measurement = None
         self.filtered_derivative = 0.0
         self.last_bar_size = None
@@ -306,7 +306,7 @@ class Api:
         self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
-        self._last_bar_center_x = None
+        self._last_bar_center = None
         self.last_arrow_delta = None
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
@@ -1944,8 +1944,8 @@ class Api:
         pd_clamp = self._get_var_number("pid_clamp", 100.0)
 
         # Reconstruct fish_x (target position) from error and bar_center
-        bar_center_x   = bar_center
-        target_line_last_x = bar_center_x + error  # fish_x = bar_center + error
+        bar_center   = bar_center
+        target_line_last_x = bar_center + error  # fish_x = bar_center + error
 
         current_time = time.perf_counter()
 
@@ -1963,7 +1963,7 @@ class Api:
             if time_delta > 0.001:
                 # Bar velocity: how fast the bar centre moved since last frame
                 last_bar_x   = self._pid_last_target_x - self._pid_last_error
-                bar_velocity = (bar_center_x - last_bar_x) / time_delta
+                bar_velocity = (bar_center - last_bar_x) / time_delta
 
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
                 bar_moving_toward_target = (
@@ -2770,7 +2770,7 @@ class Api:
                         self._last_bar_left_x = left_x
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size
-                        self._last_bar_center_x = (left_x + right_x) / 2.0
+                        self._last_bar_center = (left_x + right_x) / 2.0
             # Fish Direction-Jump Rejection
             if fish_x is not None:
                 if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:

@@ -866,8 +866,8 @@ class App(CTk):
         self.last_cached_box_length = None  # Cached Bar Size From Minigame For Arrow Estimation
 
         # P/D State Variables
-        self.prev_error = 0.0      # Previous Error Term
-        self.last_time = None      # Timestamp Of Last Pd Sample
+        self._pid_last_error = 0.0      # Previous Error Term
+        self._pid_last_scan_time = None      # Timestamp Of Last Pd Sample
         self.prev_measurement = None
         self.filtered_derivative = 0.0
         self.last_bar_size = None
@@ -891,7 +891,7 @@ class App(CTk):
         self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
-        self._last_bar_center_x = None
+        self._last_bar_center = None
         
         self._reset_control_state()
 
@@ -3228,7 +3228,7 @@ class App(CTk):
             capture_width: Width of capture region
         
         Returns:
-            Tuple of (bar_center_x, left_x, right_x) or (None, None, None) if can't estimate
+            Tuple of (bar_center, left_x, right_x) or (None, None, None) if can't estimate
         """
         
         # Initialize tracking variables if not already done
@@ -3238,18 +3238,18 @@ class App(CTk):
             self._last_bar_right_x = None
         if not hasattr(self, '_last_bar_box_size'):
             self._last_bar_box_size = None
-        if not hasattr(self, '_last_bar_center_x'):
-            self._last_bar_center_x = None
+        if not hasattr(self, '_last_bar_center'):
+            self._last_bar_center = None
         
         # Handle missing arrow
         if arrow_centroid_x is None:
             # Return last known positions if available
-            if self._last_bar_center_x is not None:
-                return self._last_bar_center_x, self._last_bar_left_x, self._last_bar_right_x
+            if self._last_bar_center is not None:
+                return self._last_bar_center, self._last_bar_left_x, self._last_bar_right_x
             return None, None, None
         
         # Get last known values
-        last_center = self._last_bar_center_x
+        last_center = self._last_bar_center
         box_size = self._last_bar_box_size
         
         # If we have previous bar data, determine which side the arrow is on
@@ -3295,9 +3295,9 @@ class App(CTk):
                 if bar_left_x < bar_right_x:
                     self._last_bar_left_x = bar_left_x
                     self._last_bar_right_x = bar_right_x
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
-                    return bar_center_x, bar_left_x, bar_right_x
+                    bar_center = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center = bar_center
+                    return bar_center, bar_left_x, bar_right_x
             else:
                 # Arrow is on the RIGHT side - update right bar, keep left bar from memory
                 bar_right_x = arrow_centroid_x
@@ -3311,9 +3311,9 @@ class App(CTk):
                 if bar_left_x < bar_right_x:
                     self._last_bar_left_x = bar_left_x
                     self._last_bar_right_x = bar_right_x
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
-                    return bar_center_x, bar_left_x, bar_right_x
+                    bar_center = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center = bar_center
+                    return bar_center, bar_left_x, bar_right_x
         
         # Fallback: Try to establish initial box size from previous positions
         elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
@@ -3322,7 +3322,7 @@ class App(CTk):
             
             if box_size > 0:
                 self._last_bar_box_size = box_size
-                self._last_bar_center_x = last_center
+                self._last_bar_center = last_center
                 
                 # Determine side based on arrow position relative to last center
                 if arrow_centroid_x < last_center:
@@ -3334,9 +3334,9 @@ class App(CTk):
                 
                 self._last_bar_left_x = bar_left_x
                 self._last_bar_right_x = bar_right_x
-                bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                self._last_bar_center_x = bar_center_x
-                return bar_center_x, bar_left_x, bar_right_x
+                bar_center = (bar_left_x + bar_right_x) / 2.0
+                self._last_bar_center = bar_center
+                return bar_center, bar_left_x, bar_right_x
             else:
                 # Invalid box size (<=0) - use default based on capture width
                 default_box_size = capture_width // 2
@@ -3347,9 +3347,9 @@ class App(CTk):
                 self._last_bar_right_x = bar_right_x
                 self._last_bar_box_size = default_box_size
                 
-                bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                self._last_bar_center_x = bar_center_x
-                return bar_center_x, bar_left_x, bar_right_x
+                bar_center = (bar_left_x + bar_right_x) / 2.0
+                self._last_bar_center = bar_center
+                return bar_center, bar_left_x, bar_right_x
         
         else:
             # No previous data - assume a default box size based on capture width
@@ -3369,9 +3369,9 @@ class App(CTk):
             self._last_bar_right_x = bar_right_x
             self._last_bar_box_size = default_box_size
             
-            bar_center_x = (bar_left_x + bar_right_x) / 2.0
-            self._last_bar_center_x = bar_center_x
-            return bar_center_x, bar_left_x, bar_right_x
+            bar_center = (bar_left_x + bar_right_x) / 2.0
+            self._last_bar_center = bar_center
+            return bar_center, bar_left_x, bar_right_x
     # Get Values From Gui
     def _get_areas(self, area_key):
         # Apply Scale Factor
@@ -3731,7 +3731,7 @@ class App(CTk):
             kd = 0.6
         return kp, kd
 
-    def _pid_control(self, error, bar_center_x=None):
+    def _pid_control(self, error, bar_center=None):
         """
         Compute PD output using proportional gain system from comet reference.
         Uses velocity-based derivative with asymmetric damping.
@@ -3740,14 +3740,14 @@ class App(CTk):
         now = time.perf_counter()
         pd_clamp = float(self.vars["pid_clamp"].get() or 100)
         # First Sample: Initialize State And Return Zero Control
-        if self.last_time is None:
-            self.last_time = now
-            self.prev_error = error
-            if bar_center_x is not None:
-                self.last_bar_x = bar_center_x
+        if self._pid_last_scan_time is None:
+            self._pid_last_scan_time = now
+            self._pid_last_error = error
+            if bar_center is not None:
+                self.last_bar_x = bar_center
             return 0.0
 
-        dt = now - self.last_time
+        dt = now - self._pid_last_scan_time
         if dt <= 0:
             return 0.0
 
@@ -3758,9 +3758,9 @@ class App(CTk):
 
         # D Term - Asymmetric Damping Based On Situation
         d_term = 0.0
-        if bar_center_x is not None and self.last_bar_x is not None and dt > 0:
-            bar_velocity = (bar_center_x - self.last_bar_x) / dt
-            error_delta = error - self.prev_error if self.prev_error is not None else 0
+        if bar_center is not None and self.last_bar_x is not None and dt > 0:
+            bar_velocity = (bar_center - self.last_bar_x) / dt
+            error_delta = error - self._pid_last_error if self._pid_last_error is not None else 0
 
             # True if movement is reducing the error
             bar_moving_toward_target = (
@@ -3769,8 +3769,8 @@ class App(CTk):
             )
 
             error_magnitude_decreasing = (
-                abs(error) < abs(self.prev_error)
-                if self.prev_error is not None else False
+                abs(error) < abs(self._pid_last_error)
+                if self._pid_last_error is not None else False
             )
 
             damping_multiplier = 5.0 if (
@@ -3779,18 +3779,18 @@ class App(CTk):
             self.status_overlay.set_line(f"Damping Multiplier: {damping_multiplier}", row=6)
         else:
             # Fallback To Standard Derivative
-            if self.prev_error is not None and dt > 0:
-                d_term = kd * (error - self.prev_error) / dt
+            if self._pid_last_error is not None and dt > 0:
+                d_term = kd * (error - self._pid_last_error) / dt
 
         # Combined Control Signal (Pd Controller Output)
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))  # Clamp Output
 
         # Update History
-        self.prev_error = error
-        self.last_time = now
-        if bar_center_x is not None:
-            self.last_bar_x = bar_center_x
+        self._pid_last_error = error
+        self._pid_last_scan_time = now
+        if bar_center is not None:
+            self.last_bar_x = bar_center
 
         return control_signal
     
@@ -3798,8 +3798,8 @@ class App(CTk):
         """Reset controller(s) memory without touching bar estimation state."""
 
         # Core Pid Error + Timing State + State Variables (All Used By _Pid_Control Method)
-        self.prev_error = 0.0          # Prevents Derivative Kick
-        self.last_time = None          # Forces Fresh Dt On Next Frame
+        self._pid_last_error = 0.0          # Prevents Derivative Kick
+        self._pid_last_scan_time = None          # Forces Fresh Dt On Next Frame
         self.pid_last_time = None      # Forces Fresh Dt Calculation
         self.pid_prev_error = 0.0      # Prevents Derivative Kick
         self.pid_integral = 0.0        # Resets Accumulated Integral Term
@@ -3821,8 +3821,8 @@ class App(CTk):
     def _reset_pid_memory(self):
         """Reset only the live PD history used for the next bar-alignment step."""
 
-        self.prev_error = 0.0
-        self.last_time = None
+        self._pid_last_error = 0.0
+        self._pid_last_scan_time = None
         self.last_bar_x = None
         self.prev_measurement = None
         self.filtered_derivative = 0.0
@@ -4945,7 +4945,7 @@ class App(CTk):
                         self._last_bar_left_x = left_x
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size
-                        self._last_bar_center_x = (left_x + right_x) / 2.0
+                        self._last_bar_center = (left_x + right_x) / 2.0
             # Fish Direction-Jump Rejection
             if fish_x is not None:
                 if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:

@@ -1,5 +1,5 @@
 {
-    "config-select": "Default",
+    "config-select": "Requiem",
     "macro_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -61,7 +61,7 @@
     "bar_ratio_from_side": "0.5",
     "controller_mode": "steady",
     "kp": "0.6",
-    "kd": "0.4",
+    "kd": "0.6",
     "stopping_distance": "1.4",
     "velocity_smoothing": "0.07",
     "pinion_note_ratio": "0.3",

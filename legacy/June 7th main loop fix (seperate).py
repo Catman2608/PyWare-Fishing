@@ -192,7 +192,7 @@ def start():
                 self._last_bar_left_x = left_x
                 self._last_bar_right_x = right_x
                 self._last_bar_box_size = bar_size
-                self._last_bar_center_x = (left_x + right_x) / 2.0 if left_x is not None and right_x is not None else 0
+                self._last_bar_center = (left_x + right_x) / 2.0 if left_x is not None and right_x is not None else 0
             # Fish Direction-Jump Rejection
             fish_valid = True
             if (self.last_fish_x is not None and fish_x is not None):

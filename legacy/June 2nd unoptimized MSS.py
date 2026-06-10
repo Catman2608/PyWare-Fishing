@@ -724,8 +724,8 @@ class Api:
         self.last_input_time = 0.0
         self.cooldown_duration = 1.0  # 1 second cooldown
         # P/D State Variables
-        self.prev_error = 0.0      # Previous Error Term
-        self.last_time = None      # Timestamp Of Last Pd Sample
+        self._pid_last_error = 0.0      # Previous Error Term
+        self._pid_last_scan_time = None      # Timestamp Of Last Pd Sample
         self.prev_measurement = None
         self.filtered_derivative = 0.0
         self.last_bar_size = None
@@ -747,7 +747,7 @@ class Api:
         self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
-        self._last_bar_center_x = None
+        self._last_bar_center = None
         self.last_arrow_delta = None
         # PD position smoothing
         self._smooth_fish_x = None
@@ -2105,12 +2105,12 @@ class Api:
         Arrow fallback logic: ONLY triggers if NO bar colors were detected in this frame
         If arrow is found, it updates ONE side (whichever is closer), OTHER side uses old position
         """
-        bar_center_x = None
+        bar_center = None
         bar_left_x = None
         bar_right_x = None
         # Arrow estimation logic
         if not any_bar_detected_this_frame and arrow_center_x is not None:
-            last_center = self._last_bar_center_x
+            last_center = self._last_bar_center
             box_size = self._last_bar_box_size
             # If we have previous bar data, determine which side the arrow is on
             if last_center is not None and box_size is not None and box_size > 0:
@@ -2150,8 +2150,8 @@ class Api:
                     if bar_left_x < bar_right_x:
                         self._last_bar_left_x = bar_left_x
                         self._last_bar_right_x = bar_right_x
-                        bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                        self._last_bar_center_x = bar_center_x
+                        bar_center = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center = bar_center
                         bar_center_found = True
                         # print(f"🐟 Arrow mode: Arrow LEFT of center - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (kept)")
                     else:
@@ -2167,8 +2167,8 @@ class Api:
                     if bar_left_x < bar_right_x:
                         self._last_bar_left_x = bar_left_x
                         self._last_bar_right_x = bar_right_x
-                        bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                        self._last_bar_center_x = bar_center_x
+                        bar_center = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center = bar_center
                         bar_center_found = True
                         # print(f"🐟 Arrow mode: Arrow RIGHT of center - L={bar_left_x:.0f} (kept), R={bar_right_x:.0f} (arrow)")
                     else:
@@ -2179,7 +2179,7 @@ class Api:
                 last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
                 if box_size > 0:
                     self._last_bar_box_size = box_size
-                    self._last_bar_center_x = last_center
+                    self._last_bar_center = last_center
                     # Determine side based on arrow position relative to last center
                     if arrow_center_x < last_center:
                         bar_left_x = arrow_center_x
@@ -2191,8 +2191,8 @@ class Api:
                         # print(f"🐟 Arrow mode: Initial RIGHT - L={bar_left_x:.0f} (size={box_size:.0f}), R={bar_right_x:.0f} (arrow)")
                     self._last_bar_left_x = bar_left_x
                     self._last_bar_right_x = bar_right_x
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
+                    bar_center = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center = bar_center
                     bar_center_found = True
                 else:
                     # Invalid box size (<=0) - use default based on fish area width
@@ -2202,11 +2202,11 @@ class Api:
                     self._last_bar_left_x = bar_left_x
                     self._last_bar_right_x = bar_right_x
                     self._last_bar_box_size = default_box_size
-                    bar_center_x = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center_x = bar_center_x
+                    bar_center = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center = bar_center
                     bar_center_found = True
                     # print(f"🐟 Arrow mode: Invalid box size (<=0), using fish area width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")
-        return bar_center_x, bar_left_x, bar_right_x
+        return bar_center, bar_left_x, bar_right_x
     # Main macro functions
     def _get_hotkeys(self):
         try:
@@ -2486,8 +2486,8 @@ class Api:
         self.last_input_time = 0.0
         self.cooldown_duration = 1.0  # 1 second cooldown
         # P/D State Variables
-        self.prev_error = 0.0      # Previous Error Term
-        self.last_time = None      # Timestamp Of Last Pd Sample
+        self._pid_last_error = 0.0      # Previous Error Term
+        self._pid_last_scan_time = None      # Timestamp Of Last Pd Sample
         self.prev_measurement = None
         self.filtered_derivative = 0.0
         self.last_bar_size = None
@@ -2509,7 +2509,7 @@ class Api:
         self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
-        self._last_bar_center_x = None
+        self._last_bar_center = None
         self.last_arrow_delta = None
         # Predictive Controller
         self._pred_prev_fish_x = None
@@ -2534,22 +2534,22 @@ class Api:
         Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
         """
         now = time.perf_counter()
-        if self.last_time is None:
-            self.last_time = now
-            self.prev_error = error
+        if self._pid_last_scan_time is None:
+            self._pid_last_scan_time = now
+            self._pid_last_error = error
             return 0.0
-        dt = now - self.last_time
+        dt = now - self._pid_last_scan_time
         if dt <= 0:
             return 0.0
         kp       = self._get_var_number("kp", 0.93)
         kd       = self._get_var_number("kd", 0.07)
         # Derivative
-        derivative = (error - self.prev_error) / dt
+        derivative = (error - self._pid_last_error) / dt
         
         output = (kp * error + kd * derivative)
         
-        self.prev_error = error
-        self.last_time = now
+        self._pid_last_error = error
+        self._pid_last_scan_time = now
         
         return output
     def _steady_control(self, error, bar_center):
@@ -2566,8 +2566,8 @@ class Api:
         kd       = self._get_var_number("kd", 0.07)
         pd_clamp = self._get_var_number("pid_clamp", 100.0)
         # Reconstruct fish_x (target position) from error and bar_center
-        bar_center_x   = bar_center
-        target_line_last_x = bar_center_x + error  # fish_x = bar_center + error
+        bar_center   = bar_center
+        target_line_last_x = bar_center + error  # fish_x = bar_center + error
         current_time = time.perf_counter()
         # P term – proportional to distance
         p_term = kp * error
@@ -2582,7 +2582,7 @@ class Api:
             if time_delta > 0.001:
                 # Bar velocity: how fast the bar centre moved since last frame
                 last_bar_x   = self._pid_last_target_x - self._pid_last_error
-                bar_velocity = (bar_center_x - last_bar_x) / time_delta
+                bar_velocity = (bar_center - last_bar_x) / time_delta
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
                 bar_moving_toward_target = (
                     (bar_velocity > 0 and error > 0)
@@ -3823,7 +3823,7 @@ class Api:
                         self._last_bar_left_x = left_x
                         self._last_bar_right_x = right_x
                         self._last_bar_box_size = bar_size
-                        self._last_bar_center_x = (left_x + right_x) / 2.0
+                        self._last_bar_center = (left_x + right_x) / 2.0
             # Fish Direction-Jump Rejection
             if fish_x is not None:
                 if self.last_fish_x is not None and abs(fish_x - self.last_fish_x) > 200:
