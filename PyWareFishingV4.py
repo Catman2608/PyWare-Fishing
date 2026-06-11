@@ -2144,6 +2144,29 @@ class Api:
             y, x = coords[-1]  # Changed from [0] to [-1]
             return int(x), int(y)
         return None
+    def _find_color_bounds(self, frame, hex_color, tolerance=8):
+        """
+        Returns (left_x, right_x) for all matching pixels.
+        """
+        if frame is None or frame.size == 0:
+            return None
+
+        tolerance = int(np.clip(tolerance, 0, 255))
+
+        b, g, r = self._hex_to_bgr(hex_color)
+
+        target = np.array([b, g, r], dtype=np.int32)
+        frame_i = frame.astype(np.int32)
+
+        diff = frame_i - target
+        mask = np.sqrt(np.sum(diff ** 2, axis=-1)) <= tolerance
+
+        y_coords, x_coords = np.where(mask)
+
+        if len(x_coords) == 0:
+            return None
+
+        return int(np.min(x_coords)), int(np.max(x_coords))
     def _find_circles(self, frame):
         """
         Detect circles in frame using strict Hough Circle Transform for perfect circles only.
@@ -2290,13 +2313,7 @@ class Api:
             last_left = self._last_bar_left_x
             last_right = self._last_bar_right_x
             # Determine which side based on center comparison
-            if last_left is not None and last_right is not None:
-                dist_left = abs(arrow_centroid_x - last_left)
-                dist_right = abs(arrow_centroid_x - last_right)
-
-                arrow_on_left_side = dist_left < dist_right
-            else:
-                arrow_on_left_side = arrow_centroid_x < last_center
+            arrow_on_left_side = arrow_centroid_x < last_center
             # SMART VALIDATION: Check if arrow is actually near the bar we think it is
             # Calculate distances to both last known bars
             dist_to_left = abs(arrow_centroid_x - last_left) if last_left is not None else float('inf')
@@ -2424,22 +2441,26 @@ class Api:
             right_tol += 2
             fish_tol += 2
         fish_center = self._find_color_cluster(frame, fish_hex, fish_tol, 5)
-        left_bar_center = self._find_first_pixel(frame, left_bar_hex, left_tol)
-        if left_bar_center == None:
-            left_bar_center = self._find_first_pixel(frame, right_bar_hex, right_tol)
-        right_bar_center = self._find_last_pixel(frame, right_bar_hex, right_tol)
-        if right_bar_center == None:
-            right_bar_center = self._find_last_pixel(frame, left_bar_hex, left_tol)
+        bar_pixels = []
+
+        bounds = self._find_color_bounds(frame, left_bar_hex, left_tol)
+        if bounds:
+            bar_pixels.extend(bounds)
+
+        bounds = self._find_color_bounds(frame, right_bar_hex, right_tol)
+        if bounds:
+            bar_pixels.extend(bounds)
+
+        if bar_pixels:
+            left_bar_center = min(bar_pixels)
+            right_bar_center = max(bar_pixels)
+        else:
+            left_bar_center = None
+            right_bar_center = None
         try:
             fish_center = fish_center[0]
         except:
             fish_center = None
-        try:
-            left_bar_center = left_bar_center[0]
-            right_bar_center = right_bar_center[0]
-        except:
-            left_bar_center = None
-            right_bar_center = None
         return fish_center, left_bar_center, right_bar_center
     def _do_line_search(self, frame, original_width=None):
         """
@@ -2688,6 +2709,7 @@ class Api:
 
         # D term – asymmetric damping
         d_term = 0.0
+        bar_velocity = 0
         if (
             self._pid_last_scan_time is not None
             and self._pid_last_target_x is not None
@@ -2697,7 +2719,7 @@ class Api:
             if time_delta > 0.001:
                 # Bar velocity: how fast the bar centre moved since last frame
                 last_bar_x   = self._pid_last_target_x - self._pid_last_error
-                bar_velocity = (bar_center - last_bar_x) / time_delta
+                bar_velocity = (error - self._pid_last_error) / time_delta
 
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
                 bar_moving_toward_target = (
@@ -2720,6 +2742,12 @@ class Api:
         # Combined and clamped control signal
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
+        print(
+            f"Error={error:.1f} "
+            f"ErrVel={bar_velocity:.1f} "
+            f"P={p_term:.1f} "
+            f"D={d_term:.1f}"
+        )
         return control_signal
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
@@ -4030,6 +4058,7 @@ class Api:
         self._reset_pid_state()
         mouse_down = False
         self._set_fish_overlay_mode("fishing")
+        
         # Colors
         arrow_hex = self.vars["arrow_color"]
         note_box_hex = self.vars["tracking_color"]
@@ -4038,6 +4067,7 @@ class Api:
         friend_tol = int(self.vars["friends_tolerance"])
         note_box_tol = self._get_var_number("tracking_tolerance", 8)
         arrow_tol = self._get_var_number("arrow_tolerance", 8)
+        
         # Minigame Settings
         bar_ratio = float(self.vars["bar_ratio_from_side"] or 0.5)
         restart_delay = float(self.vars["restart_delay"])
@@ -4047,6 +4077,7 @@ class Api:
         dual_fishing = (self.vars["dual_fishing"]).lower()
         fishing_mode = (self.vars["fishing_mode"])
         minigame_controller_mode = self.vars["controller_mode"].lower()
+        
         # Utility Settings
         catch_success = True
         shake_x = int((shake_left + shake_right) / 2)
@@ -4055,40 +4086,68 @@ class Api:
         scale = self._get_scale_factor()
         deadzone_action = 0
         canvas_offset = 0
+        
+        # Cache variables for detection stability
+        detection_cache = {
+            'last_valid_bar_left': None,
+            'last_valid_bar_right': None,
+            'last_valid_bar_center': None,
+            'last_valid_bar_size': None,
+            'last_valid_fish_x': None,
+            'consecutive_failures': 0,
+            'last_detection_time': 0,
+            'estimation_mode': False
+        }
+        
         # Helper Functions
         def hold_mouse(mouse_state=False):
             nonlocal mouse_down
             if not mouse_down:
                 self.hold_mouse(mouse_state)
                 mouse_down = True
+        
         def release_mouse(mouse_state=False):
             nonlocal mouse_down
             if mouse_down:
                 self.release_mouse(mouse_state)
                 mouse_down = False
+        
         # Start Capture Thread (with failsafe)
         _minigame_stop = self._start_capture(scan_delay)
+        
         while self.macro_running:
             # Step 1: Grab Full Screen Then Crop (Better On Macos)
             if not self._cap_event.wait(timeout=0.5):
                 continue
+            
             with self._cap_lock:
                 frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id  # back-pressure release
+                self._cap_consumed_id = self._cap_frame_id
                 self._cap_event.clear()
+            
             if frame is None:
                 _minigame_stop.set()
                 self._set_fish_overlay_mode("idle")
                 return catch_success
+            
+            # Step 2: Crop images based on dual fishing mode
             if dual_fishing == "on":
                 fish_img = frame[fish_top:fish_bottom, fish_left:fish_area_center]
                 fish_img2 = frame[fish_top:fish_bottom, fish_area_center:fish_right]
             else:
                 fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
+            
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
-            cv2.imwrite("screenshot.png", fish_img)
-            # Step 2: Detection (Local coordinates)
+            
+            # Step 3: Detection with caching
+            self.fish_overlay.clear()
+            # Left Side / Main Image
+            if fishing_mode == "Line":
+                fish_x, left_x, right_x = self._do_line_search(fish_img)
+            else:
+                fish_x, left_x, right_x = self._do_pixel_search(fish_img)
+            
             # Right Side (Only Triggers If dual_fishing Is True)
             if dual_fishing == "on":
                 if fishing_mode == "Line":
@@ -4096,124 +4155,140 @@ class Api:
                 else:
                     fish_x2, left_x2, right_x2 = self._do_pixel_search(fish_img2)
                 arrow_indicator_x2 = self._find_first_pixel(fish_img2, arrow_hex, arrow_tol)
-            # Left Side / Main Image
-            if fishing_mode == "Line":
-                fish_x, left_x, right_x = self._do_line_search(fish_img)
-            else:
-                fish_x, left_x, right_x = self._do_pixel_search(fish_img)
+            
             arrow_indicator_x = self._find_first_pixel(fish_img, arrow_hex, arrow_tol)
+            
             if track_notes == "on":
                 note_coords = self._find_color_center(note_img, note_box_hex, note_box_tol)
             else:
                 note_coords = None
+            
+            # Extract arrow x coordinate safely
             try:
                 arrow_indicator_x = arrow_indicator_x[0]
-            except:
+            except (TypeError, IndexError):
                 arrow_indicator_x = None
-            # Step 3: Calculations
-            self.fish_overlay.clear()
-            any_bar_detected_this_frame = left_x is not None and right_x is not None # Check 1
-            if any_bar_detected_this_frame == True:
+            
+            # Step 4: Bar detection with cache fallback
+            bar_detected = (left_x is not None and right_x is not None)
+            
+            if bar_detected:
+                # Valid detection - update cache
+                detection_cache['last_valid_bar_left'] = left_x
+                detection_cache['last_valid_bar_right'] = right_x
+                detection_cache['last_valid_bar_center'] = (left_x + right_x) / 2.0
+                detection_cache['last_valid_bar_size'] = abs(right_x - left_x)
+                detection_cache['consecutive_failures'] = 0
+                detection_cache['estimation_mode'] = False
+                bar_center = detection_cache['last_valid_bar_center']
+                bar_size = detection_cache['last_valid_bar_size']
                 detection_source = 0
             else:
-                bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, fish_width)
-                any_bar_detected_this_frame = True # Check 2
-                detection_source = 1
-            if any_bar_detected_this_frame and not (left_x == None or right_x == None): # Bar Or Arrows Found
-                bar_size = abs(right_x - left_x)
-                bar_center = (left_x + bar_size / 2.0) # Do not convert to screen coordinates
+                # Detection failed - use cache or estimation
+                detection_cache['consecutive_failures'] += 1
+                
+                if detection_cache['last_valid_bar_left'] is not None:
+                    # Use cached values if available
+                    left_x = detection_cache['last_valid_bar_left']
+                    right_x = detection_cache['last_valid_bar_right']
+                    bar_size = detection_cache['last_valid_bar_size']
+                    
+                    # Only estimate if arrow indicator exists and cache is stale
+                    if arrow_indicator_x is not None and detection_cache['consecutive_failures'] > 3:
+                        estimated_center, left_x, right_x = self._update_arrow_box_estimation(
+                            arrow_indicator_x, fish_width
+                        )
+                        if estimated_center is not None:
+                            bar_center = estimated_center
+                            detection_cache['estimation_mode'] = True
+                        else:
+                            bar_center = detection_cache['last_valid_bar_center']
+                    else:
+                        bar_center = detection_cache['last_valid_bar_center']
+                    detection_source = 1
+                else:
+                    # No cache available, try estimation
+                    if arrow_indicator_x is not None:
+                        bar_center, left_x, right_x = self._update_arrow_box_estimation(
+                            arrow_indicator_x, fish_width
+                        )
+                        if bar_center is not None:
+                            bar_size = abs(right_x - left_x) if right_x and left_x else 100
+                            detection_source = 2
+                        else:
+                            bar_center = None
+                            bar_size = 0
+                    else:
+                        bar_center = None
+                        bar_size = 0
+            
+            # Step 5: Validate and sanitize detection results
+            if bar_center is not None and left_x is not None and right_x is not None:
+                # Ensure bar_size is positive and reasonable
+                bar_size = max(bar_size, 10)  # Minimum bar size
+                bar_size = min(bar_size, fish_width)  # Maximum bar size
+                
                 deadzone_size = bar_size * bar_ratio
-                # Calculate max left and max right (local coordinates)
-                max_left  = deadzone_size
+                max_left = deadzone_size
                 max_right = (fish_right - fish_left) - deadzone_size
+                
+                # Clamp max bounds
+                max_left = max(0, min(max_left, fish_width))
+                max_right = max(0, min(max_right, fish_width))
             else:
                 bar_size = 0
                 bar_center = None
-                # Max left and right changed from None to 0 to prevent TypeError
                 max_left = fish_left
                 max_right = fish_right
-            if deadzone_action == 3:
-                deadzone_action = 0
+            
+            # Step 6: Update deadzone action counter
+            deadzone_action = (deadzone_action + 1) % 4
+            
+            # Step 7: Calculate threshold
+            if bar_size > 0:
+                thresh = max(1, (1 - round((bar_size / fish_width), 2)) * 8 * scale)
             else:
-                deadzone_action = deadzone_action + 1
-            thresh = (1 - round((bar_size / fish_width), 2)) * 8 * scale
-            # Step 4: Restart and Cache (using Friend Area)
+                thresh = 5  # Default threshold
+            
+            # Step 8: Restart detection (using Friend Area)
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
             if friend_x is not None:
                 release_mouse()
                 time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
                 return catch_success
-            # Use cached coordinates if current detection is None or bar bounds are invalid
-            bar_valid = True
-            try:
-                if abs(self._last_bar_left_x - left_x) > 80 or abs(self._last_bar_right_x - right_x) > 80:
-                    if left_x == 0 or right_x == 0 or self._last_bar_left_x == 0 or self._last_bar_right_x == 0:
-                        bar_valid = True
-                    else:
-                        bar_valid = False
-            except:
-                pass
-            if left_x is None or right_x is None:
-                bar_valid = False
-            elif right_x <= left_x:
-                bar_valid = False
-            if bar_valid == False:
-                left_x = self._last_bar_left_x * 0.93 + left_x * 0.07 if self._last_bar_left_x is not None else 0
-                right_x = self._last_bar_right_x * 0.93 + right_x * 0.07 if self._last_bar_right_x is not None else 0
-                bar_size = right_x - left_x
-                bar_center = (left_x + bar_size / 2.0)
-                bar_valid = True
-            if bar_valid == True:
-                self.last_cached_box_length = bar_size
-                self.estimated_box_length = bar_size
-                self._last_bar_left_x = left_x
-                self._last_bar_right_x = right_x
-                self._last_bar_box_size = bar_size
-                self._last_bar_center = (left_x + right_x) / 2.0 if left_x is not None and right_x is not None else 0
-            # Fish Direction-Jump Rejection
-            fish_valid = True
-            if (self.last_fish_x is not None and fish_x is not None):
-                if abs(self.last_fish_x - fish_x) > 450:
-                    fish_valid = False
-            if fish_x is None:
-                fish_x = self.last_fish_x if self.last_fish_x is not None else 0
-            if fish_valid == False:
-                if self.last_fish_x is not None:
-                    fish_x = self.last_fish_x * 0.93 + fish_x * 0.07
-                fish_valid = True
-            if fish_valid == True:
-                self.last_fish_x = fish_x if fish_x is not None else 0
-            # Position Bar Based On State
-            if not mouse_down:
-                right_x = left_x + bar_size if not left_x == None else None
-            else:
-                left_x = right_x - bar_size if not right_x == None else None
-            # Step 5: Check controller mode condition
-            if any_bar_detected_this_frame and bar_center is not None: # Bar Found
-                if note_coords is not None:
-                    # Note X use local coordinates and note Y uses ratio coordinates
-                    note_screen_x = note_coords[0]
-                    note_screen_y = note_coords[1]
-                    note_screen_y_ratio = note_screen_y / (fish_bottom - fish_top)
-                else:
-                    note_screen_x = None
-                    note_screen_y_ratio = None
-                if note_coords is not None and track_notes == "on":
-                    if note_screen_y_ratio >= note_track_ratio:
-                        fish_x = note_screen_x
-                elif track_notes == "off":
-                    pass
-                # Important: Bar left and right check is moved below the calculation
+            
+            # Step 9: Note tracking logic
+            if note_coords is not None and track_notes == "on" and bar_center is not None:
+                note_screen_y_ratio = note_coords[1] / (fish_bottom - fish_top)
+                if note_screen_y_ratio >= note_track_ratio:
+                    fish_x = note_coords[0]
+                    detection_cache['last_valid_fish_x'] = fish_x
+            
+            # Update fish_x cache
+            if fish_x is not None:
+                detection_cache['last_valid_fish_x'] = fish_x
+            elif detection_cache['last_valid_fish_x'] is not None:
+                fish_x = detection_cache['last_valid_fish_x']
+            
+            # Step 10: Check if fish is within bounds
+            if bar_center is not None and fish_x is not None and left_x is not None and right_x is not None:
                 try:
-                    if not left_x <= fish_x <= right_x:
+                    if not (left_x <= fish_x <= right_x):
                         catch_success = False
-                except:
+                except TypeError:
                     pass
-                # Check controller mode
-                if max_left and fish_x <= max_left: # Max Left And Right Check (Inside Bar)
+            
+            # Step 11: Debug logging (optional)
+            if bar_size > 500:
+                cv2.imwrite("screenshot_debug.png", fish_img)
+            
+            # Step 12: Controller mode selection
+            controller_mode = 0
+            if bar_center is not None and fish_x is not None:
+                if max_left is not None and fish_x <= max_left:
                     controller_mode = 4
-                elif max_right and fish_x >= max_right:
+                elif max_right is not None and fish_x >= max_right:
                     controller_mode = 3
                 else:
                     if minigame_controller_mode == "steady":
@@ -4222,87 +4297,91 @@ class Api:
                         controller_mode = 1
                     elif minigame_controller_mode == "predictive":
                         controller_mode = 5
-                    if (track_notes == "on" or minigame_controller_mode == "predictive") and not left_x <= fish_x <= right_x:
-                        controller_mode = 2
-            # Step 6: Detect fish overlay and draw (image coordinates scaled with fish left)
-            if self._is_fish_overlay_enabled():
+                    
+                    if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x is not None:
+                        if not (left_x <= fish_x <= right_x):
+                            controller_mode = 2
+            
+            # Step 13: Draw overlay if enabled
+            if self._is_fish_overlay_enabled() and bar_center is not None:
                 self.fish_overlay.draw(
                     bar_center=bar_center, box_size=bar_size,
                     color="green", canvas_offset=canvas_offset,
                     show_bar_center=True
                 )
-                self.fish_overlay.draw(
-                    bar_center=max_left, box_size=15,
-                    color="lightblue", canvas_offset=canvas_offset
+                if max_left is not None:
+                    self.fish_overlay.draw(
+                        bar_center=max_left, box_size=15,
+                        color="lightblue", canvas_offset=canvas_offset
+                    )
+                if max_right is not None:
+                    self.fish_overlay.draw(
+                        bar_center=max_right, box_size=15,
+                        color="lightblue", canvas_offset=canvas_offset
+                    )
+                if fish_x is not None:
+                    self.fish_overlay.draw(
+                        bar_center=fish_x, box_size=10,
+                        color="red", canvas_offset=canvas_offset
+                    )
+            
+            # Step 14: Controller logic
+            if bar_center is not None and fish_x is not None:
+                error = fish_x - bar_center
+                
+                # Debug print with cache status
+                print(
+                    f"Fish={fish_x:.1f}",
+                    f"Left={left_x:.1f}" if left_x else "Left=None",
+                    f"Right={right_x:.1f}" if right_x else "Right=None",
+                    f"Size={bar_size:.1f}",
+                    f"Center={bar_center:.1f}",
+                    f"Error={error:.1f}",
+                    f"Thresh={thresh:.1f}",
+                    f"Mode={controller_mode}",
+                    f"Cache={'Est' if detection_cache['estimation_mode'] else 'Ok' if bar_detected else 'Stale'}"
                 )
-                self.fish_overlay.draw(
-                    bar_center=max_right, box_size=15,
-                    color="lightblue", canvas_offset=canvas_offset
-                )
-                self.fish_overlay.draw(
-                    bar_center=fish_x, box_size=10,
-                    color="red", canvas_offset=canvas_offset
-                )
-            controller_mode = 2
-            # Step 7: Controller (Image coordinates)
-            error = (fish_x - bar_center) if bar_center is not None and fish_x is not None else 0.0
-            print(
-                f"Fish={fish_x:.1f}",
-                f"Left={left_x:.1f}",
-                f"Right={right_x:.1f}",
-                f"Size={bar_size:.1f}",
-                f"Center={bar_center:.1f}",
-                f"MouseDown={mouse_down}"
-            )
-            if controller_mode == 0 and not bar_center == None: # PID (Steady)
-                control = self._steady_control(error, bar_center)
-                # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
-                # Stabilize Deadzone Checker
-                if -thresh <= error <= thresh:
-                    if not deadzone_action == 0:
+                
+                # Execute controller action
+                if controller_mode == 0:  # PID (Steady)
+                    control = self._steady_control(error, bar_center)
+                    if -thresh <= error <= thresh:
+                        release_mouse() if deadzone_action == 0 else hold_mouse()
+                    elif control > thresh:
+                        hold_mouse()
+                    elif control < -thresh:
+                        release_mouse()
+                        
+                elif controller_mode == 1:  # PID (Normal)
+                    control = self._normal_control(error)
+                    if control > thresh:
+                        hold_mouse()
+                    elif control < -thresh:
+                        release_mouse()
+                    else:
+                        release_mouse() if deadzone_action == 0 else hold_mouse()
+                        
+                elif controller_mode == 2:  # Simple Tracking
+                    if error > thresh:
+                        hold_mouse()
+                    elif error < -thresh:
+                        release_mouse()
+                    else:
+                        release_mouse() if deadzone_action == 0 else hold_mouse()
+                        
+                elif controller_mode == 3:  # Force hold
+                    hold_mouse()
+                elif controller_mode == 4:  # Force release
+                    release_mouse()
+                elif controller_mode == 5:  # Predictive control
+                    should_hold = self._predictive_control(
+                        fish_x, bar_center, fish_left, fish_right, left_x, right_x
+                    )
+                    if should_hold:
                         hold_mouse()
                     else:
                         release_mouse()
-                elif control > thresh:
-                    hold_mouse()
-                elif control < -thresh:
-                    release_mouse()
-            elif controller_mode == 1 and bar_center is not None: # PID (Normal)
-                control = self._normal_control(error)
-                # Map PID Output To Mouse Clicks Using Hysteresis To Avoid Jitter/Oscillation
-                # Stabilize Deadzone Checker
-                if control > thresh:
-                    hold_mouse()
-                elif control < -thresh:
-                    release_mouse()
-                else:
-                    if not deadzone_action == 0:
-                        hold_mouse()
-                    else:
-                        release_mouse()
-            elif controller_mode == 2: # Simple Tracking
-                # Stabilize Deadzone Checker
-                if error > thresh:
-                    hold_mouse()
-                elif error < -thresh:
-                    release_mouse()
-                else:
-                    if not deadzone_action == 0:
-                        hold_mouse()
-                    else:
-                        release_mouse()
-            elif controller_mode == 3:
-                hold_mouse()
-            elif controller_mode == 4:
-                release_mouse()
-            elif controller_mode == 5 and bar_center is not None:
-                should_hold = self._predictive_control(fish_x, bar_center, 
-                                                    fish_left, fish_right, 
-                                                    left_x, right_x)
-                if should_hold:
-                    hold_mouse()
-                else:
-                    release_mouse()
+            
             time.sleep(scan_delay)
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False

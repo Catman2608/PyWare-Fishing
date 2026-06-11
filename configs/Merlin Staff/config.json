@@ -1,5 +1,5 @@
 {
-    "config-select": "Nico's Yarncaster",
+    "config-select": "Duskwire",
     "macro_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -59,7 +59,7 @@
     "minigame_scan_delay": "0.01",
     "restart_delay": "3",
     "bar_ratio_from_side": "80",
-    "controller_mode": "predictive",
+    "controller_mode": "steady",
     "kp": "0.93",
     "kd": "0.07",
     "stopping_distance": "1.4",
