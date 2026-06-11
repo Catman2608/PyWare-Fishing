@@ -28,7 +28,7 @@
     "auto_zoom": "off",
     "auto_refresh": "on",
     "efficiency_mode": "off",
-    "track_notes": "off",
+    "track_notes": "on",
     "always_on_top": "off",
     "lock_cursor": "off",
     "click_after_minigame": "off",
