@@ -1791,7 +1791,7 @@ class App(CTk):
     def load_settings(self, name="default"):
         """Load settings from a JSON config file."""
         path = os.path.join(CONFIG_DIR, name, "config.json")
-        rod_folder = os.path.join(CONFIG_DIR, name.replace(".json", ""))
+        rod_folder = os.path.join(CONFIG_DIR, name.replace(".json"]
         if not os.path.exists(path):
             self.set_status(f"Config not found: {name}")
             return

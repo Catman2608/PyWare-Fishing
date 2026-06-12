@@ -137,13 +137,15 @@ elif sys.platform == "darwin":
         loc = Quartz.CGEventGetLocation(event)
         return loc.x, loc.y
     def _move_mouse(x, y):
-        # Expects logical points (already converted by the caller).
-        # CGWarpMouseCursorPosition works in logical coordinate space.
+        """
+        Expects logical points (already converted by the caller).
+        CGWarpMouseCursorPosition works in logical coordinate space.
+        """
         point = Quartz.CGPointMake(x, y)
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
     def _mouse_event(event_type, right=False, x=None, y=None):
-        # Expects logical points (already converted by the caller).
+        "Expects logical points (already converted by the caller)."
         if x is None or y is None:
             x, y = get_mouse_position()
         event = Quartz.CGEventCreateMouseEvent(
@@ -2628,11 +2630,10 @@ class Api:
         self.color_check_target_velocity = 0.0
         self.color_check_bar_velocity  = 0.0
         self._pred_last_click_time = 0.0
-        # PD position smoothing
-        self._prev_fish_x = None
-        self._prev_bar_center = None
-        self._fish_v_ema = 0.0
-        self._bar_v_ema = 0.0
+        # Dual Fishing
+        self._pid_last_error2      = 0.0
+        self._pid_last_target_x2   = 0.0
+        self._pid_last_scan_time2  = 0.0
     def _normal_control(self, error2):
         """
         Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
@@ -2709,6 +2710,64 @@ class Api:
         self._pid_last_error      = error
         self._pid_last_target_x   = target_line_last_x
         self._pid_last_scan_time  = current_time
+
+        # Combined and clamped control signal
+        control_signal = p_term + d_term
+        control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
+        return control_signal
+    def _steady_control2(self, error, bar_center):
+        """
+        Asymmetric PD controller (2).
+        Args:
+            error:      fish_x - bar_center  (positive = target is right of bar)
+            bar_center: current bar centre in screen coordinates
+        Returns:
+            Clamped control signal (float).  Positive → hold, negative → release.
+        """
+        # Gains and clamp from GUI settings
+        kp       = self._get_var_number("kp", 0.93)
+        kd       = self._get_var_number("kd", 0.07)
+        pd_clamp = self._get_var_number("pid_clamp", 100.0)
+        # Reconstruct fish_x (target position) from error and bar_center
+        bar_center   = bar_center
+        target_line_last_x = bar_center + error  # fish_x = bar_center + error
+        current_time = time.perf_counter()
+        # P term – proportional to distance
+        p_term = kp * error
+        # D term – asymmetric damping
+        d_term = 0.0
+        bar_velocity = 0
+        time_delta = 0
+        if (
+            self._pid_last_scan_time2 is not None
+            and self._pid_last_target_x2 is not None
+            and self._pid_last_error2 is not None
+        ):
+            time_delta = current_time - self._pid_last_scan_time2
+            if time_delta > 0.001:
+                # Bar velocity: how fast the bar centre moved since last frame
+                last_bar_x   = self._pid_last_target_x2 - self._pid_last_error2
+                bar_velocity = (bar_center - last_bar_x) / time_delta
+                error_magnitude_decreasing = abs(error) < abs(self._pid_last_error2)
+                bar_moving_toward_target = (
+                    (bar_velocity > 0 and error > 0)
+                    or (bar_velocity < 0 and error < 0)
+                )
+                if error_magnitude_decreasing and bar_moving_toward_target:
+                    # APPROACHING – strong damping to prevent overshoot
+                    d_term = -kd * 5.0 * bar_velocity
+                else:
+                    # CHASING – light damping to allow fast movement
+                    d_term = -kd * 0.2 * bar_velocity
+        else:
+            # Fallback to standard derivative
+            if self._pid_last_error2 is not None and time_delta > 0:
+                d_term = kd * (error - self._pid_last_error2) / time_delta
+
+        # Update state for next frame
+        self._pid_last_error2      = error
+        self._pid_last_target_x2   = target_line_last_x
+        self._pid_last_scan_time2  = current_time
 
         # Combined and clamped control signal
         control_signal = p_term + d_term
@@ -3218,6 +3277,9 @@ class Api:
         y = float(self.vars["appraisal_enchant_y"])
         x_scaled = int(dialogue_width * x) + dialogue_left
         y_scaled = int(dialogue_height * y) + dialogue_top
+        e_delay = self.vars["e_delay"]
+        click_delay = self.vars["click_delay"]
+        click_delay2 = self.vars["click_delay2"]
         # Check for utilities
         self._check_logging_trigger(-1)
         # Main loop
@@ -3225,9 +3287,9 @@ class Api:
         while self.macro_running:
             time.sleep(0.1)
             self._send_key("e")
-            time.sleep(0.5)
+            time.sleep(e_delay)
             self._click_at(x_scaled, y_scaled)
-            time.sleep(1.2)
+            time.sleep(click_delay)
             img = self._grab_screen_full()
             enchantment = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
             gray = cv2.cvtColor(enchantment, cv2.COLOR_BGR2GRAY)
@@ -3238,7 +3300,9 @@ class Api:
             text = pytesseract.image_to_string(gray)
             if mutation_enchant.lower() in text.lower():
                 self.stop_macro("Enchanting finished")
-            time.sleep(4)
+            if self.macro_running == False:
+                self.stop_macro("Macro Already Stopped")
+            time.sleep(click_delay2)
     # Start appraisal
     def start_appraisal(self):
         self._stop_active_capture()
@@ -3248,42 +3312,23 @@ class Api:
         tesseract_path = self.vars["tesseract_path"]
         mutation_enchant = self.vars["mutation_enchant"]
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
-        tolerance = int(self.vars["shake_tolerance"])
-        shake_pixel = self.vars["shake_color"]
-        appraisal_mode = self.vars["appraisal_enchant_mode"].capitalize()
         appraisal_x_ratio = self.vars["appraisal_enchant_x"]
         appraisal_y_ratio = self.vars["appraisal_enchant_y"]
         appraisal_x = int(dialogue_width * appraisal_x_ratio) + dialogue_left
         appraisal_y = int(dialogue_height * appraisal_y_ratio) + dialogue_top
+        click_delay = self.vars["click_delay"]
         # Check for utilities
         self._check_logging_trigger(-1)
         # Main loop
         time.sleep(0.1)
-        keyboard_controller.press("e")
-        time.sleep(0.05)
-        keyboard_controller.release("e")
+        self._send_key("e", 0.05)
         while self.macro_running:
-            for i in range(2):
-                time.sleep(1.2)
-                img = self._grab_screen_full()
-                shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
-                fish = img[hotbar_top:hotbar_bottom, hotbar_left:hotbar_right]
-                if appraisal_mode == "Search":
-                    dialogue = self._find_first_pixel(shake, shake_pixel, tolerance)
-                    try:
-                        if dialogue is None:
-                            continue
-                        dialogue_x, dialogue_y = dialogue
-                        # Convert cropped coordinates back to screen coordinates
-                        screen_x = dialogue_left + dialogue_x
-                        screen_y = dialogue_top + dialogue_y
-                        self._click_at(screen_x, screen_y)
-                        time.sleep(1.2)
-                    except Exception as e:
-                        self.set_status(e)
-                        self.stop_macro(f"Appraisal failed: {e}")
-                else:
-                    self._click_at(appraisal_x, appraisal_y)
+            # Click
+            time.sleep(click_delay)
+            self._click_at(appraisal_x, appraisal_y)
+            # Detection
+            img = self._grab_screen_full()
+            fish = img[hotbar_top:hotbar_bottom, hotbar_left:hotbar_right]
             gray = cv2.cvtColor(fish, cv2.COLOR_BGR2GRAY)
             # Upscale image
             gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
@@ -3292,6 +3337,8 @@ class Api:
             text = pytesseract.image_to_string(gray)
             if mutation_enchant.lower() in text.lower():
                 self.stop_macro("Appraisal finished")
+            if self.macro_running == False:
+                self.stop_macro("Macro Already Stopped")
     # Start main automation
     def start_fishing(self):
         self._stop_active_capture()
@@ -3311,12 +3358,15 @@ class Api:
         casting_mode = self.vars.get("casting_mode", "Normal")
         shake_mode = self.vars.get("shake_mode", "Navigation")
         macro_mode = self.vars["macro_mode"]
-        if auto_zoom == "on":
-            for _ in range(20):
-                mouse_controller.scroll(0, 1)
-                time.sleep(0.05)
-            mouse_controller.scroll(0, -1)
-            time.sleep(0.1)
+        if self.macro_running == True:
+            if auto_zoom == "on":
+                for _ in range(20):
+                    mouse_controller.scroll(0, 1)
+                    time.sleep(0.05)
+                mouse_controller.scroll(0, -1)
+                time.sleep(0.1)
+        else:
+            self.stop_macro("Macro Already Stopped")
         while self.macro_running:
             # Misc / Utilities
             cycle = cycle + 1
@@ -3330,22 +3380,30 @@ class Api:
                 time.sleep(bag_delay)
                 self._send_key(rod_slot)
                 time.sleep(0.2)
+            if self.macro_running == False:
+                self.stop_macro("Macro Already Stopped")
             # Logging
             self._check_logging_trigger(catch_rate_show)
             # Totem
             self._check_totem_trigger(shake_x, shake_y)
             if self.vars["auto_reconnect"] == "on":
                 self._auto_reconnect(shake_x, shake_y)
+            if self.macro_running == False:
+                self.stop_macro("Macro Already Stopped")
             # Cast
             if casting_mode == "perfect" or casting_mode == "Perfect":
                 self._execute_cast_perfect()
             else:
                 self.execute_cast_normal()
+            if self.macro_running == False:
+                self.stop_macro("Macro Already Stopped")
             # Shake
             if shake_mode == "navigation" or shake_mode == "Navigation":
                 self._execute_shake_navigation()
             else:
                 self._execute_shake_click(shake_mode)
+            if self.macro_running == False:
+                self.stop_macro("Macro Already Stopped")
             # Minigame
             if macro_mode == "tranquility" or macro_mode == "Tranquility":
                 self._enter_minigame_tranquility()
@@ -3354,6 +3412,8 @@ class Api:
             successful_catches = successful_catches + 1 if catch_success == True else successful_catches
             catch_rate = (successful_catches / cycle)
             catch_rate_show = round(catch_rate * 100)
+            if self.macro_running == False:
+                self.stop_macro("Macro Already Stopped")
     # Utilities
     def _check_logging_trigger(self, catch_rate=-1):
         """
@@ -4066,12 +4126,14 @@ class Api:
         
         # Helper Functions
         def hold_mouse(mouse_state=False):
+            "Hold mouse. False for left click, True for right click."
             nonlocal mouse_down
             if not mouse_down:
                 self.hold_mouse(mouse_state)
                 mouse_down = True
         
         def release_mouse(mouse_state=False):
+            "Release mouse. False for left click, True for right click."
             nonlocal mouse_down
             if mouse_down:
                 self.release_mouse(mouse_state)
@@ -4097,12 +4159,20 @@ class Api:
             
             # Step 2: Crop images based on dual fishing mode
             if dual_fishing == "on":
+                # Fish images
                 fish_img = frame[fish_top:fish_bottom, fish_left:fish_area_center]
                 fish_img2 = frame[fish_top:fish_bottom, fish_area_center:fish_right]
+                # Note images
+                note_img = frame[shake_top:fish_bottom, fish_left:fish_area_center]
+                note_img2 = frame[shake_top:fish_bottom, fish_area_center:fish_right]
+                # Make sure to recalculate fish width
+                fish_width = fish_area_center - fish_left
+                fish_width2 = fish_right - fish_area_center
             else:
+                # 1 fish and 1 note image
                 fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
-            
-            note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
+                note_img = frame[shake_top:fish_bottom, fish_left:fish_right]
+            # Keep 1 friend image
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
             
             # Step 3: Detection with caching
@@ -4114,6 +4184,7 @@ class Api:
                 fish_x, left_x, right_x = self._do_pixel_search(fish_img)
             
             # Right Side (Only Triggers If dual_fishing Is True)
+            # Dual Fishing: LEFT (primary) is strong, RIGHT (secondary) is basic controls (no overlay)
             if dual_fishing == "on":
                 if fishing_mode == "Line":
                     fish_x2, left_x2, right_x2 = self._do_line_search(fish_img2)
@@ -4135,6 +4206,28 @@ class Api:
                 arrow_indicator_x = None
             
             # Step 4: Bar detection with cache fallback
+            if dual_fishing == "on": # Extra variables for secondary bar
+                bar2_detected = (left_x2 is not None and right_x2 is not None)
+            else:
+                bar2_detected = False
+            try:
+                if bar2_detected:
+                    bar_size2 = int(right_x2 - left_x2)
+                    bar_center2 = left_x2 + (bar_size2 / 2)
+                    detection_source2 = 0
+                elif dual_fishing == "on":
+                    left_x2 = arrow_indicator_x2
+                    right_x2 = arrow_indicator_x2 + 30
+                    bar_center2 = arrow_indicator_x2 + 15
+                    detection_source2 = 1
+                else:
+                    bar_center2 = 0
+                    left_x2 = 0
+                    right_x2 = 0
+            except:
+                bar_center2 = 0
+                left_x2 = 0
+                right_x2 = 0
             bar_detected = (left_x is not None and right_x is not None)
             detection_source = 2
             if bar_detected:
@@ -4148,18 +4241,13 @@ class Api:
                 bar_center = detection_cache['last_valid_bar_center']
                 bar_size = detection_cache['last_valid_bar_size']
                 detection_source = 0
-                # Warm-start arrow estimation state.
-                # _update_arrow_box_estimation uses last_known_box_center_x /
-                # last_left_x / last_right_x and _last_bar_box_size.  Keeping
-                # them current on every direct-detection frame means estimation
-                # is never cold when it eventually kicks in — no box-size
-                # guessing, no position jump on the first estimation frame.
+                # Arrow estimation (Warm state)
                 self._last_bar_box_size      = bar_size
                 self.last_known_box_center_x = bar_center
                 self.last_left_x             = left_x
                 self.last_right_x            = right_x
             else:
-                # Detection failed - use cache or estimation
+                # Use cache
                 detection_cache['consecutive_failures'] += 1
                 
                 if detection_cache['last_valid_bar_left'] is not None:
@@ -4225,15 +4313,20 @@ class Api:
                 bar_center = None
                 max_left = fish_left
                 max_right = fish_right
-            
             # Step 6: Update deadzone action counter
             deadzone_action = (deadzone_action + 1) % 4
             
             # Step 7: Calculate threshold
-            if bar_size > 0:
-                thresh = max(1, (1 - round((bar_size / fish_width), 2)) * 8 * scale)
+            if dual_fishing == "on":
+                if bar_size2 > 0:
+                    thresh2 = max(1, (1 - round((bar_size2 / fish_width2), 2)) * 8 * scale)
+                else:
+                    thresh2 = 5  # Default threshold
             else:
-                thresh = 5  # Default threshold
+                if bar_size > 0:
+                    thresh = max(1, (1 - round((bar_size / fish_width), 2)) * 8 * scale)
+                else:
+                    thresh = 5  # Default threshold
             
             # Step 8: Restart detection (using Friend Area)
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
@@ -4243,7 +4336,7 @@ class Api:
                 self._set_fish_overlay_mode("idle")
                 return catch_success
             
-            # Step 9: Note tracking logic
+            # Step 9: Special tracking logic
             if note_coords is not None and track_notes == "on" and bar_center is not None:
                 note_screen_y_ratio = note_coords[1] / (fish_bottom - fish_top)
                 if note_screen_y_ratio >= note_track_ratio:
@@ -4264,11 +4357,7 @@ class Api:
                 except TypeError:
                     pass
             
-            # Step 11: Debug logging (optional)
-            if bar_size > 500:
-                cv2.imwrite("screenshot_debug.png", fish_img)
-            
-            # Step 12: Controller mode selection
+            # Step 11: Controller mode selection
             controller_mode = 0
             if bar_center is not None and fish_x is not None:
                 if max_left is not None and fish_x <= max_left:
@@ -4286,8 +4375,14 @@ class Api:
                     if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x is not None:
                         if not (left_x <= fish_x <= right_x):
                             controller_mode = 2
-            
-            # Step 13: Draw overlay if enabled
+            controller_mode2 = 0
+            if bar_center2 is not None and fish_x2 is not None:
+                if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x is not None:
+                    if not (left_x <= fish_x <= right_x):
+                        controller_mode = 2
+                else:
+                    controller_mode2 = 0
+            # Step 12: Draw overlay if enabled
             if self._is_fish_overlay_enabled() and bar_center is not None:
                 self.fish_overlay.draw(
                     bar_center=bar_center, box_size=bar_size,
@@ -4309,40 +4404,43 @@ class Api:
                         bar_center=fish_x, box_size=10,
                         color="red", canvas_offset=canvas_offset
                     )
-            # Step 14: Controller logic
+            # Step 13: Controller logic
+            controller_found = 1
+            if dual_fishing == "on" and bar_center2 is not None and fish_x2 is not None:
+                controller_found2 = 1
+                error2 = fish_x2 - bar_center2
+                if controller_mode2 == 0 or controller_mode2 == 1 or controller_mode2 == 5:
+                    control2 = self._steady_control2(error2, bar_center2)
+                    controller_found2 = 0
+                elif controller_mode2 == 2:
+                    control2 = error2
+                    controller_found2 = 0
+                elif controller_mode2 == 3:
+                    hold_mouse(True)
+                    controller_found2 = 1
+                elif controller_mode2 == 4:
+                    release_mouse(True)
+                    controller_found2 = 1
             if bar_center is not None and fish_x is not None:
                 error = fish_x - bar_center
                 # Execute controller action
                 if controller_mode == 0:  # PID (Steady)
                     control = self._steady_control(error, bar_center)
-                    if -thresh <= control <= thresh:
-                        release_mouse() if deadzone_action == 0 else hold_mouse()
-                    elif control > thresh:
-                        hold_mouse()
-                    elif control < -thresh:
-                        release_mouse()
-                        
+                    controller_found = 0
                 elif controller_mode == 1:  # PID (Normal)
                     control = self._normal_control(error)
-                    if control > thresh:
-                        hold_mouse()
-                    elif control < -thresh:
-                        release_mouse()
-                    else:
-                        release_mouse() if deadzone_action == 0 else hold_mouse()
+                    controller_found = 0
                         
                 elif controller_mode == 2:  # Simple Tracking
-                    if error > thresh:
-                        hold_mouse()
-                    elif error < -thresh:
-                        release_mouse()
-                    else:
-                        release_mouse() if deadzone_action == 0 else hold_mouse()
+                    control = error
+                    controller_found = 0
                         
                 elif controller_mode == 3:  # Force hold
                     hold_mouse()
+                    controller_found = 1
                 elif controller_mode == 4:  # Force release
                     release_mouse()
+                    controller_found = 1
                 elif controller_mode == 5:  # Predictive control
                     should_hold = self._predictive_control(
                         fish_x, bar_center, fish_left, fish_right, left_x, right_x
@@ -4351,7 +4449,21 @@ class Api:
                         hold_mouse()
                     else:
                         release_mouse()
-            
+                    controller_found = 1
+            if controller_found == 0:
+                if -thresh <= control <= thresh:
+                    release_mouse() if deadzone_action == 0 else hold_mouse()
+                elif control > thresh:
+                    hold_mouse()
+                elif control < -thresh:
+                    release_mouse()
+            if dual_fishing == "on" and controller_found2 == 0:
+                if -thresh <= control2 <= thresh:
+                    release_mouse(True) if deadzone_action == 0 else hold_mouse(True)
+                elif control2 > thresh:
+                    hold_mouse(True)
+                elif control2 < -thresh:
+                    release_mouse(True)
             time.sleep(scan_delay)
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False

@@ -394,6 +394,25 @@
             <!-- Utilities Tab -->
             <div id="utilities" class="tab-content">
                 <div class="card">
+                    <h3>Global</h3>
+                    <div class="text">
+                        <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
+                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
+                    </div>
+                    <div class="text">
+                        <label>Delay After E (Enchant, Angler)</label>
+                        <input id=e_delay type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Delay After Click (Appraisal, Enchant, Angler)</label>
+                        <input id=click_delay type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Delay After Click 2 (Enchant, Angler)</label>
+                        <input id=click_delay2 type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card">
                     <h3>Logging</h3>
                     <div class="dropdown">
                         <label for="logging_mode">Logging Mode:</label>
@@ -489,17 +508,6 @@
                 </div>
                 <div class="card">
                     <h3>Appraisal/Enchantment (toggle in Basic tab)</h3>
-                    <div class="text">
-                        <label>Tesseract Path</label>
-                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
-                    </div>
-                    <div class="dropdown">
-                        <label for="appraisal_enchant_mode">Appraisal Click mode:</label>
-                        <select name="appraisal_enchant_mode" id="appraisal_enchant_mode">
-                        <option value="search">Pixel Search</option>
-                        <option value="ratio">Ratio</option>
-                        </select>
-                    </div>
                     <div class="text">
                         <label>Mutation/Enchant</label>
                         <input id=mutation_enchant type="text" placeholder="Darkened">
