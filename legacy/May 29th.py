@@ -1984,7 +1984,7 @@ class Api:
         return indicator_x
     def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
         """
-        Estimate box position based on arrow indicator using IRUS-style logic.
+        Estimate box position based on arrow indicator using Hydra-style logic.
         If holding: arrow is on RIGHT edge, extend LEFT
         If not holding: arrow is on LEFT edge, extend RIGHT
         When state swaps: measure distance between arrows to get box size
@@ -2496,7 +2496,7 @@ class Api:
         return control_signal
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
-        Predictive controller ported from IRUS idiotproof.
+        Predictive controller ported from Hydra idiotproof.
         Uses linear stopping distance, on-bar counter-thrust, off-bar PD chase,
         and edge-unreachability logic.
         Check legacy/May 3rd.py for PD chase controller

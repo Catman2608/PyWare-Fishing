@@ -1546,7 +1546,7 @@ class Api:
         return indicator_x
     def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
         """
-        Estimate box position based on arrow indicator using IRUS-style logic.
+        Estimate box position based on arrow indicator using Hydra-style logic.
         
         If holding: arrow is on RIGHT edge, extend LEFT
         If not holding: arrow is on LEFT edge, extend RIGHT

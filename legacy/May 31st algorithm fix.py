@@ -2330,7 +2330,7 @@ class Api:
 
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
-        Predictive controller ported from IRUS idiotproof.
+        Predictive controller ported from Hydra idiotproof.
         Uses linear stopping distance, on-bar counter-thrust, off-bar PD chase,
         and edge-unreachability logic.
         Check legacy/May 3rd.py for PD chase controller

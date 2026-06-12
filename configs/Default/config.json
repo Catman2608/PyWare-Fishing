@@ -118,7 +118,7 @@
     "perfect_cast_timing_1600_plus": "-0.1",
     "delay_before_cating": "0.5",
     "delay_after_casting": "1",
-    "bar_ratio_from_side": "0.5",
+    "bar_ratio_from_side": "0.4",
     "controller_mode": "steady",
     "kp": "0.4",
     "kd": "0.5",

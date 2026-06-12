@@ -958,6 +958,11 @@ class Api:
         self._last_bar_box_size = None
         self._last_bar_center = None
         self.last_arrow_delta = None
+        # Estimation internal position state — initialised here so that
+        # the first arrow_centroid_x=None call never raises AttributeError
+        self.last_known_box_center_x = None
+        self.last_left_x = None
+        self.last_right_x = None
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         self.current_rod_name = "Basic Rod"
@@ -2279,132 +2284,99 @@ class Api:
         # Centroid 
         center_x, center_y = centroids[largest_label]
         return int(center_x), int(center_y)
+
     def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
         """
-        Estimate bar position from the moving arrow indicator.
+        Estimate bar position from the arrow indicator (geometry-first, spike-guarded).
 
-        Side-determination strategy
-        ───────────────────────────
-        PRIMARY  – mouse hold state (is_holding).
-            is_holding=True  → bar moving right → arrow is on the RIGHT edge
-            is_holding=False → bar moving left  → arrow is on the LEFT  edge
-        This is stable during steady-state because the hold state never flips
-        without cause, so the estimated center never oscillates due to a
-        last_center chase loop.
+        Strategy
+        --------
+        Side detection (geometry-first):
+          • If a prior centre exists: arrow < centre → LEFT edge, else RIGHT edge.
+          • Cold-start only (no history): fall back to is_holding semantics.
+            – Not holding → arrow on LEFT;  Holding → arrow on RIGHT.
 
-        PROXIMITY OVERRIDE – handles transition frames.
-        After a hold-state change the arrow hasn't physically crossed to the new
-        edge yet.  If the smoothed arrow is clearly closer to the OPPOSITE
-        expected edge (within 35 % of box_size), trust position over state.
+        Box size (priority order):
+          1. self._last_bar_box_size — live-synced from direct pixel detection.
+          2. capture_width * 0.30    — last-resort default.
 
-        EMA SMOOTHING – suppresses per-frame detection jitter.
-        _find_first_pixel is leftmost-pixel scan; tiny rendering variance can
-        shift the returned x by 40-60 px between frames.  A lightweight EMA
-        (α = 0.55) cuts ~45 % of single-frame jitter with < 1 frame of extra lag.
+        Spike guard:
+          Per-frame centre movement is clamped to box_size * 0.40.
+          This suppresses is_holding-lag spikes and stale-cache artefacts without
+          introducing visible lag for legitimate bar movement.
 
         Args:
-            arrow_centroid_x: Raw X of detected arrow pixel (local fish-img coords)
-            is_holding:       True when the mouse button is currently held down
-            capture_width:    Width of the fish capture region (physical pixels)
+            arrow_centroid_x : X pixel of the arrow centroid (capture-region coords).
+            is_holding       : True if the mouse button is currently held.
+            capture_width    : Width of the capture region in pixels.
 
         Returns:
-            (bar_center, left_x, right_x)  –or–  (None, None, None)
+            (bar_center, left_x, right_x) — all None on cold-start failure.
         """
-        # ── Lazy init ────────────────────────────────────────────────────────
-        if not hasattr(self, '_last_bar_left_x'):   self._last_bar_left_x  = None
-        if not hasattr(self, '_last_bar_right_x'):  self._last_bar_right_x = None
-        if not hasattr(self, '_last_bar_box_size'): self._last_bar_box_size = None
-        if not hasattr(self, '_last_bar_center'):   self._last_bar_center  = None
-        if not hasattr(self, '_ema_arrow_x'):       self._ema_arrow_x      = None
-
-        # ── No arrow: return last known estimate ─────────────────────────────
+        # ── 0. Arrow absent ──────────────────────────────────────────────────
         if arrow_centroid_x is None:
-            if self._last_bar_center is not None:
-                return self._last_bar_center, self._last_bar_left_x, self._last_bar_right_x
+            if self.last_known_box_center_x is not None:
+                return self.last_known_box_center_x, self.last_left_x, self.last_right_x
             return None, None, None
 
-        # ── EMA smooth the raw arrow position ────────────────────────────────
-        # α = 0.55: keeps one-frame lag small (~half a frame) while removing
-        # high-frequency jitter caused by the leftmost-pixel scan alternating
-        # between the arrow tip and arrow base on consecutive frames.
-        _ALPHA = 0.55
-        if self._ema_arrow_x is None:
-            self._ema_arrow_x = float(arrow_centroid_x)
+        # ── 1. Box-size resolution ───────────────────────────────────────────
+        # Prefer the directly-detected bar size (synced every frame direct
+        # detection succeeds, see the warm-start sync block in _enter_minigame).
+        if self._last_bar_box_size is not None and self._last_bar_box_size > 0:
+            box_size = float(self._last_bar_box_size)
         else:
-            self._ema_arrow_x = _ALPHA * arrow_centroid_x + (1.0 - _ALPHA) * self._ema_arrow_x
-        smooth_arrow = self._ema_arrow_x
+            box_size = capture_width * 0.30  # last-resort default
 
-        last_center = self._last_bar_center
-        box_size    = self._last_bar_box_size
+        # ── 2. Geometry-first side detection ────────────────────────────────
+        # Using the previous centre to decide which side the arrow is on avoids
+        # the 1-frame is_holding lag that causes the spike in both older versions.
+        if self.last_known_box_center_x is not None:
+            arrow_on_left = (arrow_centroid_x < self.last_known_box_center_x)
+        else:
+            # Cold-start: no position history — bootstrap from is_holding.
+            arrow_on_left = not is_holding  # not holding → arrow is on LEFT edge
 
-        # ── Warm path: we have a previous estimate ────────────────────────────
-        if last_center is not None and box_size is not None and box_size > 0:
-            last_left  = self._last_bar_left_x
-            last_right = self._last_bar_right_x
+        # ── 3. Candidate edges ───────────────────────────────────────────────
+        if arrow_on_left:
+            new_left_x  = float(arrow_centroid_x)
+            new_right_x = new_left_x + box_size
+        else:
+            new_right_x = float(arrow_centroid_x)
+            new_left_x  = new_right_x - box_size
 
-            # Primary side from hold state
-            arrow_on_left_side = not is_holding
+        # ── 4. Clamp to capture bounds ───────────────────────────────────────
+        if new_left_x < 0:
+            new_left_x  = 0.0
+            new_right_x = box_size
+        elif new_right_x > capture_width:
+            new_right_x = float(capture_width)
+            new_left_x  = new_right_x - box_size
 
-            # Proximity override for hold-state transitions
-            if last_left is not None and last_right is not None:
-                dist_to_left  = abs(smooth_arrow - last_left)
-                dist_to_right = abs(smooth_arrow - last_right)
-                threshold = box_size * 0.35
-                if arrow_on_left_side:
-                    # Expected left, but arrow is clearly near the right edge
-                    if dist_to_right < dist_to_left and dist_to_right < threshold:
-                        arrow_on_left_side = False
-                else:
-                    # Expected right, but arrow is clearly near the left edge
-                    if dist_to_left < dist_to_right and dist_to_left < threshold:
-                        arrow_on_left_side = True
+        new_center = (new_left_x + new_right_x) / 2.0
 
-            # Rigid-body placement: opposite edge is exactly box_size away
-            if arrow_on_left_side:
-                bar_left_x  = smooth_arrow
-                bar_right_x = bar_left_x + box_size
-            else:
-                bar_right_x = smooth_arrow
-                bar_left_x  = bar_right_x - box_size
+        # ── 5. Per-frame velocity cap (spike guard) ──────────────────────────
+        # If the centre would jump more than 40 % of the box width in a single
+        # frame, clamp the movement.  This is a hard backstop that catches any
+        # residual artefact (e.g. a momentary wrong side-decision) without
+        # suppressing real fast bar movement.
+        if self.last_known_box_center_x is not None:
+            max_delta = box_size * 0.40
+            delta = new_center - self.last_known_box_center_x
+            if abs(delta) > max_delta:
+                clamped = self.last_known_box_center_x + math.copysign(max_delta, delta)
+                half        = box_size / 2.0
+                new_left_x  = clamped - half
+                new_right_x = clamped + half
+                new_center  = clamped
 
-            if bar_left_x < bar_right_x:
-                self._last_bar_left_x  = bar_left_x
-                self._last_bar_right_x = bar_right_x
-                bar_center = (bar_left_x + bar_right_x) / 2.0
-                self._last_bar_center  = bar_center
-                return bar_center, bar_left_x, bar_right_x
+        # ── 6. Commit ────────────────────────────────────────────────────────
+        self.last_left_x             = new_left_x
+        self.last_right_x            = new_right_x
+        self.last_known_box_center_x = new_center
+        self.last_indicator_x        = arrow_centroid_x
+        self.last_holding_state      = is_holding
 
-        # ── Cold start: no last_center yet ───────────────────────────────────
-        # box_size is seeded by the detection-cache sync in _enter_minigame, so
-        # this branch is only reached on the very first estimation frame, or
-        # after a complete reset.
-        if box_size is None or box_size <= 0:
-            if self._last_bar_left_x is not None and self._last_bar_right_x is not None:
-                box_size = self._last_bar_right_x - self._last_bar_left_x
-            if box_size is None or box_size <= 0:
-                box_size = float(capture_width) // 2
-
-        if not is_holding:          # Arrow is on the LEFT edge
-            bar_left_x  = smooth_arrow
-            bar_right_x = bar_left_x + box_size
-        else:                       # Arrow is on the RIGHT edge
-            bar_right_x = smooth_arrow
-            bar_left_x  = bar_right_x - box_size
-
-        # Clamp to capture bounds (keep the arrow-anchored edge in place)
-        if bar_left_x < 0:
-            bar_left_x  = 0.0
-            bar_right_x = min(box_size, float(capture_width))
-        if bar_right_x > capture_width:
-            bar_right_x = float(capture_width)
-            bar_left_x  = max(0.0, bar_right_x - box_size)
-
-        self._last_bar_left_x   = bar_left_x
-        self._last_bar_right_x  = bar_right_x
-        self._last_bar_box_size = box_size
-        bar_center = (bar_left_x + bar_right_x) / 2.0
-        self._last_bar_center   = bar_center
-        return bar_center, bar_left_x, bar_right_x
+        return new_center, new_left_x, new_right_x
     def _hex_to_bgr(self, hex_color):
         "Convert hex color to BGR tuple for OpenCV."
         if hex_color is None or hex_color.lower() in ["none", "# None", ""]:
@@ -2645,6 +2617,10 @@ class Api:
         self._last_bar_center = None
         self.last_arrow_delta = None
         self._ema_arrow_x = None        # EMA-smoothed arrow x; reset per minigame
+        # Estimation internal position state
+        self.last_known_box_center_x = None
+        self.last_left_x = None
+        self.last_right_x = None
         # Predictive Controller
         self._pred_prev_fish_x = None
         self._pred_prev_bar_x = None
@@ -2683,11 +2659,9 @@ class Api:
     def _steady_control(self, error, bar_center):
         """
         Asymmetric PD controller.
-
         Args:
             error:      fish_x - bar_center  (positive = target is right of bar)
             bar_center: current bar centre in screen coordinates
-
         Returns:
             Clamped control signal (float).  Positive → hold, negative → release.
         """
@@ -2695,38 +2669,41 @@ class Api:
         kp       = self._get_var_number("kp", 0.93)
         kd       = self._get_var_number("kd", 0.07)
         pd_clamp = self._get_var_number("pid_clamp", 100.0)
-
         # Reconstruct fish_x (target position) from error and bar_center
         bar_center   = bar_center
         target_line_last_x = bar_center + error  # fish_x = bar_center + error
-
         current_time = time.perf_counter()
-
         # P term – proportional to distance
         p_term = kp * error
-
         # D term – asymmetric damping
         d_term = 0.0
-        error_velocity = 0
+        bar_velocity = 0
+        time_delta = 0
         if (
             self._pid_last_scan_time is not None
             and self._pid_last_target_x is not None
             and self._pid_last_error is not None
         ):
             time_delta = current_time - self._pid_last_scan_time
-            bar_velocity = (error - self._pid_last_error) / time_delta
             if time_delta > 0.001:
                 # Bar velocity: how fast the bar centre moved since last frame
-                crossed_target = (
-                    self._pid_last_error * error < 0
+                last_bar_x   = self._pid_last_target_x - self._pid_last_error
+                bar_velocity = (bar_center - last_bar_x) / time_delta
+                error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
+                bar_moving_toward_target = (
+                    (bar_velocity > 0 and error > 0)
+                    or (bar_velocity < 0 and error < 0)
                 )
-            if crossed_target:
-                d_term = 0
-            elif abs(error) < abs(self._pid_last_error):
-                d_term = -kd * 5.0 * bar_velocity
-            else:
-                d_term = -kd * 0.2 * bar_velocity
-        d_term = max(-kd * 200, min(d_term, kd * 200))
+                if error_magnitude_decreasing and bar_moving_toward_target:
+                    # APPROACHING – strong damping to prevent overshoot
+                    d_term = -kd * 5.0 * bar_velocity
+                else:
+                    # CHASING – light damping to allow fast movement
+                    d_term = -kd * 0.2 * bar_velocity
+        else:
+            # Fallback to standard derivative
+            if self._pid_last_error is not None and time_delta > 0:
+                d_term = kd * (error - self._pid_last_error) / time_delta
 
         # Update state for next frame
         self._pid_last_error      = error
@@ -2736,17 +2713,10 @@ class Api:
         # Combined and clamped control signal
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
-        print(
-            f"Error={error:.1f} "
-            f"ErrVel={error_velocity:.1f} "
-            f"KD: {kd}"
-            f"P={p_term:.1f} "
-            f"D={d_term:.1f}"
-        )
         return control_signal
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
-        Predictive controller ported from IRUS idiotproof.
+        Predictive controller ported from Hydra idiotproof.
         Uses linear stopping distance, on-bar counter-thrust, off-bar PD chase,
         and edge-unreachability logic.
         Check legacy/May 3rd.py for PD chase controller
@@ -4166,7 +4136,7 @@ class Api:
             
             # Step 4: Bar detection with cache fallback
             bar_detected = (left_x is not None and right_x is not None)
-            
+            detection_source = 2
             if bar_detected:
                 # Valid detection - update cache
                 detection_cache['last_valid_bar_left'] = left_x
@@ -4178,16 +4148,16 @@ class Api:
                 bar_center = detection_cache['last_valid_bar_center']
                 bar_size = detection_cache['last_valid_bar_size']
                 detection_source = 0
-                # Sync estimation cache so _update_arrow_box_estimation starts warm
-                # (not cold) if it needs to kick in on later failure frames.
-                # Without this sync, _last_bar_* stays None (reset by _reset_pid_state)
-                # so the first estimation call always falls into the cold-start branch
-                # and guesses default_box_size = fish_width // 2, producing a wildly
-                # wrong center estimate.
-                self._last_bar_left_x = left_x
-                self._last_bar_right_x = right_x
-                self._last_bar_center = bar_center
-                self._last_bar_box_size = bar_size
+                # Warm-start arrow estimation state.
+                # _update_arrow_box_estimation uses last_known_box_center_x /
+                # last_left_x / last_right_x and _last_bar_box_size.  Keeping
+                # them current on every direct-detection frame means estimation
+                # is never cold when it eventually kicks in — no box-size
+                # guessing, no position jump on the first estimation frame.
+                self._last_bar_box_size      = bar_size
+                self.last_known_box_center_x = bar_center
+                self.last_left_x             = left_x
+                self.last_right_x            = right_x
             else:
                 # Detection failed - use cache or estimation
                 detection_cache['consecutive_failures'] += 1
@@ -4237,7 +4207,6 @@ class Api:
                     else:
                         bar_center = None
                         bar_size = 0
-            
             # Step 5: Validate and sanitize detection results
             if bar_center is not None and left_x is not None and right_x is not None:
                 # Ensure bar_size is positive and reasonable
@@ -4340,34 +4309,13 @@ class Api:
                         bar_center=fish_x, box_size=10,
                         color="red", canvas_offset=canvas_offset
                     )
-            
             # Step 14: Controller logic
             if bar_center is not None and fish_x is not None:
                 error = fish_x - bar_center
-                
-                # Debug print with cache status
-                print(
-                    f"Fish={fish_x:.1f}",
-                    f"Left={left_x:.1f}" if left_x else "Left=None",
-                    f"Right={right_x:.1f}" if right_x else "Right=None",
-                    f"Size={bar_size:.1f}",
-                    f"Center={bar_center:.1f}",
-                    f"Error={error:.1f}",
-                    f"Thresh={thresh:.1f}",
-                    f"Mode={controller_mode}",
-                    f"Cache={'Est' if detection_cache['estimation_mode'] else 'Ok' if bar_detected else 'Stale'}"
-                )
                 # Execute controller action
                 if controller_mode == 0:  # PID (Steady)
                     control = self._steady_control(error, bar_center)
-                    print(
-                        f"Error={error:.1f}",
-                        f"Control={control:.1f}",
-                        f"MouseDown={mouse_down}",
-                        f"Mode={controller_mode}",
-                        f"Cache={'Est' if detection_cache['estimation_mode'] else 'Ok' if bar_detected else 'Stale'}"
-                    )
-                    if -thresh <= error <= thresh:
+                    if -thresh <= control <= thresh:
                         release_mouse() if deadzone_action == 0 else hold_mouse()
                     elif control > thresh:
                         hold_mouse()

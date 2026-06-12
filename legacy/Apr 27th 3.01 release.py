@@ -3035,7 +3035,7 @@ class App(CTk):
 
     def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
         """
-        Estimate box position based on arrow indicator using IRUS-style logic.
+        Estimate box position based on arrow indicator using mouse down and last bar positions (unreliable).
         
         If holding: arrow is on RIGHT edge, extend LEFT
         If not holding: arrow is on LEFT edge, extend RIGHT
@@ -3448,7 +3448,7 @@ class App(CTk):
         return should_hold, maelstrom_state, colors_were_missing, charge_cooldown_until
     def _predictive_control(self, fish_x, bar_center, bar_left, bar_right, fish_left, fish_right, hold_mouse, release_mouse):
         """
-        Predictive controller ported from IRUS idiotproof.
+        Predictive controller ported from Hydra idiotproof.
         Uses linear stopping distance, on-bar counter-thrust, off-bar PD chase,
         and edge-unreachability logic.
         """
