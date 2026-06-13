@@ -776,17 +776,20 @@ class SetupGuide(ctk.CTk):
         super().__init__()
 
         # Check if running on Windows
-        is_windows = sys.platform == "win32"
         ctk.set_appearance_mode("dark")
         
         # Set different window size for Windows
-        if is_windows:
-            self.geometry("500x400")
+        if sys.platform == "win32":
+            self.geometry("500x450")
         else:
             self.geometry("600x550")
         
         self.title("PyWare Fishing Setup Guide")
         self.configure(fg_color="#05051b")
+        
+        # Start hotkey listener at the beginning for macOS (only if needed)
+        if not sys.platform == "win32":
+            self.start_hotkey_listener()
 
         ctk.CTkLabel(
             self,
@@ -801,7 +804,7 @@ class SetupGuide(ctk.CTk):
         ).pack(pady=(0, 20))
 
         # Only show permissions text and buttons on macOS
-        if not is_windows:
+        if not sys.platform == "win32":
             ctk.CTkLabel(
                 self,
                 text=(
@@ -858,20 +861,42 @@ class SetupGuide(ctk.CTk):
 
         ctk.CTkButton(
             self,
-            text="Continue",
+            text="Quit",
             command=self.destroy
         ).pack(side="bottom", pady=20)
 
+    def start_hotkey_listener(self):
+        """Start the hotkey listener to avoid trace trap errors"""
+        try:
+            self.listener = keyboard.Listener(
+                on_press=lambda key: None,
+                suppress=False
+            )
+            self.listener.start()
+            # Don't stop it immediately - let it run in background
+        except Exception as e:
+            print(f"Failed to start hotkey listener: {e}")
+    def check_accessibility(self):
+        return Quartz.AXIsProcessTrusted()
+    def check_screen_recording(self):
+        try:
+            with mss.mss() as sct:
+                sct.grab({
+                    "left": 0,
+                    "top": 0,
+                    "width": 10,
+                    "height": 10
+                })
+            return True
+        except:
+            return False
     def open_accessibility(self):
         if sys.platform == "darwin":
             subprocess.Popen([
                 "open",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
             ])
-            try:
-                return Quartz.AXIsProcessTrusted()
-            except:
-                pass
+            self.check_accessibility()
         else:
             print(f"YOU'RE ON {sys.platform.upper()} IT'S ALREADY GRANTED")
 
@@ -881,16 +906,7 @@ class SetupGuide(ctk.CTk):
                 "open",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
             ])
-            try:
-                listener = keyboard.Listener(
-                    on_press=lambda key: None
-                )
-
-                listener.start()
-                listener.stop()
-                return True
-            except:
-                return False
+            # Only open the settings app, no listener check
         else:
             print(f"YOU'RE ON {sys.platform.upper()} IT'S ALREADY GRANTED")
             
@@ -900,19 +916,15 @@ class SetupGuide(ctk.CTk):
                 "open",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
             ])
-            try:
-                with mss.mss() as sct:
-                    sct.grab({
-                        "left": 0,
-                        "top": 0,
-                        "width": 10,
-                        "height": 10
-                    })
-                return True
-            except:
-                return False
+            self.check_screen_recording()
         else:
             print(f"YOU'RE ON {sys.platform.upper()} IT'S ALREADY GRANTED")
+    
+    def destroy(self):
+        """Clean up listener when closing"""
+        if hasattr(self, 'listener'):
+            self.listener.stop()
+        super().destroy()
 class Api:
     GENERIC_PLACEHOLDERS = {
         "tolerance",
@@ -4376,12 +4388,15 @@ class Api:
                         if not (left_x <= fish_x <= right_x):
                             controller_mode = 2
             controller_mode2 = 0
-            if bar_center2 is not None and fish_x2 is not None:
-                if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x is not None:
-                    if not (left_x <= fish_x <= right_x):
-                        controller_mode = 2
-                else:
-                    controller_mode2 = 0
+            try:
+                if dual_fishing == "on" and  bar_center2 is not None and fish_x2 is not None:
+                    if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x is not None:
+                        if not (left_x <= fish_x <= right_x):
+                            controller_mode = 2
+                    else:
+                        controller_mode2 = 0
+            except:
+                controller_mode2 = 0
             # Step 12: Draw overlay if enabled
             if self._is_fish_overlay_enabled() and bar_center is not None:
                 self.fish_overlay.draw(

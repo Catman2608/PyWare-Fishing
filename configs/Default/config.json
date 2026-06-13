@@ -140,5 +140,8 @@
     "backpack_key": "G",
     "backpack_x": "0.5",
     "backpack_y": "0.5",
-    "angler_cd": "0.5"
+    "angler_cd": "0.5",
+    "e_delay": "0.5",
+    "click_delay": "0.5",
+    "click_delay2": "0.5"
 }
