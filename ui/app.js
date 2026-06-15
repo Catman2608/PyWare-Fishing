@@ -1,4 +1,4 @@
-const APP_VERSION = "4.2";
+const APP_VERSION = "4.21";
 
 let currentConfig = null;
 window.setStatus = (message) => {
@@ -108,6 +108,7 @@ function updateControllerMode() {
 
     const normalCard = document.getElementById("controller-normal-card");
     const steadyCard = document.getElementById("controller-steady-card");
+    const spammyCard = document.getElementById("controller-spammy-card");
     const predictiveCard = document.getElementById("controller-predictive-card");
 
     // Hide all
@@ -120,6 +121,8 @@ function updateControllerMode() {
         normalCard.style.display = "block";
     } else if (mode === "steady") {
         steadyCard.style.display = "block";
+    } else if (mode === "spammy") {
+        spammyCard.style.display = "block";
     } else if (mode === "predictive") {
         predictiveCard.style.display = "block";
     }

@@ -159,9 +159,9 @@ hr {
 }
 /* Sidebar ── */
 .sidebar {
-    width: 220px;
+    width: 240px;
     min-width: 220px;
-    max-width: 220px;
+    max-width: 260px;
     background: rgba(20, 20, 50, 0.95);
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     padding: 16px;

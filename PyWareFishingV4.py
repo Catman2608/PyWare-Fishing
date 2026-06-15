@@ -29,6 +29,9 @@ if sys.platform == "win32":
 elif sys.platform == "darwin":
     import Quartz
     from AppKit import NSScreen
+elif sys.platform == "linux":
+    from Xlib import X, XK, display as Xdisplay
+    from Xlib.ext import xtest
 import math
 import subprocess
 # Logging
@@ -58,6 +61,15 @@ if sys.platform == "win32":
     user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
     user32.SetLayeredWindowAttributes.restype = wintypes.BOOL
     user32.SetLayeredWindowAttributes.argtypes = [wintypes.HWND, wintypes.COLORREF, ctypes.c_byte, wintypes.DWORD]
+    # Set DPI scaling
+    try:
+        windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+    # Windows API related functions
     def get_scale_factor():
         return 1
     def _get_hwnd(window):
@@ -115,73 +127,149 @@ elif sys.platform == "darwin":
         "u": 32, "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "semicolon": 41, "comma": 43, "slash": 44, "n": 45,
         "m": 46, "period": 47, "space": 49, "return": 36, "enter": 76, "tab": 48, "escape": 53,
     }
+
     def get_scale_factor():
-        """
-        Return display backing scale factor.
-        macOS returns true Retina pixel ratio.
-        Other platforms return 1.0.
-        """
         global _scale_cache
         if _scale_cache is not None:
             return _scale_cache
-        if sys.platform == "darwin":
-            try:
-                _scale_cache = float(NSScreen.mainScreen().backingScaleFactor())
-            except Exception:
-                _scale_cache = 1.0
-        else:
+        try:
+            _scale_cache = float(NSScreen.mainScreen().backingScaleFactor())
+        except Exception:
             _scale_cache = 1.0
         return _scale_cache
+
     def get_mouse_position():
         event = Quartz.CGEventCreate(None)
         loc = Quartz.CGEventGetLocation(event)
         return loc.x, loc.y
+
     def _move_mouse(x, y):
-        """
-        Expects logical points (already converted by the caller).
-        CGWarpMouseCursorPosition works in logical coordinate space.
-        """
+        """Expects logical points."""
         point = Quartz.CGPointMake(x, y)
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
-    def _mouse_event(event_type, right=False, x=None, y=None):
-        "Expects logical points (already converted by the caller)."
+
+    def _mouse_event(button="left", press=True, x=None, y=None):
+        """Unified cross-platform mouse event.
+        button: 'left'/'right'/'middle' or 1/2/3
+        press=True → down, False → up
+        """
         if x is None or y is None:
             x, y = get_mouse_position()
+
+        # Map button → (Quartz button constant, down event, up event)
+        button_map = {
+            "left":   (Quartz.kCGMouseButtonLeft,   Quartz.kCGEventLeftMouseDown,   Quartz.kCGEventLeftMouseUp),
+            1:        (Quartz.kCGMouseButtonLeft,   Quartz.kCGEventLeftMouseDown,   Quartz.kCGEventLeftMouseUp),
+            "right":  (Quartz.kCGMouseButtonRight,  Quartz.kCGEventRightMouseDown,  Quartz.kCGEventRightMouseUp),
+            3:        (Quartz.kCGMouseButtonRight,  Quartz.kCGEventRightMouseDown,  Quartz.kCGEventRightMouseUp),
+            "middle": (Quartz.kCGMouseButtonCenter, Quartz.kCGEventOtherMouseDown,  Quartz.kCGEventOtherMouseUp),
+            2:        (Quartz.kCGMouseButtonCenter, Quartz.kCGEventOtherMouseDown,  Quartz.kCGEventOtherMouseUp),
+        }
+        key = button.lower() if isinstance(button, str) else button
+        if key not in button_map:
+            key = "left"
+        btn, down_evt, up_evt = button_map[key]
+        event_type = down_evt if press else up_evt
+
         event = Quartz.CGEventCreateMouseEvent(
             None,
             event_type,
             Quartz.CGPointMake(float(x), float(y)),
-            Quartz.kCGMouseButtonRight if right else Quartz.kCGMouseButtonLeft
+            btn
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-    def _send_key(key, delay=0.05):
+
+    def send_key(key, delay=0.05):
         keycode = MAC_KEY_MAP.get(str(key).lower())
         if keycode is None:
             return
-        Quartz.CGEventPost(
-            Quartz.kCGHIDEventTap,
-            Quartz.CGEventCreateKeyboardEvent(
-                None,
-                keycode,
-                True
-            )
-        )
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, Quartz.CGEventCreateKeyboardEvent(None, keycode, True))
         time.sleep(delay)
-        Quartz.CGEventPost(
-            Quartz.kCGHIDEventTap,
-            Quartz.CGEventCreateKeyboardEvent(
-                None,
-                keycode,
-                False
-            )
-        )
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, Quartz.CGEventCreateKeyboardEvent(None, keycode, False))
+
     def make_window_translucent(window, transparency):
-        "Does nothing"
         pass
-elif sys.platform == "linux":
+elif sys.platform.startswith("linux"):
+    _xdisplay = None
+
+    def _get_xdisplay():
+        global _xdisplay
+        if _xdisplay is None:
+            _xdisplay = Xdisplay.Display()
+        return _xdisplay
+
+    def get_scale_factor():
+        """
+        X11 normally works in physical pixels.
+        Return 1.0 unless you implement desktop-specific scaling detection.
+        """
+        return 1.0
+
+    def get_mouse_position():
+        d = _get_xdisplay()
+        root = d.screen().root
+        pointer = root.query_pointer()
+        return pointer.root_x, pointer.root_y
+
+    def _move_mouse(x, y):
+        d = _get_xdisplay()
+
+        root = d.screen().root
+
+        root.warp_pointer(int(x), int(y))
+        d.sync()
+
+    def _mouse_event(button="left", press=True, x=None, y=None):
+        """Unified cross-platform mouse event.
+        button: 'left'/'right'/'middle' or 1/2/3
+        press=True → down, False → up
+        """
+        d = _get_xdisplay()
+
+        if x is not None and y is not None:
+            _move_mouse(x, y)   # move first so the click happens at the desired location
+
+        button_map = {
+            "left": 1, 1: 1,
+            "middle": 2, 2: 2,
+            "right": 3, 3: 3,
+        }
+        key = button.lower() if isinstance(button, str) else button
+        btn = button_map.get(key, 1)
+
+        xtest.fake_input(
+            d,
+            X.ButtonPress if press else X.ButtonRelease,
+            btn
+        )
+        d.sync()
+
+    def send_key(key, delay=0.05):
+        d = _get_xdisplay()
+
+        keysym = XK.string_to_keysym(str(key))
+
+        if keysym == 0:
+            keysym = XK.string_to_keysym(str(key).lower())
+
+        if keysym == 0:
+            return
+
+        keycode = d.keysym_to_keycode(keysym)
+
+        if keycode == 0:
+            return
+
+        xtest.fake_input(d, X.KeyPress, keycode)
+        d.sync()
+
+        time.sleep(delay)
+
+        xtest.fake_input(d, X.KeyRelease, keycode)
+        d.sync()
+
     def make_window_translucent(window, transparency):
-        "Does nothing"
         pass
 def get_macos_menu_offset():
     if sys.platform != "darwin":
@@ -298,7 +386,7 @@ CONFIG_DIR = CONFIGS_FOLDER
 IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
 CONFIG_PATH = LAST_CONFIG_FILE
-APP_VERSION = "4.2"
+APP_VERSION = "4.21"
 # Area Selector — pywebview-based (no tkinter)
 class AreaSelector:
     """
@@ -1671,12 +1759,10 @@ class Api:
             else:
                 windll.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
         elif sys.platform == "darwin":
-            if mouse:
-                _mouse_event(Quartz.kCGEventRightMouseDown,right=True)
-            else:
-                _mouse_event(Quartz.kCGEventLeftMouseDown)
+            _mouse_event(button="right" if mouse else "left", press=True)
         else:
-            mouse_controller.press( Button.right if mouse else Button.left )
+            # Linux - now uses the unified X11 implementation
+            _mouse_event(button="right" if mouse else "left", press=True)
     # Release Mouse
     def release_mouse(self, mouse=False):
         if sys.platform == "win32":
@@ -1685,68 +1771,40 @@ class Api:
             else:
                 windll.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
         elif sys.platform == "darwin":
-            if mouse:
-                _mouse_event(Quartz.kCGEventRightMouseUp,right=True)
-            else:
-                _mouse_event(Quartz.kCGEventLeftMouseUp)
+            _mouse_event(button="right" if mouse else "left", press=False)
         else:
-            mouse_controller.release( Button.right if mouse else Button.left )
+            # Linux - now uses the unified X11 implementation
+            _mouse_event(button="right" if mouse else "left", press=False)
     # Click At
     def _click_at(self, x, y, click_count=1):
-        if sys.platform == "win32":
-            # Move Cursor
-            windll.SetCursorPos(x, y)
-            # Important: Tiny Movement So Roblox Registers Input
-            windll.mouse_event(MOUSEEVENTF_MOVE, 0, 1, 0, 0)
-            for i in range(click_count):
-                windll.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-                windll.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-                if i < click_count - 1:
-                    time.sleep(0.03)
-        elif sys.platform == "darwin":
-            # _get_areas returns physical pixels (ratio × scale × SCREEN_W/H).
-            # CGWarp and CGEventCreate both expect logical points, so divide once here.
+        # Convert coordinates if needed (Retina scaling)
+        if sys.platform == "darwin":
             scale = self._get_scale_factor()
-            lx = int(x / scale)
-            ly = int(y / scale)
-            # Move cursor
-            _move_mouse(lx, ly)
-            # Tiny movement (Roblox trick)
-            _move_mouse(lx, ly + 1)
-            for i in range(click_count):
-                _mouse_event(Quartz.kCGEventLeftMouseDown, x=lx, y=ly)
-                _mouse_event(Quartz.kCGEventLeftMouseUp, x=lx, y=ly)
-                if i < click_count - 1:
-                    time.sleep(0.03)
+            x = int(x / scale)
+            y = int(y / scale)
+
+        # Move cursor to target
+        _move_mouse(x, y)
+
+        # Tiny jiggle so Roblox registers the input
+        if sys.platform == "win32":
+            windll.mouse_event(MOUSEEVENTF_MOVE, 0, 1, 0, 0)
         else:
-            mouse_controller.position = (x, y)
-            time.sleep(0.01)
-            # Jitter To Prevent Roblox From Crashing
-            mouse_controller.position = (x + 3, y + 3)
-            mouse_controller.position = (x, y)
-            mouse_controller.press(Button.left)
-            time.sleep(0.04)
-            mouse_controller.release(Button.left)
+            _move_mouse(x + 1, y + 1)
+            _move_mouse(x, y)
+
+        for i in range(click_count):
+            _mouse_event(button="left", press=True)   # mouse down
+            _mouse_event(button="left", press=False)  # mouse up
+
+            if i < click_count - 1:
+                time.sleep(0.03)
     # Keyboard
     def _send_key(self, key2, delay=0.05):
         key = str(key2)
         if sys.platform == "darwin":
-            keycode = MAC_KEY_MAP.get(key.lower())
-            if keycode is None:
-                print(f"_send_key: no macOS keycode for '{key}'")
-                return
-            try:
-                Quartz.CGEventPost(
-                    Quartz.kCGHIDEventTap,
-                    Quartz.CGEventCreateKeyboardEvent(None, keycode, True)
-                )
-                time.sleep(delay)
-                Quartz.CGEventPost(
-                    Quartz.kCGHIDEventTap,
-                    Quartz.CGEventCreateKeyboardEvent(None, keycode, False)
-                )
-            except Exception as e:
-                print(f"Error sending key '{key}': {e}")
+            # Reuse the platform send_key we defined earlier (cleaner)
+            send_key(key, delay=delay)
         else:
             try:
                 keyboard_controller.press(key)
@@ -2646,6 +2704,9 @@ class Api:
         self._pid_last_error2      = 0.0
         self._pid_last_target_x2   = 0.0
         self._pid_last_scan_time2  = 0.0
+        # Spammy Controller
+        self.current_frame = 0
+        self.state = "release"
     def _normal_control(self, error2):
         """
         Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
@@ -2785,6 +2846,71 @@ class Api:
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
         return control_signal
+    def _spammy_control(self, fish_x, bar_center, bar_size):
+        # Initialization
+        spam_ratio = self._get_var_number("spam_ratio", 0.3)
+        velocity_multiplier = self._get_var_number("velocity_multiplier", 3)
+
+        hold_frames = int(self.vars["hold_frames"])
+        release_frames = int(self.vars["release_frames"])
+
+        error = fish_x - bar_center
+
+        if hold_frames > release_frames:
+            larger_frame = hold_frames
+            smaller_frame = release_frames
+        else:
+            larger_frame = release_frames
+            smaller_frame = hold_frames
+
+        if error > 0:
+            hold_frames = larger_frame
+            release_frames = smaller_frame
+
+        elif error < 0:
+            hold_frames = smaller_frame
+            release_frames = larger_frame
+
+        if self.state == "hold":
+            self.current_frame += 1
+
+            if self.current_frame >= hold_frames:
+                self.state = "release"
+                self.current_frame = 0
+
+        elif self.state == "release":
+            self.current_frame += 1
+
+            if self.current_frame >= release_frames:
+                self.state = "hold"
+                self.current_frame = 0
+        
+        # Calculations
+        spam_distance = int(bar_size * spam_ratio)
+        try:
+            raw_velocity = bar_center - self._pid_last_bar_x
+            if raw_velocity != 0:
+                self._last_velocity = raw_velocity
+        except AttributeError:
+            self._last_velocity = 0
+        velocity = getattr(self, "_last_velocity", 0)
+        spam_distance = spam_distance + (abs(velocity) * velocity_multiplier)
+        # Update cache
+        self._pid_last_error      = error
+        self._pid_last_bar_x = bar_center
+        # print(error, velocity, spam_distance)
+        if abs(error) < abs(spam_distance):
+            # print("Spam")
+            if self.state == "hold":
+                return True
+            else:
+                return False
+        elif error < 0:
+            # print("Release")
+            return False
+        else:
+            # print("Hold")
+            return True
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
         Predictive controller ported from Hydra idiotproof.
@@ -3148,8 +3274,8 @@ class Api:
         angler_cd = int(self.vars["angler_cd"])
         angler_click_mode = self.vars["angler_click_mode"].capitalize()
         # Angler Key
-        angler_x_ratio = self.vars["angler_click_x"]
-        angler_y_ratio = self.vars["angler_click_y"]
+        angler_x_ratio = float(self.vars["angler_click_x"])
+        angler_y_ratio = float(self.vars["angler_click_y"])
         angler_click_x = int(dialogue_width * angler_x_ratio) + dialogue_left
         angler_click_y = int(dialogue_height * angler_y_ratio) + dialogue_top
         # Backpack Key
@@ -3289,9 +3415,14 @@ class Api:
         y = float(self.vars["appraisal_enchant_y"])
         x_scaled = int(dialogue_width * x) + dialogue_left
         y_scaled = int(dialogue_height * y) + dialogue_top
-        e_delay = self.vars["e_delay"]
-        click_delay = self.vars["click_delay"]
-        click_delay2 = self.vars["click_delay2"]
+        try:
+            e_delay = float(self.vars["e_delay"])
+            click_delay = float(self.vars["click_delay"])
+            click_delay2 = float(self.vars["click_delay2"])
+        except:
+            e_delay = 1.0
+            click_delay = 1.0
+            click_delay2 = 6.0
         # Check for utilities
         self._check_logging_trigger(-1)
         # Main loop
@@ -3324,11 +3455,11 @@ class Api:
         tesseract_path = self.vars["tesseract_path"]
         mutation_enchant = self.vars["mutation_enchant"]
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
-        appraisal_x_ratio = self.vars["appraisal_enchant_x"]
-        appraisal_y_ratio = self.vars["appraisal_enchant_y"]
+        appraisal_x_ratio = float(self.vars["appraisal_enchant_x"])
+        appraisal_y_ratio = float(self.vars["appraisal_enchant_y"])
         appraisal_x = int(dialogue_width * appraisal_x_ratio) + dialogue_left
         appraisal_y = int(dialogue_height * appraisal_y_ratio) + dialogue_top
-        click_delay = self.vars["click_delay"]
+        click_delay = int(self.vars["click_delay"])
         # Check for utilities
         self._check_logging_trigger(-1)
         # Main loop
@@ -4379,6 +4510,8 @@ class Api:
                 else:
                     if minigame_controller_mode == "steady":
                         controller_mode = 0
+                    if minigame_controller_mode == "spammy":
+                        controller_mode = 6
                     elif minigame_controller_mode == "normal":
                         controller_mode = 1
                     elif minigame_controller_mode == "predictive":
@@ -4465,6 +4598,13 @@ class Api:
                     else:
                         release_mouse()
                     controller_found = 1
+                elif controller_mode == 6:  # Spammy
+                    should_hold = self._spammy_control(fish_x, bar_center, bar_size)
+                    controller_found = 1
+                    if should_hold:
+                        hold_mouse()
+                    else:
+                        release_mouse()
             if controller_found == 0:
                 if -thresh <= control <= thresh:
                     release_mouse() if deadzone_action == 0 else hold_mouse()

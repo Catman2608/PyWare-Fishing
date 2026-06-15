@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PyWare Fishing V4</title>
+    <title>PyWare Fishing V4.21</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -10,7 +10,7 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
-                PyWare Fishing V4.2
+                PyWare Fishing V4.21
             </div>
             <button class="tab-button active" onclick="switchTab('basic')">
                 Basic
@@ -331,6 +331,7 @@
                         <select name="controller_mode" id="controller_mode" onchange="updateControllerMode()">
                         <option value="normal">Normal</option>
                         <option value="steady">Steady</option>
+                        <option value="spammy">Spammy</option>
                         <option value="predictive">Predictive</option>
                         </select>
                     </div>
@@ -355,6 +356,25 @@
                     <div class="text">
                         <label>KD (Derivative)</label>
                         <input id=kd type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card" id="controller-spammy-card" style="display:none;">
+                    <h3>Controller (Steady)</h3>
+                    <div class="text">
+                        <label>Spam Ratio (Relative to Bar)</label>
+                        <input id=spam_ratio type="text" placeholder="0.3">
+                    </div>
+                    <div class="text">
+                        <label>Velocity Multiplier (Relative to FPS)</label>
+                        <input id=velocity_multiplier type="text" placeholder="3">
+                    </div>
+                    <div class="text">
+                        <label>Hold Frames</label>
+                        <input id=hold_frames type="text" placeholder="2">
+                    </div>
+                    <div class="text">
+                        <label>Release Frames</label>
+                        <input id=release_frames type="text" placeholder="2">
                     </div>
                 </div>
                 <div class="card" id="controller-predictive-card" style="display:none;">
