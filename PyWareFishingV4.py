@@ -2040,10 +2040,10 @@ class Api:
         """
         self.set_status("Saved debug screenshots (fish, shake, friend, totem, full)")
         # Define Areas (Same As Minigame) 
-        shake = self._get_areas("shake")
-        fish = self._get_areas("fish")
-        friend = self._get_areas("friend")
-        totem = self._get_areas("totem")
+        shake_l, shake_t, shake_r, shake_b, _, _ = self._get_areas("shake")
+        fish_l, fish_t, fish_r, fish_b, _, _ = self._get_areas("fish")
+        friend_l, friend_t, friend_r, friend_b, _, _ = self._get_areas("friend")
+        totem_l, totem_t, totem_r, totem_b, _, _ = self._get_areas("totem")
         # Capture Full Screen (Better For Overlay Debugging) 
         full_img = self._grab_screen_full()
         if full_img is None:
@@ -2054,16 +2054,24 @@ class Api:
             cv2.imwrite(os.path.join(BASE_PATH, "debug_full.png"), full_img)
         except Exception as e:
             self.set_status(f"Error saving full screenshot: {e}")
-        # Helper To Crop 
-        def crop(img, rect):
-            l, t, r, b = rect
-            return img[t:b, l:r]
         # Save Individual Regions
         try:
-            cv2.imwrite(os.path.join(BASE_PATH, "debug_fish.png"), crop(full_img, fish))
-            cv2.imwrite(os.path.join(BASE_PATH, "debug_shake.png"), crop(full_img, shake))
-            cv2.imwrite(os.path.join(BASE_PATH, "debug_friend.png"), crop(full_img, friend))
-            cv2.imwrite(os.path.join(BASE_PATH, "debug_totem.png"), crop(full_img, totem))
+            cv2.imwrite(
+                os.path.join(BASE_PATH, "debug_fish.png"),
+                full_img[fish_t:fish_b, fish_l:fish_r]
+            )
+            cv2.imwrite(
+                os.path.join(BASE_PATH, "debug_shake.png"),
+                full_img[shake_t:shake_b, shake_l:shake_r]
+            )
+            cv2.imwrite(
+                os.path.join(BASE_PATH, "debug_friend.png"),
+                full_img[friend_t:friend_b, friend_l:friend_r]
+            )
+            cv2.imwrite(
+                os.path.join(BASE_PATH, "debug_totem.png"),
+                full_img[totem_t:totem_b, totem_l:totem_r]
+            )
         except Exception as e:
             self.set_status(f"Error saving region screenshots: {e}")
             return
