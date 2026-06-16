@@ -8,7 +8,7 @@ This guide walks through setting up Python and all required modules for running 
 
 ## 1️⃣ Prerequisites
 
-- **OS**: Windows or macOS (project is not tested on Linux)
+- **OS**: Windows, macOS or Linux (experimental)
 - **Administrator/Root access** may be needed for certain system-level operations
 - **Internet connection** for downloading packages
 

@@ -1,5 +1,5 @@
 {
-    "config-select": "Silly Fun Happy Rod",
+    "config-select": "Castbound",
     "macro_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -64,7 +64,7 @@
     "kd": "0.3",
     "spam_ratio": "0.7",
     "velocity_multiplier": "3",
-    "hold_frames": "3",
+    "hold_frames": "5",
     "release_frames": "2",
     "stopping_distance": "3",
     "velocity_smoothing": "0.3",

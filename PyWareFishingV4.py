@@ -2707,6 +2707,8 @@ class Api:
         # Spammy Controller
         self.current_frame = 0
         self.state = "release"
+        self.current_frame2 = 0
+        self.state2 = "release"
     def _normal_control(self, error2):
         """
         Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
@@ -2846,6 +2848,71 @@ class Api:
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
         return control_signal
+    def _spammy_control2(self, fish_x, bar_center, bar_size):
+        # Initialization
+        spam_ratio = self._get_var_number("spam_ratio", 0.3)
+        velocity_multiplier = self._get_var_number("velocity_multiplier", 3)
+
+        hold_frames = int(self.vars["hold_frames"])
+        release_frames = int(self.vars["release_frames"])
+
+        error = fish_x - bar_center
+
+        if hold_frames > release_frames:
+            larger_frame = hold_frames
+            smaller_frame = release_frames
+        else:
+            larger_frame = release_frames
+            smaller_frame = hold_frames
+
+        if error > 0:
+            hold_frames = larger_frame
+            release_frames = smaller_frame
+
+        elif error < 0:
+            hold_frames = smaller_frame
+            release_frames = larger_frame
+
+        if self.state2 == "hold":
+            self.current_frame2 += 1
+
+            if self.current_frame2 >= hold_frames:
+                self.state2 = "release"
+                self.current_frame2 = 0
+
+        elif self.state2 == "release":
+            self.current_frame2 += 1
+
+            if self.current_frame2 >= release_frames:
+                self.state2 = "hold"
+                self.current_frame2 = 0
+        
+        # Calculations
+        spam_distance = int(bar_size * spam_ratio)
+        try:
+            raw_velocity = bar_center - self._pid_last_bar_x
+            if raw_velocity != 0:
+                self._last_velocity = raw_velocity
+        except AttributeError:
+            self._last_velocity = 0
+        velocity = getattr(self, "_last_velocity", 0)
+        spam_distance = spam_distance + (abs(velocity) * velocity_multiplier)
+        # Update cache
+        self._pid_last_error      = error
+        self._pid_last_bar_x = bar_center
+        # print(error, velocity, spam_distance)
+        if abs(error) < abs(spam_distance):
+            # print("Spam")
+            if self.state == "hold":
+                return True
+            else:
+                return False
+        elif error < 0:
+            # print("Release")
+            return False
+        else:
+            # print("Hold")
+            return True
     def _spammy_control(self, fish_x, bar_center, bar_size):
         # Initialization
         spam_ratio = self._get_var_number("spam_ratio", 0.3)
@@ -4349,6 +4416,7 @@ class Api:
                 arrow_indicator_x = None
             
             # Step 4: Bar detection with cache fallback
+            bar_size2 = 0
             if dual_fishing == "on": # Extra variables for secondary bar
                 bar2_detected = (left_x2 is not None and right_x2 is not None)
             else:
@@ -4439,27 +4507,66 @@ class Api:
                         bar_center = None
                         bar_size = 0
             # Step 5: Validate and sanitize detection results
-            if bar_center is not None and left_x is not None and right_x is not None:
-                # Ensure bar_size is positive and reasonable
-                bar_size = max(bar_size, 10)  # Minimum bar size
-                bar_size = min(bar_size, fish_width)  # Maximum bar size
-                
-                deadzone_size = bar_size * bar_ratio
-                max_left = deadzone_size
-                max_right = (fish_right - fish_left) - deadzone_size
-                
-                # Clamp max bounds
-                max_left = max(0, min(max_left, fish_width))
-                max_right = max(0, min(max_right, fish_width))
+            if dual_fishing == "on":
+                if bar_center is not None and left_x is not None and right_x is not None:
+                    # Ensure bar_size is positive and reasonable
+                    bar_size = max(bar_size, 10)  # Minimum bar size
+                    bar_size = min(bar_size, fish_width)  # Maximum bar size
+                    
+                    deadzone_size = bar_size * bar_ratio
+                    max_left = deadzone_size
+                    max_right = (fish_area_center - fish_left) - deadzone_size
+                    
+                    # Clamp max bounds
+                    max_left = max(0, min(max_left, fish_width))
+                    max_right = max(0, min(max_right, fish_width))
+                else:
+                    bar_size = 0
+                    bar_center = None
+                    max_left = fish_left
+                    max_right = fish_area_center
+                # Max Left and Right for second bar
+                if bar_center2 is not None and left_x2 is not None and right_x2 is not None:
+                    # Ensure bar_size is positive and reasonable
+                    bar_size2 = max(bar_size2, 10)  # Minimum bar size
+                    bar_size2 = min(bar_size2, fish_width)  # Maximum bar size
+                    
+                    deadzone_size2 = bar_size2 * bar_ratio
+                    max_left2 = deadzone_size2
+                    max_right2 = (fish_right - fish_area_center) - deadzone_size2
+                    
+                    # Clamp max bounds
+                    max_left2 = max(0, min(max_left2, fish_width))
+                    max_right2 = max(0, min(max_right2, fish_width))
+                else:
+                    bar_size2 = 0
+                    bar_center2 = None
+                    max_left2 = fish_area_center
+                    max_right2 = fish_right
             else:
-                bar_size = 0
-                bar_center = None
-                max_left = fish_left
-                max_right = fish_right
+                if bar_center is not None and left_x is not None and right_x is not None:
+                    # Ensure bar_size is positive and reasonable
+                    bar_size = max(bar_size, 10)  # Minimum bar size
+                    bar_size = min(bar_size, fish_width)  # Maximum bar size
+                    
+                    deadzone_size = bar_size * bar_ratio
+                    max_left = deadzone_size
+                    max_right = (fish_right - fish_left) - deadzone_size
+                    
+                    # Clamp max bounds
+                    max_left = max(0, min(max_left, fish_width))
+                    max_right = max(0, min(max_right, fish_width))
+                else:
+                    bar_size = 0
+                    bar_center = None
+                    max_left = fish_left
+                    max_right = fish_right
             # Step 6: Update deadzone action counter
             deadzone_action = (deadzone_action + 1) % 4
             
             # Step 7: Calculate threshold
+            thresh = 0
+            thresh2 = 0
             if dual_fishing == "on":
                 if bar_size2 > 0:
                     thresh2 = max(1, (1 - round((bar_size2 / fish_width2), 2)) * 8 * scale)
@@ -4475,6 +4582,7 @@ class Api:
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
             if friend_x is not None:
                 release_mouse()
+                release_mouse(True)
                 time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
                 return catch_success
@@ -4523,14 +4631,44 @@ class Api:
             controller_mode2 = 0
             try:
                 if dual_fishing == "on" and  bar_center2 is not None and fish_x2 is not None:
-                    if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x is not None:
-                        if not (left_x <= fish_x <= right_x):
-                            controller_mode = 2
+                    if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x2 is not None:
+                        if not (left_x2 <= fish_x2 <= right_x2):
+                            controller_mode2 = 2
                     else:
-                        controller_mode2 = 0
+                        if max_left2 is not None and fish_x2 <= max_left2:
+                            controller_mode2 = 4
+                        elif max_right2 is not None and fish_x2 >= max_right2:
+                            controller_mode2 = 3
+                        elif minigame_controller_mode == "spammy":
+                            controller_mode2 = 6
+                        else:
+                            controller_mode2 = 0
             except:
                 controller_mode2 = 0
             # Step 12: Draw overlay if enabled
+            if dual_fishing == "on":
+                canvas_offset2 = 0 - abs(fish_area_center - fish_left)
+                if self._is_fish_overlay_enabled() and bar_center is not None:
+                    self.fish_overlay.draw(
+                        bar_center=bar_center2, box_size=bar_size2,
+                        color="green", canvas_offset=canvas_offset2,
+                        show_bar_center=True
+                    )
+                    if max_left is not None:
+                        self.fish_overlay.draw(
+                            bar_center=max_left2, box_size=15,
+                            color="lightblue", canvas_offset=canvas_offset2
+                        )
+                    if max_right is not None:
+                        self.fish_overlay.draw(
+                            bar_center=max_right2, box_size=15,
+                            color="lightblue", canvas_offset=canvas_offset2
+                        )
+                    if fish_x is not None:
+                        self.fish_overlay.draw(
+                            bar_center=fish_x2, box_size=10,
+                            color="red", canvas_offset=canvas_offset2
+                        )
             if self._is_fish_overlay_enabled() and bar_center is not None:
                 self.fish_overlay.draw(
                     bar_center=bar_center, box_size=bar_size,
@@ -4554,12 +4692,20 @@ class Api:
                     )
             # Step 13: Controller logic
             controller_found = 1
+            controller_found2 = 1
             if dual_fishing == "on" and bar_center2 is not None and fish_x2 is not None:
                 controller_found2 = 1
                 error2 = fish_x2 - bar_center2
                 if controller_mode2 == 0 or controller_mode2 == 1 or controller_mode2 == 5:
                     control2 = self._steady_control2(error2, bar_center2)
                     controller_found2 = 0
+                elif controller_mode2 == 6:
+                    should_hold = self._spammy_control2(fish_x2, bar_center2, bar_size2)
+                    if should_hold:
+                        hold_mouse(True)
+                    else:
+                        release_mouse(True)
+                    controller_found2 = 1
                 elif controller_mode2 == 2:
                     control2 = error2
                     controller_found2 = 0
@@ -4613,11 +4759,11 @@ class Api:
                 elif control < -thresh:
                     release_mouse()
             if dual_fishing == "on" and controller_found2 == 0:
-                if -thresh <= control2 <= thresh:
+                if -thresh2 <= control2 <= thresh2:
                     release_mouse(True) if deadzone_action == 0 else hold_mouse(True)
-                elif control2 > thresh:
+                elif control2 > thresh2:
                     hold_mouse(True)
-                elif control2 < -thresh:
+                elif control2 < -thresh2:
                     release_mouse(True)
             time.sleep(scan_delay)
     def stop_macro(self, text="Macro Stopped"):
@@ -4664,7 +4810,7 @@ if show_setup_guide == False:
     # =========================
     api = Api()
     window = webview.create_window(
-        "PyWare Fishing V4.2",
+        "PyWare Fishing V4.21",
         os.path.join(UI_PATH, "index.html"),
         js_api=api,
         width=1000,
