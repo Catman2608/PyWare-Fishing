@@ -3420,7 +3420,7 @@ class Api:
         fish_left, fish_top, fish_right, fish_bottom, _, fish_height = self._get_areas("fish")
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
         while self.macro_running:
-            # Step 1: Grab Full Screen Then Crop (Better On Macos)
+            # Step 1: Grab Full Screen Then Crop (better on macOS)
             frame = self._grab_screen_full()
             self._set_fish_overlay_mode("tranquility")
             # Friend detection area
@@ -3594,7 +3594,7 @@ class Api:
                 mouse_down = False
         # any previously running capture thread is stopped before this one begins)
         while self.macro_running:
-            # Step 1: Grab Full Screen Then Crop (Better On Macos)
+            # Step 1: Grab Full Screen Then Crop (better on macOS)
             frame = self._grab_screen_full()
             img = frame[fish_top:fish_bottom, fish_left:fish_right]
             note_img = frame[shake_top:fish_bottom, fish_left:fish_right]

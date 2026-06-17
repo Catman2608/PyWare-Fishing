@@ -1,5 +1,5 @@
 {
-    "config-select": "Rainbow Cluster",
+    "config-select": "Verdant Oath",
     "macro_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -46,7 +46,7 @@
     "perfect_cast_timing_1000": "0.04",
     "perfect_cast_timing_1100": "0.02",
     "perfect_cast_timing_1200": "0.0",
-    "perfect_cast_timing_1300": "-0.02",
+    "perfect_cast_timing_150": "-0.02",
     "perfect_cast_timing_1400": "-0.04",
     "perfect_cast_timing_1500": "-0.06",
     "perfect_cast_timing_1600": "-0.08",

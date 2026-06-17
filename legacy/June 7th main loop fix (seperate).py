@@ -77,7 +77,7 @@ def start():
         # any previously running capture thread is stopped before this one begins)
         _minigame_stop = self._start_capture(scan_delay)
         while self.macro_running:
-            # Step 1: Grab Full Screen Then Crop (Better On Macos)
+            # Step 1: Grab Full Screen Then Crop (better on macOS)
             if not self._cap_event.wait(timeout=0.5):
                 continue
             with self._cap_lock:

@@ -3158,7 +3158,7 @@ class Api:
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
                 #Start Screen Capture Thread (via _start_capture So It's Tracked And                #Any Previously Running Capture Thread Is Stopped Before This One Begins)        _minigame_stop = self._start_capture(scan_delay)
         while self.macro_running:
-                        #Step 1: Grab Full Screen Then Crop (Better On Macos)            if not self._cap_event.wait(timeout=0.5):
+                        #Step 1: Grab Full Screen Then Crop (better on macOS)            if not self._cap_event.wait(timeout=0.5):
                 continue
             with self._cap_lock:
                 frame = self._cap_frame
@@ -3316,7 +3316,7 @@ class Api:
                                 #Keyboard_Controller.Release(Key.Space)                mouse_down = False
                 #Start Screen Capture Thread (via _start_capture So It's Tracked And                #Any Previously Running Capture Thread Is Stopped Before This One Begins)        _minigame_stop = self._start_capture(scan_delay)
         while self.macro_running:
-                        #Step 1: Grab Full Screen Then Crop (Better On Macos)            if not self._cap_event.wait(timeout=0.5):
+                        #Step 1: Grab Full Screen Then Crop (better on macOS)            if not self._cap_event.wait(timeout=0.5):
                 continue
             with self._cap_lock:
                 frame = self._cap_frame

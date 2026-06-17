@@ -1,4 +1,4 @@
-name: Build Silicon DMG
+name: Build macOS DMG (Apple Silicon Only)
 
 on:
     workflow_dispatch:
@@ -32,7 +32,7 @@ jobs:
                   ls -lh dist
                   echo "Contents of dist:"
                   ls -la dist/
-                  dir dist\PyWareFishingV4
+                  ls -la dist/PyWareFishingV4
 
             - name: Create DMG from .app bundle
               run: |
