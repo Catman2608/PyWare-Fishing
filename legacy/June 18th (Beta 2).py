@@ -3611,8 +3611,6 @@ class Api:
         casting_mode = self.vars.get("casting_mode", "Normal")
         shake_mode = self.vars.get("shake_mode", "Navigation")
         macro_mode = self.vars["macro_mode"]
-
-        reverse_fishing = self.vars["reverse_fishing"].lower()
         if self.macro_running == True:
             if auto_zoom == "on":
                 for _ in range(20):
@@ -3662,8 +3660,6 @@ class Api:
             # Minigame
             if macro_mode == "tranquility" or macro_mode == "Tranquility":
                 self._enter_minigame_tranquility()
-            elif reverse_fishing == "on":
-                self._enter_minigame_dreambreaker()
             else:
                 catch_success = self._enter_minigame()
             successful_catches = successful_catches + 1 if catch_success == True else successful_catches
@@ -4324,105 +4320,6 @@ class Api:
                     else:
                         self._send_key(keys[lane], 0.03, 2)
             time.sleep(scan_delay)
-    def _enter_minigame_dreambreaker(self):
-        # Areas
-        fish_left, fish_top, fish_right, fish_bottom, fish_width, _ = self._get_areas("fish")
-        friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
-        # Colors
-        fish_hex = self.vars["fish_color"]
-        left_bar_hex = self.vars["left_color"]
-        right_bar_hex = self.vars["right_color"]
-        arrow_hex = self.vars["arrow_color"]
-        friend_color = self.vars["friends_color"]
-        # Misc Settings
-        scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
-        lock_cursor = self.vars["lock_cursor"]
-        restart_delay = float(self.vars["restart_delay"])
-        # Misc Initialization
-        mouse_down = False
-        # Tolerance
-        try: # Handle Nonetype and int properly
-            left_tol = int(self.vars["left_tolerance"])
-            right_tol = int(self.vars["right_tolerance"])
-            arrow_tol = int(self.vars["arrow_tolerance"])
-            fish_tol = int(self.vars["fish_tolerance"])
-            friend_tol = int(self.vars["friends_tolerance"])
-        except:
-            left_tol = 8
-            right_tol = 8
-            arrow_tol = 8
-            fish_tol = 4
-            friend_tol = 5
-        # Helper Functions
-        def hold_mouse(mouse_state=False):
-            "Hold mouse. False for left click, True for right click."
-            nonlocal mouse_down
-            if not mouse_down:
-                self.hold_mouse(mouse_state)
-                mouse_down = True
-        def release_mouse(mouse_state=False):
-            "Release mouse. False for left click, True for right click."
-            nonlocal mouse_down
-            if mouse_down:
-                self.release_mouse(mouse_state)
-                mouse_down = False
-        # Start Capture Thread (with failsafe)
-        _minigame_stop = self._start_capture(scan_delay)
-        while self.macro_running:
-            # Step 1: Grab Full Screen Then Crop (better on macOS)
-            if not self._cap_event.wait(timeout=0.5):
-                continue
-            with self._cap_lock:
-                frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id
-                self._cap_event.clear()
-            if frame is None:
-                _minigame_stop.set()
-                self._set_fish_overlay_mode("idle")
-                return
-            # Step 2: Crop image into fish and friend areas
-            friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
-            fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
-            # Step 3: Pixel Search
-            fish_x, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
-            detection_source = 0
-            arrow_indicator_x = self._find_color_cluster(fish_img, arrow_hex, arrow_tol)
-            try:
-                arrow_indicator_x = arrow_indicator_x[0]
-            except:
-                arrow_indicator_x = None
-            if left_x == None or right_x == None:
-                bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, mouse_down, fish_width)
-                detection_source = 1
-            bar_size = right_x - left_x
-            canvas_offset = 0
-            # Step 4: Restart (friend area)
-            friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
-            if friend_x is not None:
-                release_mouse()
-                time.sleep(restart_delay)
-                self._set_fish_overlay_mode("idle")
-                return
-            # Step 5: Fish Overlay
-            self.fish_overlay.draw(
-                bar_center=bar_center, box_size=bar_size,
-                color="green", canvas_offset=canvas_offset,
-                show_bar_center=True
-            )
-            if fish_x is not None:
-                self.fish_overlay.draw(
-                    bar_center=fish_x, box_size=10,
-                    color="red", canvas_offset=canvas_offset
-                )
-            # Step 6: Hold/Release Logic
-            if detection_source == 1 and last_detection_source == 0:
-                if mouse_down == False:
-                    hold_mouse()
-                elif mouse_down == True:
-                    release_mouse()
-            # Step 7: Cleanup
-            last_detection_source = detection_source
-            time.sleep(scan_delay)
     def _enter_minigame(self):
         # Areas
         shake_left, shake_top, shake_right, shake_bottom, _, _ = self._get_areas("shake")
@@ -4751,42 +4648,6 @@ class Api:
                         catch_success = False
                 except TypeError:
                     pass
-
-            # ============================================================
-            # METRONOME RHYTHM MODE (Lullaby-style minigame)
-            # ============================================================
-            # The metronome_img (upper slice of the fish area) contains:
-            #   - A moving "metronome" indicator (fish_color cluster) → target_metronome (x)
-            #   - 1-3 clickable "beat areas" defined by left_bar_hex / right_bar_hex clusters
-            #     whose center is computed as metronome_center_x/y
-            # Rule: ONLY click (short tap) when target_metronome is touching a beat area.
-            #       Clicking at the wrong time = instant fish loss.
-            # Therefore we completely bypass the normal bar-control hold/release logic.
-            if metronome_fishing == "on":
-                did_click = False
-                if target_metronome is not None and metronome_center_x is not None:
-                    distance = abs(target_metronome - metronome_center_x)
-                    # Tolerance for "touches" — scaled to resolution. 25-35 px typical at 1440p.
-                    touch_tol = max(8, int(28 * scale))
-                    if distance <= touch_tol:
-                        # Clean short tap — never hold across frames
-                        release_mouse()
-                        time.sleep(0.006)
-                        hold_mouse()
-                        time.sleep(0.032)   # short press so Roblox registers a click
-                        release_mouse()
-                        did_click = True
-                        self.set_status(f"Metronome hit ✓  dist={distance:.0f}")
-                    else:
-                        # Not aligned → must stay released
-                        release_mouse()
-                else:
-                    # No valid detection → stay safe (released)
-                    release_mouse()
-
-                time.sleep(scan_delay)
-                continue   # skip all normal controller / overlay / dual logic
-
             # Step 11: Controller mode selection
             controller_mode = 0
             if bar_center is not None and fish_x is not None:
@@ -4915,6 +4776,8 @@ class Api:
                     should_hold = self._predictive_control(
                         fish_x, bar_center, fish_left, fish_right, left_x, right_x
                     )
+                    if metronome_fishing == "on":
+                        pass
                     if should_hold:
                         hold_mouse()
                     else:
