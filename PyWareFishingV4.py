@@ -972,7 +972,10 @@ class SetupGuide(ctk.CTk):
         except Exception as e:
             print(f"Failed to start hotkey listener: {e}")
     def check_accessibility(self):
-        return Quartz.AXIsProcessTrusted()
+        if sys.platform == "darwin":
+            return Quartz.AXIsProcessTrusted()
+        else:
+            return True
     def check_screen_recording(self):
         try:
             with mss.mss() as sct:
@@ -1733,7 +1736,7 @@ class Api:
                 else:
                     # Save current settings to config before starting
                     self.save_config(self.current_config, self.vars)
-                    if macro_mode == "fishing" or macro_mode == "tranquility":
+                    if macro_mode == "fishing":
                         threading.Thread(target=self.start_fishing, daemon=True).start()
                     elif macro_mode == "appraisal":
                         threading.Thread(target=self.start_appraisal, daemon=True).start()
@@ -1786,19 +1789,24 @@ class Api:
             scale = self._get_scale_factor()
             x = int(x / scale)
             y = int(y / scale)
-        # Move cursor to target
-        _move_mouse(x, y)
-        # Tiny jiggle so Roblox registers the input
+        # Seperate branches for Windows and macOS mouse events
         if sys.platform == "win32":
+            windll.SetCursorPos(x, y)
             windll.mouse_event(MOUSEEVENTF_MOVE, 0, 1, 0, 0)
+            for i in range(click_count):
+                windll.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                windll.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+                if i < click_count - 1:
+                    time.sleep(0.03)
         else:
+            _move_mouse(x, y)
             _move_mouse(x + 1, y + 1)
             _move_mouse(x, y)
-        for i in range(click_count):
-            _mouse_event(button="left", press=True)   # mouse down
-            _mouse_event(button="left", press=False)  # mouse up
-            if i < click_count - 1:
-                time.sleep(0.03)
+            for i in range(click_count):
+                _mouse_event(button="left", press=True)   # mouse down
+                _mouse_event(button="left", press=False)  # mouse up
+                if i < click_count - 1:
+                    time.sleep(0.03)
     # Keyboard
     def _send_key(self, key2, delay=0.05, click_type=0):
         """
@@ -2142,6 +2150,7 @@ class Api:
         y = above_y if above_y >= 0 else below_y
         return x, y, width, height
     def _get_fish_overlay_layout(self, mode=None):
+        fishing_profile = self.vars["fishing_profile"].lower()
         mode = mode or self._fish_overlay_mode
         if mode == "casting":
             shake_left, shake_top, shake_right, shake_bottom = self._get_overlay_anchor_area("shake")
@@ -2159,22 +2168,23 @@ class Api:
             x = shake_right if cast_center_x <= shake_center_x else shake_left - overlay_width
             return x, y, overlay_width, overlay_height
         elif mode == "fishing":
-            x, y, overlay_width, overlay_height = self._build_horizontal_overlay_layout(
-                self._get_overlay_anchor_area("fish")
-            )
-            half_height = int(self.SCREEN_HEIGHT / 2)
-            y = y - 80 if y > half_height else y + 80
-            return x, y, overlay_width, overlay_height
-        elif mode == "tranquility":
-            shake_left, shake_top, shake_right, shake_bottom = self._get_overlay_anchor_area("shake")
-            fish_left, fish_top, fish_right, fish_bottom = self._get_overlay_anchor_area("fish")
-            shake_height = shake_bottom - shake_top
-            fish_height = fish_bottom - fish_top
-            overlay_width = fish_height
-            overlay_height = shake_height
-            x = int(shake_left - 20 - (fish_left / 2))
-            y = shake_top
-            return x, y, overlay_width, overlay_height
+            if fishing_profile == "lanes":
+                x, y, overlay_width, overlay_height = self._build_horizontal_overlay_layout(
+                    self._get_overlay_anchor_area("fish")
+                )
+                half_height = int(self.SCREEN_HEIGHT / 2)
+                y = y - 80 if y > half_height else y + 80
+                return x, y, overlay_width, overlay_height
+            else:
+                shake_left, shake_top, shake_right, shake_bottom = self._get_overlay_anchor_area("shake")
+                fish_left, fish_top, fish_right, fish_bottom = self._get_overlay_anchor_area("fish")
+                shake_height = shake_bottom - shake_top
+                fish_height = fish_bottom - fish_top
+                overlay_width = fish_height
+                overlay_height = shake_height
+                x = int(shake_left - 20 - (fish_left / 2))
+                y = shake_top
+                return x, y, overlay_width, overlay_height
         return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("friend"))
     def _is_fish_overlay_enabled(self):
         return self.vars.get("fish_overlay") == "on"
@@ -3611,8 +3621,7 @@ class Api:
         casting_mode = self.vars.get("casting_mode", "Normal")
         shake_mode = self.vars.get("shake_mode", "Navigation")
         macro_mode = self.vars["macro_mode"]
-
-        reverse_fishing = self.vars["reverse_fishing"].lower()
+        fishing_profile = self.vars["fishing_profile"].lower()
         if self.macro_running == True:
             if auto_zoom == "on":
                 for _ in range(20):
@@ -3660,9 +3669,9 @@ class Api:
             if self.macro_running == False:
                 self.stop_macro("Macro Already Stopped")
             # Minigame
-            if macro_mode == "tranquility" or macro_mode == "Tranquility":
+            if fishing_profile == "lanes":
                 self._enter_minigame_tranquility()
-            elif reverse_fishing == "on":
+            elif fishing_profile == "reverse":
                 self._enter_minigame_dreambreaker()
             else:
                 catch_success = self._enter_minigame()
@@ -4454,14 +4463,12 @@ class Api:
         # Minigame Settings
         bar_ratio = float(self.vars["bar_ratio_from_side"] or 0.5)
         restart_delay = float(self.vars["restart_delay"])
-        track_notes = self.vars["track_notes"]
+        fishing_profile = self.vars["fishing_profile"].lower()
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
         lock_cursor = (self.vars["lock_cursor"])
-        dual_fishing = (self.vars["dual_fishing"]).lower()
         fishing_mode = (self.vars["fishing_mode"])
         minigame_controller_mode = self.vars["controller_mode"].lower()
 
-        metronome_fishing = self.vars["metronome_fishing"]
         lullaby_metronome_ratio = float(self.vars["lullaby_metronome_ratio"])
         lullaby_fishing_ratio = float(self.vars["lullaby_fishing_ratio"])
         # Utility Settings
@@ -4511,7 +4518,7 @@ class Api:
                 self._set_fish_overlay_mode("idle")
                 return catch_success
             # Step 2: Crop images based on dual fishing mode
-            if dual_fishing == "on":
+            if fishing_profile == "dual":
                 # Fish images
                 fish_img = frame[fish_top:fish_bottom, fish_left:fish_area_center]
                 fish_img2 = frame[fish_top:fish_bottom, fish_area_center:fish_right]
@@ -4521,7 +4528,7 @@ class Api:
                 # Make sure to recalculate fish width
                 fish_width = fish_area_center - fish_left
                 fish_width2 = fish_right - fish_area_center
-            elif metronome_fishing == "on":
+            elif fishing_profile == "metronome":
                 lullaby_metronome_pos = int((fish_bottom - fish_top) * lullaby_metronome_ratio)
                 lullaby_fishing_top = int((fish_bottom - fish_top) * lullaby_fishing_ratio)
                 # 1 fish 1 metronome 1 note image
@@ -4542,7 +4549,7 @@ class Api:
             else:
                 fish_x, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
             # Middle Side / Metronome
-            if metronome_fishing == "on":
+            if fishing_profile == "metronome":
                 left_metronome = self._find_color_cluster(metronome_img, left_bar_hex, left_tol)
                 right_metronome = self._find_color_cluster(metronome_img, right_bar_hex, right_tol)
                 target_metronome = self._find_color_cluster(metronome_img, fish_hex, fish_tol)
@@ -4554,16 +4561,16 @@ class Api:
                     target_metronome = None
                     metronome_center_x = None
                     metronome_center_y = None
-            # Right Side (Only Triggers If dual_fishing Is True)
+            # Right Side (Only Triggers If fishing_profile Is dual)
             # Dual Fishing: LEFT (primary) is strong, RIGHT (secondary) is basic controls (no overlay)
-            if dual_fishing == "on":
+            if fishing_profile == "dual":
                 if fishing_mode == "Line":
                     fish_x2, left_x2, right_x2 = self._do_line_search(fish_img2)
                 else:
                     fish_x2, left_x2, right_x2 = self._do_pixel_search(fish_img2)
                 arrow_indicator_x2 = self._find_first_pixel(fish_img2, arrow_hex, arrow_tol)
             arrow_indicator_x = self._find_first_pixel(fish_img, arrow_hex, arrow_tol)
-            if track_notes == "on":
+            if fishing_profile == "notes":
                 note_coords = self._find_color_center(note_img, note_box_hex, note_box_tol)
             else:
                 note_coords = None
@@ -4574,7 +4581,7 @@ class Api:
                 arrow_indicator_x = None
             # Step 4: Bar detection with cache fallback
             bar_size2 = 0
-            if dual_fishing == "on": # Extra variables for secondary bar
+            if fishing_profile == "dual": # Extra variables for secondary bar
                 bar2_detected = (left_x2 is not None and right_x2 is not None)
             else:
                 bar2_detected = False
@@ -4583,7 +4590,7 @@ class Api:
                     bar_size2 = int(right_x2 - left_x2)
                     bar_center2 = left_x2 + (bar_size2 / 2)
                     detection_source2 = 0
-                elif dual_fishing == "on":
+                elif fishing_profile == "dual":
                     left_x2 = arrow_indicator_x2
                     right_x2 = arrow_indicator_x2 + 30
                     bar_center2 = arrow_indicator_x2 + 15
@@ -4662,7 +4669,7 @@ class Api:
                         bar_center = None
                         bar_size = 0
             # Step 5: Validate and sanitize detection results
-            if dual_fishing == "on":
+            if fishing_profile == "dual":
                 if bar_center is not None and left_x is not None and right_x is not None:
                     # Ensure bar_size is positive and reasonable
                     bar_size = max(bar_size, 10)  # Minimum bar size
@@ -4715,7 +4722,7 @@ class Api:
             # Step 7: Calculate threshold
             thresh = 0
             thresh2 = 0
-            if dual_fishing == "on":
+            if fishing_profile == "dual":
                 if bar_size2 > 0:
                     thresh2 = max(1, (1 - round((bar_size2 / fish_width2), 2)) * 8 * scale)
                 else:
@@ -4734,7 +4741,7 @@ class Api:
                 self._set_fish_overlay_mode("idle")
                 return catch_success
             # Step 9: Special tracking logic
-            if note_coords is not None and track_notes == "on" and bar_center is not None:
+            if note_coords is not None and fishing_profile == "notes" and bar_center is not None:
                 note_screen_y_ratio = note_coords[1] / (fish_bottom - fish_top)
                 if note_screen_y_ratio >= note_track_ratio:
                     fish_x = note_coords[0]
@@ -4762,7 +4769,7 @@ class Api:
             # Rule: ONLY click (short tap) when target_metronome is touching a beat area.
             #       Clicking at the wrong time = instant fish loss.
             # Therefore we completely bypass the normal bar-control hold/release logic.
-            if metronome_fishing == "on":
+            if fishing_profile == "metronome":
                 did_click = False
                 if target_metronome is not None and metronome_center_x is not None:
                     distance = abs(target_metronome - metronome_center_x)
@@ -4803,13 +4810,13 @@ class Api:
                         controller_mode = 1
                     elif minigame_controller_mode == "predictive":
                         controller_mode = 5
-                    if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x is not None:
+                    if (fishing_profile == "notes" or minigame_controller_mode == "predictive") and left_x is not None:
                         if not (left_x <= fish_x <= right_x):
                             controller_mode = 2
             controller_mode2 = 0
             try:
-                if dual_fishing == "on" and  bar_center2 is not None and fish_x2 is not None:
-                    if (track_notes == "on" or minigame_controller_mode == "predictive") and left_x2 is not None:
+                if fishing_profile == "dual" and  bar_center2 is not None and fish_x2 is not None:
+                    if (fishing_profile == "notes" or minigame_controller_mode == "predictive") and left_x2 is not None:
                         if not (left_x2 <= fish_x2 <= right_x2):
                             controller_mode2 = 2
                     else:
@@ -4824,7 +4831,7 @@ class Api:
             except:
                 controller_mode2 = 0
             # Step 12: Draw overlay if enabled
-            if dual_fishing == "on":
+            if fishing_profile == "dual":
                 canvas_offset2 = 0 - abs(fish_area_center - fish_left)
                 if self._is_fish_overlay_enabled() and bar_center is not None:
                     self.fish_overlay.draw(
@@ -4871,7 +4878,7 @@ class Api:
             # Step 13: Controller logic
             controller_found = 1
             controller_found2 = 1
-            if dual_fishing == "on" and bar_center2 is not None and fish_x2 is not None:
+            if fishing_profile == "dual" and bar_center2 is not None and fish_x2 is not None:
                 controller_found2 = 1
                 error2 = fish_x2 - bar_center2
                 if controller_mode2 == 0 or controller_mode2 == 1 or controller_mode2 == 5:
@@ -4934,7 +4941,7 @@ class Api:
                     hold_mouse()
                 elif control < -thresh:
                     release_mouse()
-            if dual_fishing == "on" and controller_found2 == 0:
+            if fishing_profile == "dual" and controller_found2 == 0:
                 if -thresh2 <= control2 <= thresh2:
                     release_mouse(True) if deadzone_action == 0 else hold_mouse(True)
                 elif control2 > thresh2:

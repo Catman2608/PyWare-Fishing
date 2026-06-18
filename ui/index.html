@@ -26,7 +26,6 @@
                 <div class="dropdown">
                     <select name="macro_mode" id="macro_mode">
                     <option value="fishing">Fishing</option>
-                    <option value="tranquility">Fishing (Tranquility)</option>
                     <option value="appraisal">Appraisal</option>
                     <option value="enchant">Enchant</option>
                     <option value="angler">Angler</option>
@@ -208,35 +207,6 @@
                         </label>
                     </div>
                     <hr>
-                    <div class="switch2">
-                        <p>Track Notes</p>
-                        <label class="switch">
-                            <input id=track_notes type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="switch2">
-                        <p>Dual Fishing</p>
-                        <label class="switch">
-                            <input id=dual_fishing type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="switch2">
-                        <p>Metronome Fishing</p>
-                        <label class="switch">
-                            <input id=metronome_fishing type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="switch2">
-                        <p>Reverse Fishing</p>
-                        <label class="switch">
-                            <input id=reverse_fishing type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <hr>
                     <div class="text">
                         <label>Select Rod Duration</label>
                         <input id=select_rod_duration type="text" placeholder="0.35">
@@ -254,6 +224,17 @@
                         <option value="pixel">Pixel</option>
                         <option value="circle">Circle</option>
                         <option value="navigation">Navigation</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="fishing_profile">Fishing Profile:</label>
+                        <select name="fishing_profile" id="fishing_profile">
+                        <option value="normal">Normal</option>
+                        <option value="notes">Notes (Pinion)</option>
+                        <option value="reverse">Reverse (Dreambreaker)</option>
+                        <option value="dual">Dual (Bellona)</option>
+                        <option value="lanes">4 Lanes (Tranquility)</option>
+                        <option value="metronome">Metronome (Lullaby)</option>
                         </select>
                     </div>
                     <div class="dropdown">

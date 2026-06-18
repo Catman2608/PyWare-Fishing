@@ -48,6 +48,8 @@ window.addEventListener("pywebviewready", async () => {
     updateCastingMode();
     updateControllerMode();
     updateAccentColor();
+    bindColorPreviewInputs();
+    updateColorPreviews();
 });
 async function startMacro() {
     // Save current UI settings first
@@ -158,6 +160,7 @@ function applySettings(settings) {
     updateCastingMode();
     updateControllerMode();
     updateAccentColor();
+    updateColorPreviews();
 }
 function setElementValue(element, value) {
     if (element.tagName !== "SELECT") {
@@ -189,6 +192,7 @@ function bindSettingsSync() {
             element.addEventListener("input", updateAccentColor);
         }
     });
+    bindColorPreviewInputs();
 }
 async function switchConfig(newConfigName) {
     try {
@@ -564,38 +568,67 @@ document.addEventListener("click", (e) => {
         closeConfigManager();
     }
 });
-document.querySelectorAll(
-    '.simple-box input[type="text"]'
-).forEach(input => {
-    function updateColorPreview() {
-        const value = input.value.trim();
-        const isValid =
-            /^#([0-9A-F]{3}){1,2}$/i.test(value);
-        if (isValid) {
-            input.style.border =
-                `2px solid ${value}`;
-            input.style.boxShadow =
-                `0 0 10px ${value}88`;
-        } else {
-            input.style.border =
-                "2px solid rgba(255,255,255,0.08)";
-            input.style.boxShadow = "none";
-        }
+const validHexColor = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
+
+function normalizeHexColor(hex) {
+    hex = String(hex || "").trim();
+    if (!validHexColor.test(hex)) {
+        return "";
     }
-    input.addEventListener(
-        "input",
-        () => {
-            updateColorPreview();
-            updateAccentColor();
+    if (hex.length === 4) {
+        hex = "#" + hex
+            .slice(1)
+            .split("")
+            .map(char => char + char)
+            .join("");
+    }
+    return hex;
+}
+
+function updateColorPreview(input) {
+    const value = normalizeHexColor(input.value);
+    if (value) {
+        input.style.border = `2px solid ${value}`;
+        input.style.boxShadow = `0 0 10px ${value}88`;
+    } else {
+        input.style.border = "2px solid rgba(255,255,255,0.08)";
+        input.style.boxShadow = "none";
+    }
+}
+
+function getColorPreviewInputs() {
+    return document.querySelectorAll(
+        '.simple-box input[type="text"][id$="_color"]'
+    );
+}
+
+function updateColorPreviews() {
+    getColorPreviewInputs().forEach(updateColorPreview);
+}
+
+function bindColorPreviewInputs() {
+    getColorPreviewInputs().forEach(input => {
+        if (input.dataset.colorPreviewBound === "true") {
+            return;
         }
-    );
-    input.addEventListener(
-        "focus",
-        updateColorPreview
-    );
-    updateColorPreview();
-});
+        input.dataset.colorPreviewBound = "true";
+        input.addEventListener("input", () => {
+            updateColorPreview(input);
+            updateAccentColor();
+        });
+        input.addEventListener("change", () => {
+            updateColorPreview(input);
+            updateAccentColor();
+        });
+        input.addEventListener("focus", () => updateColorPreview(input));
+        updateColorPreview(input);
+    });
+}
 function hexBrightness(hex) {
+    hex = normalizeHexColor(hex);
+    if (!hex) {
+        return 0;
+    }
     const r = parseInt(hex.substr(1,2), 16);
     const g = parseInt(hex.substr(3,2), 16);
     const b = parseInt(hex.substr(5,2), 16);
@@ -606,7 +639,6 @@ function hexBrightness(hex) {
     );
 }
 function updateAccentColor() {
-    updateButtonContrast();
     const leftElement = document.getElementById("left_color");
     const rightElement = document.getElementById("right_color");
     const arrowElement = document.getElementById("arrow_color");
@@ -614,14 +646,15 @@ function updateAccentColor() {
     const left = leftElement ? leftElement.value.trim() : "";
     const right = rightElement ? rightElement.value.trim() : "";
     const arrow = arrowElement ? arrowElement.value.trim() : "";
-    const validHex = /^#([0-9A-F]{3}){1,2}$/i;
     const colors = [];
     // Compare left/right first
-    if (validHex.test(left)) {
-        colors.push(left);
+    const normalizedLeft = normalizeHexColor(left);
+    const normalizedRight = normalizeHexColor(right);
+    if (normalizedLeft) {
+        colors.push(normalizedLeft);
     }
-    if (validHex.test(right)) {
-        colors.push(right);
+    if (normalizedRight) {
+        colors.push(normalizedRight);
     }
     let brightestBar = "#3b5cff";
     if (colors.length > 0) {
@@ -645,13 +678,13 @@ function updateAccentColor() {
         .style
         .setProperty(
             "--left-gradient",
-            left || finalAccent
+            normalizedLeft || finalAccent
         );
     document.documentElement
         .style
         .setProperty(
             "--right-gradient",
-            right || finalAccent
+            normalizedRight || finalAccent
         );
     // Glow version
     const r =
@@ -666,6 +699,7 @@ function updateAccentColor() {
             "--accent-glow",
             `rgba(${r}, ${g}, ${b}, 0.4)`
         );
+    updateButtonContrast();
 }
 function hexToRgb(hex) {
     hex = hex.replace("#", "");
@@ -692,8 +726,8 @@ function updateButtonContrast() {
         getComputedStyle(document.documentElement)
         .getPropertyValue("--right-gradient")
         .trim();
-    const leftBrightness = getBrightness(left);
-    const rightBrightness = getBrightness(right);
+    const leftBrightness = getBrightness(normalizeHexColor(left) || "#3b82f6");
+    const rightBrightness = getBrightness(normalizeHexColor(right) || "#8b5cf6");
     const average = (leftBrightness + rightBrightness) / 2;
     const textColor =
         average > 170
@@ -704,8 +738,11 @@ function updateButtonContrast() {
         textColor
     );
 }
-updateAccentColor();
-updateButtonContrast();
+document.addEventListener("DOMContentLoaded", () => {
+    bindColorPreviewInputs();
+    updateAccentColor();
+    updateButtonContrast();
+});
 
 // =========================
 // TOP BAR HELPERS
