@@ -2168,7 +2168,7 @@ class Api:
             x = shake_right if cast_center_x <= shake_center_x else shake_left - overlay_width
             return x, y, overlay_width, overlay_height
         elif mode == "fishing":
-            if fishing_profile == "lanes":
+            if fishing_profile == "normal":
                 x, y, overlay_width, overlay_height = self._build_horizontal_overlay_layout(
                     self._get_overlay_anchor_area("fish")
                 )
@@ -2391,30 +2391,33 @@ class Api:
         return (center_x, center_y)
     def _find_color_cluster(self, frame, target_color_hex, tolerance=8, min_area=10):
         """
-        Find the largest color cluster and return its center.
+        Find the largest color cluster and return its center, leftmost point, and rightmost point.
         Args:
             frame: BGR image
             target_color_hex: hex color string
             tolerance: color tolerance
             min_area: minimum cluster size to be valid
         Returns:
-            (center_x, center_y) or None
+            ((center_x, center_y), (left_x, left_y), (right_x, right_y)) or None
         """
-        # Required_Fish_Pixels
         if frame is None:
             return None
-        # Color Mask (Vectorized Like Your Fast Version) 
+
+        # Color Mask (Vectorized)
         target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int32)
         frame_int = frame.astype(np.int32)
         tol = int(np.clip(tolerance, 0, 255))
         mask = (np.sqrt(np.sum((frame_int - target_bgr) ** 2, axis=2)) <= tol).astype(np.uint8)
+
         if not np.any(mask):
-            return None
-        # Connected Components (Cluster Detection) 
+            return None, None, None
+
+        # Connected Components (Cluster Detection)
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
         if num_labels <= 1:
-            return None  # Only Background
-        # Skip Label 0 (Background)
+            return None, None, None  # Only background
+
+        # Find largest cluster (skip label 0 = background)
         largest_label = None
         largest_area = 0
         for label in range(1, num_labels):
@@ -2422,11 +2425,28 @@ class Api:
             if area > largest_area and area >= min_area:
                 largest_area = area
                 largest_label = label
+
         if largest_label is None:
-            return None
-        # Centroid 
+            return None, None, None
+
+        # Get all pixel coordinates belonging to the largest cluster
+        ys, xs = np.where(labels == largest_label)
+        if len(xs) == 0:
+            return None, None, None
+
+        # Center = centroid (from connectedComponentsWithStats)
         center_x, center_y = centroids[largest_label]
-        return int(center_x), int(center_y)
+        center = (int(center_x), int(center_y))
+
+        # Leftmost point of cluster (minimum x)
+        left_idx = np.argmin(xs)
+        left = (int(xs[left_idx]), int(ys[left_idx]))
+
+        # Rightmost point of cluster (maximum x)
+        right_idx = np.argmax(xs)
+        right = (int(xs[right_idx]), int(ys[right_idx]))
+
+        return center, left, right
     def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
         """
         Estimate bar position from the arrow indicator (geometry-first, spike-guarded).
@@ -2522,7 +2542,7 @@ class Api:
         return None
     # Do Pixel/Image/Line Search
     def _do_pixel_search(self, frame, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol):
-        fish_center = self._find_color_cluster(frame, fish_hex, fish_tol, 5)
+        _, fish_pos_left, fish_pos_right = self._find_color_cluster(frame, fish_hex, fish_tol, 5)
         bar_pixels = []
         bounds = self._find_color_bounds(frame, left_bar_hex, left_tol)
         if bounds:
@@ -2536,11 +2556,7 @@ class Api:
         else:
             left_bar_center = None
             right_bar_center = None
-        try:
-            fish_center = fish_center[0]
-        except:
-            fish_center = None
-        return fish_center, left_bar_center, right_bar_center
+        return fish_pos_left, fish_pos_right, left_bar_center, right_bar_center
     def do_circle_search(self, detection_img):
         circles = self._find_all_circles(detection_img)
         if not circles:
@@ -2580,163 +2596,286 @@ class Api:
                 "bottom": bottom_ratio
             }
         return results
-    def _do_line_search(self, frame, original_width=None):
+    def _do_line_search(self, frame, fish_area_center):
+        # Initialization
+        line_coordinates = self._detect_lines_in_frame(frame)
+        current_time = time.time()
+        # Process lines - need at least 2 lines to continue tracking
+        if len(line_coordinates) >= 2:
+            # Reset fish lost timer
+            fish_lost_timer = 0.0
+
+            if is_initial_run or initial_target_gap is None:
+                # INITIAL RUN: Find 2 closest lines to center as target lines
+                distance_coords = sorted([(abs(coord - fish_area_center), coord) for coord in line_coordinates], key=lambda x: x[0])
+                target_pair = sorted([distance_coords[0][1], distance_coords[1][1]])
+                target_left_x = target_pair[0]
+                target_right_x = target_pair[1]
+                initial_target_gap = target_right_x - target_left_x
+
+                # Find bars - closest to left of left target, closest to right of right target
+                left_candidates = [x for x in line_coordinates if x < target_left_x]
+                right_candidates = [x for x in line_coordinates if x > target_right_x]
+                
+                left_bar_x = max(left_candidates) if left_candidates else target_left_x
+                right_bar_x = min(right_candidates) if right_candidates else target_right_x
+
+                # Store for next run
+                self.last_target_left_x = target_left_x
+                self.last_target_right_x = target_right_x
+                self.last_left_x = left_bar_x
+                self.last_right_x = right_bar_x
+
+                print(f"📏 Initial: Target=({target_left_x}, {target_right_x}), Gap={initial_target_gap}, Bars=({left_bar_x}, {right_bar_x})")
+                is_initial_run = False
+
+            else:
+                # SUBSEQUENT RUNS: Simple rules
+                # Rule 1: Find pair with gap matching initial_target_gap
+                best_gap_diff = float('inf')
+                target_left_x = self.last_target_left_x
+                target_right_x = self.last_target_right_x
+
+                for i in range(len(line_coordinates) - 1):
+                    curr_left = line_coordinates[i]
+                    curr_right = line_coordinates[i + 1]
+                    curr_gap = curr_right - curr_left
+                    gap_diff = abs(curr_gap - initial_target_gap)
+
+                    if gap_diff < best_gap_diff:
+                        best_gap_diff = gap_diff
+                        target_left_x = curr_left
+                        target_right_x = curr_right
+                
+                # If best gap is more than 4x initial gap, keep old positions
+                actual_gap = target_right_x - target_left_x
+                if actual_gap > initial_target_gap * 4:
+                    target_left_x = self.last_target_left_x
+                    target_right_x = self.last_target_right_x
+                
+                # Rule 2: Bars = line closest to old bar position
+                # CRITICAL: Exclude target lines from bar candidates
+                other_lines = [x for x in line_coordinates if x != target_left_x and x != target_right_x]
+                
+                if len(other_lines) >= 2:
+                    # We have at least 2 non-target lines - pick closest to last positions
+                    if self.last_left_x is not None:
+                        left_bar_x = min(other_lines, key=lambda x: abs(x - self.last_left_x))
+                    else:
+                        left_bar_x = other_lines[0]
+                    
+                    # Find closest to last right bar (excluding the one we picked for left)
+                    remaining_lines = [x for x in other_lines if x != left_bar_x]
+                    if remaining_lines and self.last_right_x is not None:
+                        right_bar_x = min(remaining_lines, key=lambda x: abs(x - self.last_right_x))
+                    elif remaining_lines:
+                        right_bar_x = remaining_lines[0]
+                    else:
+                        # Should not happen if len(other_lines) >= 2
+                        right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x
+                
+                elif len(other_lines) == 1:
+                    # Only 3 total lines (2 target + 1 other)
+                    # Assign the single line to closest bar, use last position for the other
+                    single_line = other_lines[0]
+                    
+                    if self.last_left_x is not None and self.last_right_x is not None:
+                        # Determine which bar this line is closer to
+                        dist_to_left = abs(single_line - self.last_left_x)
+                        dist_to_right = abs(single_line - self.last_right_x)
+                        
+                        if dist_to_left < dist_to_right:
+                            left_bar_x = single_line
+                            right_bar_x = self.last_right_x  # Use last position
+                        else:
+                            right_bar_x = single_line
+                            left_bar_x = self.last_left_x  # Use last position
+                    else:
+                        # No previous positions - just assign to left bar
+                        left_bar_x = single_line
+                        right_bar_x = target_right_x  # Fallback
+                
+                else:
+                    # No other lines besides targets (only 2 total lines)
+                    # Use last known bar positions ONLY - never use target lines as bars
+                    left_bar_x = self.last_left_x if self.last_left_x is not None else target_left_x
+                    right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x
+
+            # Percentage-based anti-teleport validation
+            # Check if lines jumped more than threshold (likely detection error or occlusion)
+            if self.last_target_left_x is not None and self.last_target_right_x is not None:
+                # Calculate actual jump distances
+                target_left_jump = abs(target_left_x - self.last_target_left_x)
+                target_right_jump = abs(target_right_x - self.last_target_right_x)
+                left_bar_jump = abs(left_bar_x - self.last_left_x) if self.last_left_x is not None else 0
+                right_bar_jump = abs(right_bar_x - self.last_right_x) if self.last_right_x is not None else 0
+                
+                max_jump = max(target_left_jump, target_right_jump, left_bar_jump, right_bar_jump)
+
+                # Teleport detection variables - prevent sudden jumps unless consistent
+                # Use percentage-based threshold: if line moves > 50% of screen width, it's likely detection error
+                # At 1032px width, 50% = ~516px, which catches major detection errors while allowing natural movement
+                TELEPORT_THRESHOLD_PERCENT = 0.50  # 50% of fish area width
+                TELEPORT_THRESHOLD = int(fish_area_center * TELEPORT_THRESHOLD_PERCENT)  # Convert to pixels
+                TELEPORT_CONFIRM_TIME = 0.15  # Time in seconds to confirm a teleport (150ms)
+
+                # If movement exceeds threshold percentage of screen width, it might be a teleport
+                if max_jump > TELEPORT_THRESHOLD:
+                    # Potential teleport - check if it's consistent at this new position
+                    if (potential_teleport_target_left == target_left_x and
+                        potential_teleport_target_right == target_right_x and
+                        potential_teleport_left_bar == left_bar_x and
+                        potential_teleport_right_bar == right_bar_x):
+                        # Same position detected again - track time
+                        if teleport_first_detected_time is None:
+                            teleport_first_detected_time = current_time
+                        
+                        # Check if teleport has been consistent long enough
+                        time_since_first_detection = current_time - teleport_first_detected_time
+                        if time_since_first_detection >= TELEPORT_CONFIRM_TIME:
+                            # Teleport confirmed - accept new positions
+                            print(f"⚠️ TELEPORT CONFIRMED after {time_since_first_detection:.3f}s - Accepting new positions (jump: {max_jump:.0f}px > {TELEPORT_THRESHOLD}px threshold)")
+                            self.last_target_left_x = target_left_x
+                            self.last_target_right_x = target_right_x
+                            self.last_left_x = left_bar_x
+                            self.last_right_x = right_bar_x
+                            
+                            # Reset teleport tracking
+                            potential_teleport_target_left = None
+                            potential_teleport_target_right = None
+                            potential_teleport_left_bar = None
+                            potential_teleport_right_bar = None
+                            teleport_first_detected_time = None
+                        else:
+                            # Still confirming - use old positions for tracking
+                            print(f"⏳ Potential teleport (jump: {max_jump:.0f}px > {TELEPORT_THRESHOLD}px, confirming: {time_since_first_detection:.3f}s/{TELEPORT_CONFIRM_TIME}s) - Using last positions")
+                            target_left_x = self.last_target_left_x
+                            target_right_x = self.last_target_right_x
+                            left_bar_x = self.last_left_x
+                            right_bar_x = self.last_right_x
+                    else:
+                        # New potential teleport position - start tracking
+                        potential_teleport_target_left = target_left_x
+                        potential_teleport_target_right = target_right_x
+                        potential_teleport_left_bar = left_bar_x
+                        potential_teleport_right_bar = right_bar_x
+                        teleport_first_detected_time = current_time
+                        
+                        # Use old positions while confirming
+                        print(f"🔍 New teleport candidate detected (jump: {max_jump:.0f}px > {TELEPORT_THRESHOLD}px threshold) - Starting confirmation")
+                        target_left_x = self.last_target_left_x
+                        target_right_x = self.last_target_right_x
+                        left_bar_x = self.last_left_x
+                        right_bar_x = self.last_right_x
+                else:
+                    # Normal movement - accept immediately and reset teleport tracking
+                    self.last_target_left_x = target_left_x
+                    self.last_target_right_x = target_right_x
+                    self.last_left_x = left_bar_x
+                    self.last_right_x = right_bar_x
+                    potential_teleport_target_left = None
+                    potential_teleport_target_right = None
+                    potential_teleport_left_bar = None
+                    potential_teleport_right_bar = None
+                    teleport_first_detected_time = None
+            else:
+                # First run - just accept positions
+                self.last_target_left_x = target_left_x
+                self.last_target_right_x = target_right_x
+                self.last_left_x = left_bar_x
+                self.last_right_x = right_bar_x
+        return target_left_x, target_right_x, left_bar_x, right_bar_x
+    def _detect_lines_in_frame(self, frame, original_width=None):
         """
-        Detect vertical lines in frame and identify fish and bar positions.
-        Based on Hydra.py line detection pipeline with brightness and density filtering.
-        Uses line identification logic similar to _execute_fish_stage_line.
-        Frame is normalized to reference fish box dimensions (517x22 at 720p)
+        Detect vertical lines in frame using Laplacian edge detection.
+        Based on b.py line detection pipeline with brightness and density filtering.
+        NLM denoising removed for 10x speedup (30 FPS -> 300 FPS).
+        
+        Frame is normalized to reference fish box dimensions (1035x43 at 2560x1440)
         for consistent detection across all resolutions. Line coordinates are scaled
         back to match the original frame dimensions.
-        Returns tuple of (fish_x, left_bar_x, right_bar_x):
-            - fish_x: Center X coordinate of the two target lines (fish)
-            - left_bar_x: X coordinate of the left bar line
-            - right_bar_x: X coordinate of the right bar line
-            Returns (None, None, None) if unable to identify lines
+        
+        Returns list of x-coordinates of detected vertical lines.
+
         Args:
-            frame: BGR image from MSS
+            frame: BGR image from dxcam/mss
             original_width: Original frame width before normalization (for coordinate scaling back)
         """
         try:
             # Get minimum line density from settings (configurable via GUI)
             MIN_LINE_DENSITY = self._get_rod_specific_setting("fish_line_min_density", 0.8)
             BRIGHTNESS_THRESHOLD = 10  # Minimum brightness for edge pixels
-            # Reference fish box dimensions at 1280x720
+            
+            # Reference fish box dimensions at 1280x720 (lower detail for better edge detection)
+            # At 1280x720: fish box is 762*(1280/2560) to 1797*(1280/2560) = 381 to 898 (width=517)
+            # Height: 1215*(720/1440) to 1258*(720/1440) = 607 to 629 (height=22)
             REFERENCE_FISH_WIDTH = 517   # Fish box width at 720p
             REFERENCE_FISH_HEIGHT = 22   # Fish box height at 720p
+            
             # Store original dimensions for coordinate scaling
             original_height, original_frame_width = frame.shape[:2]
             if original_width is None:
                 original_width = original_frame_width
+            
             # Normalize frame to reference dimensions for consistent detection
             if original_frame_width != REFERENCE_FISH_WIDTH or original_height != REFERENCE_FISH_HEIGHT:
                 frame = cv2.resize(frame, (REFERENCE_FISH_WIDTH, REFERENCE_FISH_HEIGHT), interpolation=cv2.INTER_LINEAR)
                 width_scale = original_width / REFERENCE_FISH_WIDTH
             else:
                 width_scale = 1.0
+
             # Step 1: Convert to grayscale
             grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            # Step 2: Laplacian edge detection
+
+            # Step 2: Laplacian edge detection (NLM removed for 10x speedup)
             laplacian = cv2.Laplacian(grayscale, cv2.CV_8U)
+
             # Step 3: Filter vertical lines by brightness threshold and density
+            # Keep only columns where at least MIN_LINE_DENSITY of pixels are above BRIGHTNESS_THRESHOLD
             height, width = laplacian.shape
-            # Vectorized column density calculation
+            
+            # Vectorized column density calculation (10x faster than Python loop)
             column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
             line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
-            # Merge adjacent lines into single lines
+
+            # Merge adjacent lines (consecutive x-coordinates) into single lines
+            # Takes the middle position of each group of adjacent pixels
+            # Lines must be within 2 pixels to be considered part of the same group
             if line_coordinates:
                 merged_lines = []
                 group_start = line_coordinates[0]
                 group_end = line_coordinates[0]
+                
                 for i in range(1, len(line_coordinates)):
                     if line_coordinates[i] <= group_end + 2:
+                        # Within 2 pixels, extend current group
                         group_end = line_coordinates[i]
                     else:
+                        # Gap > 2 pixels detected, save current group's middle position
                         middle = (group_start + group_end) // 2
                         merged_lines.append(middle)
+                        # Start new group
                         group_start = line_coordinates[i]
                         group_end = line_coordinates[i]
+                
+                # Don't forget the last group
                 middle = (group_start + group_end) // 2
                 merged_lines.append(middle)
+                
                 line_coordinates = merged_lines
+
             # Scale line coordinates back to original frame dimensions
             if width_scale != 1.0:
                 line_coordinates = [int(x * width_scale) for x in line_coordinates]
-            # Initialize state variables if not already done
-            if not hasattr(self, '_line_state'):
-                self._line_state = {
-                    'initial_target_gap': None,
-                    'last_target_left_x': None,
-                    'last_target_right_x': None,
-                    'last_left_bar_x': None,
-                    'last_right_bar_x': None,
-                    'is_initial_run': True
-                }
-            state = self._line_state
-            image_center_x = original_width // 2
-            # Need at least 2 lines to identify fish and bars
-            if len(line_coordinates) < 2:
-                return None, None, None
-            # INITIAL RUN: Find 2 closest lines to center as target (fish) lines
-            if state['is_initial_run'] or state['initial_target_gap'] is None:
-                distance_coords = sorted(
-                    [(abs(coord - image_center_x), coord) for coord in line_coordinates],
-                    key=lambda x: x[0]
-                )
-                target_pair = sorted([distance_coords[0][1], distance_coords[1][1]])
-                target_left_x = target_pair[0]
-                target_right_x = target_pair[1]
-                initial_target_gap = target_right_x - target_left_x
-                # Find bars - closest to left of left target, closest to right of right target
-                left_candidates = [x for x in line_coordinates if x < target_left_x]
-                right_candidates = [x for x in line_coordinates if x > target_right_x]
-                left_bar_x = max(left_candidates) if left_candidates else target_left_x
-                right_bar_x = min(right_candidates) if right_candidates else target_right_x
-                # Update state
-                state['last_target_left_x'] = target_left_x
-                state['last_target_right_x'] = target_right_x
-                state['last_left_bar_x'] = left_bar_x
-                state['last_right_bar_x'] = right_bar_x
-                state['initial_target_gap'] = initial_target_gap
-                state['is_initial_run'] = False
-            else:
-                # SUBSEQUENT RUNS: Find pair with gap matching initial_target_gap
-                best_gap_diff = float('inf')
-                target_left_x = state['last_target_left_x']
-                target_right_x = state['last_target_right_x']
-                for i in range(len(line_coordinates) - 1):
-                    curr_left = line_coordinates[i]
-                    curr_right = line_coordinates[i + 1]
-                    curr_gap = curr_right - curr_left
-                    gap_diff = abs(curr_gap - state['initial_target_gap'])
-                    if gap_diff < best_gap_diff:
-                        best_gap_diff = gap_diff
-                        target_left_x = curr_left
-                        target_right_x = curr_right
-                # If best gap is more than 4x initial gap, keep old positions
-                actual_gap = target_right_x - target_left_x
-                if actual_gap > state['initial_target_gap'] * 4:
-                    target_left_x = state['last_target_left_x']
-                    target_right_x = state['last_target_right_x']
-                # Find bars from non-target lines
-                other_lines = [x for x in line_coordinates if x != target_left_x and x != target_right_x]
-                if len(other_lines) >= 2:
-                    # Pick closest to last positions
-                    left_bar_x = min(other_lines, key=lambda x: abs(x - state['last_left_bar_x'])) if state['last_left_bar_x'] is not None else other_lines[0]
-                    remaining_lines = [x for x in other_lines if x != left_bar_x]
-                    right_bar_x = min(remaining_lines, key=lambda x: abs(x - state['last_right_bar_x'])) if remaining_lines and state['last_right_bar_x'] is not None else (remaining_lines[0] if remaining_lines else state['last_right_bar_x'])
-                elif len(other_lines) == 1:
-                    # Only one non-target line - assign to closest bar
-                    single_line = other_lines[0]
-                    if state['last_left_bar_x'] is not None and state['last_right_bar_x'] is not None:
-                        dist_to_left = abs(single_line - state['last_left_bar_x'])
-                        dist_to_right = abs(single_line - state['last_right_bar_x'])
-                        if dist_to_left < dist_to_right:
-                            left_bar_x = single_line
-                            right_bar_x = state['last_right_bar_x']
-                        else:
-                            right_bar_x = single_line
-                            left_bar_x = state['last_left_bar_x']
-                    else:
-                        left_bar_x = single_line
-                        right_bar_x = target_right_x
-                else:
-                    # No other lines - use last known positions
-                    left_bar_x = state['last_left_bar_x'] if state['last_left_bar_x'] is not None else target_left_x
-                    right_bar_x = state['last_right_bar_x'] if state['last_right_bar_x'] is not None else target_right_x
-                # Update state with new values
-                state['last_target_left_x'] = target_left_x
-                state['last_target_right_x'] = target_right_x
-                state['last_left_bar_x'] = left_bar_x
-                state['last_right_bar_x'] = right_bar_x
-            # Calculate centers
-            fish_x = (target_left_x + target_right_x) / 2.0
-            left_x = left_bar_x
-            right_x = right_bar_x
-            return fish_x, left_x, right_x
+
+            # REMOVED: Old limit of 5 lines - now handles any number of lines
+            # The fish stage will intelligently pick the best 4 lines from any number detected
+
+            return line_coordinates
+
         except Exception as e:
-            self.set_status(f"    Error in line detection: {e}")
-            return None, None, None
+            print(f"    Error in line detection: {e}")
+            return []
     # PID control
     def _reset_pid_state(self):
         """Reset all PID controller state variables before a new minigame."""
@@ -2786,6 +2925,9 @@ class Api:
         self.state = "release"
         self.current_frame2 = 0
         self.state2 = "release"
+        # Line Detection
+        self.last_target_left_x = None
+        self.last_target_right_x = None
     def _normal_control(self, error2):
         """
         Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
@@ -2826,22 +2968,28 @@ class Api:
         bar_center   = bar_center
         target_line_last_x = bar_center + error  # fish_x = bar_center + error
         current_time = time.perf_counter()
+        # First sample: Initialize state and return zero control
+        if self._pid_last_scan_time is None:
+            self._pid_last_scan_time = current_time
+            self.prev_error = error
+            return 0.0
+        # Calculate time delta
+        time_delta = current_time - self._pid_last_scan_time
+        time_delta2 = min(time_delta, 0.15)
         # P term – proportional to distance
-        p_term = kp * error
+        p_term = kp * error * time_delta2
         # D term – asymmetric damping
         d_term = 0.0
         bar_velocity = 0
-        time_delta = 0
         if (
             self._pid_last_scan_time is not None
             and self._pid_last_target_x is not None
             and self._pid_last_error is not None
         ):
-            time_delta = current_time - self._pid_last_scan_time
-            if time_delta > 0.001:
+            if time_delta2 > 0.001:
                 # Bar velocity: how fast the bar centre moved since last frame
                 last_bar_x   = self._pid_last_target_x - self._pid_last_error
-                bar_velocity = (bar_center - last_bar_x) / time_delta
+                bar_velocity = (bar_center - last_bar_x) / time_delta2
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
                 bar_moving_toward_target = (
                     (bar_velocity > 0 and error > 0)
@@ -2855,8 +3003,8 @@ class Api:
                     d_term = -kd * 0.2 * bar_velocity
         else:
             # Fallback to standard derivative
-            if self._pid_last_error is not None and time_delta > 0:
-                d_term = kd * (error - self._pid_last_error) / time_delta
+            if self._pid_last_error is not None and time_delta2 > 0:
+                d_term = kd * (error - self._pid_last_error) / time_delta2
         # Update state for next frame
         self._pid_last_error      = error
         self._pid_last_target_x   = target_line_last_x
@@ -3033,7 +3181,7 @@ class Api:
             return True
     def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
         """
-        Predictive controller ported from Hydra idiotproof.
+        Predictive controller ported from IRUS idiotproof.
         Uses linear stopping distance, on-bar counter-thrust, off-bar PD chase,
         and edge-unreachability logic.
         Check legacy/May 3rd.py for PD chase controller
@@ -3807,10 +3955,10 @@ class Api:
         # 1520
         reconnect_threshold = int((reconnect_threshold / 1500) * shake_width)
         img = self._grab_screen_region(shake_left_s, shake_top_s, shake_right_s, shake_bottom_s)
-        disconnect_area = self._find_color_cluster(img, "#393b3d", 5, reconnect_threshold)
+        disconnect_area, _, _ = self._find_color_cluster(img, "#393b3d", 5, reconnect_threshold)
         while self.macro_running:
             if not disconnect_area == None:
-                reconnect = self._find_color_cluster(img, "#FFFFFF", 8, int(reconnect_threshold / 2))
+                reconnect, _, _ = self._find_color_cluster(img, "#FFFFFF", 8, int(reconnect_threshold / 2))
                 time.sleep(1)
                 reconnect_x = reconnect[0] + shake_left_s if not reconnect == None else shake_left_s
                 reconnect_y = reconnect[1] + shake_top_s if not reconnect == None else shake_top_s
@@ -4395,7 +4543,7 @@ class Api:
             # Step 3: Pixel Search
             fish_x, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
             detection_source = 0
-            arrow_indicator_x = self._find_color_cluster(fish_img, arrow_hex, arrow_tol)
+            arrow_indicator_x, _, _ = self._find_color_cluster(fish_img, arrow_hex, arrow_tol)
             try:
                 arrow_indicator_x = arrow_indicator_x[0]
             except:
@@ -4545,14 +4693,18 @@ class Api:
             self.fish_overlay.clear()
             # Left Side / Main Image
             if fishing_mode == "Line":
-                fish_x, left_x, right_x = self._do_line_search(fish_img)
+                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_area_center)
             else:
-                fish_x, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
+                fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
+            try:
+                fish_x = int((fish_pos_left[0] + fish_pos_right[0]) / 2)
+            except:
+                fish_x = None
             # Middle Side / Metronome
             if fishing_profile == "metronome":
-                left_metronome = self._find_color_cluster(metronome_img, left_bar_hex, left_tol)
-                right_metronome = self._find_color_cluster(metronome_img, right_bar_hex, right_tol)
-                target_metronome = self._find_color_cluster(metronome_img, fish_hex, fish_tol)
+                left_metronome, _, _ = self._find_color_cluster(metronome_img, left_bar_hex, left_tol)
+                right_metronome, _, _ = self._find_color_cluster(metronome_img, right_bar_hex, right_tol)
+                target_metronome, _, _ = self._find_color_cluster(metronome_img, fish_hex, fish_tol)
                 try:
                     target_metronome = target_metronome[0]
                     metronome_center_x = int((left_metronome[0] + right_metronome[0]) / 2)
@@ -4565,9 +4717,13 @@ class Api:
             # Dual Fishing: LEFT (primary) is strong, RIGHT (secondary) is basic controls (no overlay)
             if fishing_profile == "dual":
                 if fishing_mode == "Line":
-                    fish_x2, left_x2, right_x2 = self._do_line_search(fish_img2)
+                    fish_pos_left2, fish_pos_right2, left_x2, right_x2 = self._do_line_search(fish_img2, fish_area_center)
                 else:
-                    fish_x2, left_x2, right_x2 = self._do_pixel_search(fish_img2)
+                    fish_pos_left2, fish_pos_right2, left_x2, right_x2 = self._do_pixel_search(fish_img2)
+                try:
+                    fish_x2 = int((fish_pos_left2[0] + fish_pos_right2[0]) / 2)
+                except:
+                    fish_x2 = None
                 arrow_indicator_x2 = self._find_first_pixel(fish_img2, arrow_hex, arrow_tol)
             arrow_indicator_x = self._find_first_pixel(fish_img, arrow_hex, arrow_tol)
             if fishing_profile == "notes":
@@ -4719,6 +4875,7 @@ class Api:
                     max_right = fish_right
             # Step 6: Update deadzone action counter
             deadzone_action = (deadzone_action + 1) % 4
+            tracking_threshold = (round(((bar_size / fish_width)), 2) - 0.5) * 100
             # Step 7: Calculate threshold
             thresh = 0
             thresh2 = 0
@@ -4810,8 +4967,12 @@ class Api:
                         controller_mode = 1
                     elif minigame_controller_mode == "predictive":
                         controller_mode = 5
-                    if (fishing_profile == "notes" or minigame_controller_mode == "predictive") and left_x is not None:
-                        if not (left_x <= fish_x <= right_x):
+                    if (fishing_profile == "notes" or minigame_controller_mode == "predictive" or minigame_controller_mode == "steady") and left_x is not None:
+                        left_x_threshold = left_x - tracking_threshold
+                        right_x_threshold = right_x + tracking_threshold
+                        # print("LEFT Before: ", left_x, " After: ", left_x_threshold)
+                        # print("RIGHT Before: ", right_x, " After: ", right_x_threshold)
+                        if not (left_x_threshold <= fish_x <= right_x_threshold):
                             controller_mode = 2
             controller_mode2 = 0
             try:
@@ -4849,9 +5010,13 @@ class Api:
                             bar_center=max_right2, box_size=15,
                             color="lightblue", canvas_offset=canvas_offset2
                         )
+                    try:
+                        fish_pos_size2 = int((fish_pos_right2[0] - fish_pos_left2[0]) * 2)
+                    except:
+                        fish_pos_size2 = 10
                     if fish_x is not None:
                         self.fish_overlay.draw(
-                            bar_center=fish_x2, box_size=10,
+                            bar_center=fish_x2, box_size=fish_pos_size2,
                             color="red", canvas_offset=canvas_offset2
                         )
             if self._is_fish_overlay_enabled() and bar_center is not None:
@@ -4870,9 +5035,13 @@ class Api:
                         bar_center=max_right, box_size=15,
                         color="lightblue", canvas_offset=canvas_offset
                     )
+                try:
+                    fish_pos_size = int((fish_pos_right[0] - fish_pos_left[0]) * 2)
+                except:
+                    fish_pos_size = 10
                 if fish_x is not None:
                     self.fish_overlay.draw(
-                        bar_center=fish_x, box_size=10,
+                        bar_center=fish_x, box_size=fish_pos_size,
                         color="red", canvas_offset=canvas_offset
                     )
             # Step 13: Controller logic
@@ -4974,11 +5143,11 @@ def check_setup_guide():
             if APP_VERSION > cleaned:
                 error_message = f"""
     You have updated from version {cleaned} to version {APP_VERSION}.
-    By default, macOS automatically resets the permissions after you update."""
+    Please open the base folder and move the new configs (optional), images and UI folder there."""
             else:
                 error_message = f"""
     The macro automatically updated from version {APP_VERSION} to version {cleaned}. 
-    Please redownload the EXE from the Google Drive."""
+    Please redownload the application from the Google Drive."""
     except:
         show_setup_guide = True
     return show_setup_guide, error_message
