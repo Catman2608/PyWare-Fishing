@@ -1,16 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PyWare Fishing V4.3</title>
+    <title>PyWare Fishing V4</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <script src="app.js"></script>
     <div class="app">
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
-                PyWare Fishing V4.3
+                PyWare Fishing V4.0
+            </div>
+            <div class="status-container">
+                <span class="status-dot"></span>
+                <span id="status-label" class="status-text">Ready</span>
             </div>
             <button class="tab-button active" onclick="switchTab('basic')">
                 Basic
@@ -23,143 +26,107 @@
             </button>
             <div class="config-section">
                 <select id="config-select" onchange="switchConfig(this.value)"></select>
-                <div class="dropdown">
-                    <select name="macro_mode" id="macro_mode">
-                    <option value="fishing">Fishing</option>
-                    <option value="appraisal">Appraisal</option>
-                    <option value="enchant">Enchant</option>
-                    <option value="angler">Angler</option>
-                    <option value="disabled">Disabled</option>
-                    </select>
-                </div>
                 <button onclick="openConfigManager()"> Manage </button>
                 <button onclick="openSupportTab()"> Support </button>
             </div>
         </div>
-        <div class="main-area">
-            <!-- Top Bar -->
-            <div class="topbar">
-                <div class="topbar-left">
-                    <span class="breadcrumb-current" id="active-tab-title">Basic</span>
-                    <div class="status-container">
-                        <span class="status-dot"></span>
-                        <span id="status-label" class="status-text">Ready</span>
-                    </div>
-                </div>
-            </div>
-            <!-- Main Content -->
-            <div class="content">
+        <!-- Main Content -->
+        <div class="content">
             <!-- Basic Tab -->
             <div id="basic" class="tab-content active">
+                <h1>Basic</h1>
                 <div class="card">
+                    <div class="dropdown">
+                        <label for="macro_mode">Macro Mode:</label>
+                        <select name="macro_mode" id="macro_mode">
+                        <option value="fishing">Fishing</option>
+                        <option value="tranquility">Fishing (Tranquility)</option>
+                        <option value="appraisal">Appraisal</option>
+                        <option value="enchant">Enchant</option>
+                        <option value="angler">Angler</option>
+                        <option value="disabled">Disabled</option>
+                        </select>
+                    </div>
                     <h3>Hotkeys</h3>
-                    <div class="box-grid">
-                        <div class="simple-box">
-                            <p>Start Key</p>
-                            <input id="start_stop" type="text" placeholder="F5">
-                        </div>
-                        <div class="simple-box">
-                            <p>Area Selector Key</p>
-                            <input id="change_areas" type="text" placeholder="F6">
-                        </div>
-                        <div class="simple-box">
-                            <p>Stop Key</p>
-                            <input id="force_stop" type="text" placeholder="F7">
-                        </div>
+                    <div class="text">
+                        <label>Start Key</label>
+                        <input id=start_stop type="text" placeholder="F5">
+                    </div>
+                    <div class="text">
+                        <label>Area Selector Key</label>
+                        <input id=change_areas type="text" placeholder="F6">
+                    </div>
+                    <div class="text">
+                        <label>Stop Key</label>
+                        <input id=force_stop type="text" placeholder="F7">
                     </div>
                     <hr>
-                    <div class="box-grid">
-                        <div class="simple-box">
-                            <p>Rod Slot</p>
-                            <input id="rod_slot" type="text" placeholder="1">
-                        </div>
-                        <div class="simple-box">
-                            <p>Bag Slot</p>
-                            <input id="bag_slot" type="text" placeholder="2">
-                        </div>
-                        <div class="simple-box">
-                            <p>Sundial Slot</p>
-                            <input id="sundial_slot" type="text" placeholder="6">
-                        </div>
-                        <div class="simple-box">
-                            <p>Totem Slot</p>
-                            <input id="target_slot" type="text" placeholder="7">
-                        </div>
-                        <div class="simple-box">
-                            <p>Mystic Mirror Slot</p>
-                            <input id="mirror_slot" type="text" placeholder="8">
-                        </div>
-                        <div class="simple-box">
-                            <p>Backpack Slot</p>
-                            <input id="backpack_slot" type="text" placeholder="2">
-                        </div>
+                    <div class="text">
+                        <label>Fishing Rod Slot</label>
+                        <input id=rod_slot type="text" placeholder="1">
                     </div>
-                    <hr>
-                    <div class="box-grid">
-                        <div class="simple-box">
-                            <p>Key 1 (Tranquility)</p>
-                            <input id="tranquility_key_1" type="text" placeholder="D">
-                        </div>
-                        <div class="simple-box">
-                            <p>Key 2 (Tranquility)</p>
-                            <input id="tranquility_key_2" type="text" placeholder="F">
-                        </div>
-                        <div class="simple-box">
-                            <p>Key 3 (Tranquility)</p>
-                            <input id="tranquility_key_3" type="text" placeholder="J">
-                        </div>
-                        <div class="simple-box">
-                            <p>Key 4 (Tranquility)</p>
-                            <input id="tranquility_key_4" type="text" placeholder="K">
-                        </div>
+                    <div class="text">
+                        <label>Equipment Bag Slot</label>
+                        <input id=bag_slot type="text" placeholder="2">
+                    </div>
+                    <div class="text">
+                        <label>Sundial Slot</label>
+                        <input id=sundial_slot type="text" placeholder="6">
+                    </div>
+                    <div class="text">
+                        <label>Totem Slot</label>
+                        <input id=target_slot type="text" placeholder="7">
+                    </div>
+                    <div class="text">
+                        <label>Mystic Mirror Slot</label>
+                        <input id=mirror_slot type="text" placeholder="8">
                     </div>
                 </div>
                 <div class="card">
                     <h3>Color Options</h3>
                     <button onclick="startEyedropper()"> Pick Colors </button>
-                    <button onclick="takeScreenshot()"> Take Screenshot </button>
-                    <div class="box-grid">
-                        <div class="simple-box">
+                    <div class="color-grid">
+                        <div class="color-box">
                             <p>Left Bar</p>
                             <input id="left_color" type="text" placeholder="#FFFFFF">
                             <input id="left_tolerance" type="number" placeholder="8">
                         </div>
-                        <div class="simple-box">
+                        <div class="color-box">
                             <p>Right Bar</p>
                             <input id="right_color" type="text" placeholder="#FFFFFF">
                             <input id="right_tolerance" type="number" placeholder="8">
                         </div>
-                        <div class="simple-box">
+                        <div class="color-box">
                             <p>Arrows</p>
                             <input id="arrow_color" type="text" placeholder="#848587">
                             <input id="arrow_tolerance" type="number" placeholder="8">
                         </div>
-                        <div class="simple-box">
+                        <div class="color-box">
                             <p>Fish</p>
                             <input id="fish_color" type="text" placeholder="#5B4B43">
                             <input id="fish_tolerance" type="number" placeholder="4">
                         </div>
-                        <div class="simple-box">
+                        <div class="color-box">
                             <p>Shake</p>
                             <input id="shake_color" type="text" placeholder="#FFFFFF">
                             <input id="shake_tolerance" type="number" placeholder="5">
                         </div>
-                        <div class="simple-box">
+                        <div class="color-box">
                             <p>Green Cast</p>
                             <input id="green_cast_color" type="text" placeholder="#64a04c">
                             <input id="green_cast_tolerance" type="number" placeholder="16">
                         </div>
-                        <div class="simple-box">
+                        <div class="color-box">
                             <p>White Cast</p>
                             <input id="white_cast_color" type="text" placeholder="#d4d3ca">
                             <input id="white_cast_tolerance" type="number" placeholder="20">
                         </div>
-                        <div class="simple-box">
+                        <div class="color-box">
                             <p>Tracking</p>
                             <input id="tracking_color" type="text" placeholder="#149604">
                             <input id="tracking_tolerance" type="number" placeholder="5">
                         </div>
-                        <div class="simple-box">
+                        <div class="color-box">
                             <p>Friends Area</p>
                             <input id="friends_color" type="text" placeholder="#9BFF9B">
                             <input id="friends_tolerance" type="number" placeholder="5">
@@ -169,6 +136,7 @@
             </div>
             <!-- Automation Tab -->
             <div id="automation" class="tab-content">
+                <h1>Automation</h1>
                 <div class="card">
                     <h3>Basic Options</h3>
                     <div class="switch2">
@@ -200,13 +168,19 @@
                         </label>
                     </div>
                     <div class="switch2">
+                        <p>Track Notes</p>
+                        <label class="switch">
+                            <input id=track_notes type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
                         <p>Lock Cursor</p>
                         <label class="switch">
                             <input id=lock_cursor type="checkbox">
                             <span class="slider"></span>
                         </label>
                     </div>
-                    <hr>
                     <div class="text">
                         <label>Select Rod Duration</label>
                         <input id=select_rod_duration type="text" placeholder="0.35">
@@ -227,17 +201,6 @@
                         </select>
                     </div>
                     <div class="dropdown">
-                        <label for="fishing_profile">Fishing Profile:</label>
-                        <select name="fishing_profile" id="fishing_profile">
-                        <option value="normal">Normal</option>
-                        <option value="notes">Notes (Pinion)</option>
-                        <option value="reverse">Reverse (Dreambreaker)</option>
-                        <option value="dual">Dual (Bellona)</option>
-                        <option value="lanes">4 Lanes (Tranquility)</option>
-                        <option value="metronome">Metronome (Lullaby)</option>
-                        </select>
-                    </div>
-                    <div class="dropdown">
                         <label for="fishing_mode">Fishing Mode:</label>
                         <select name="fishing_mode" id="fishing_mode">
                         <option value="line">Line</option>
@@ -255,53 +218,51 @@
                         <label>Cast Scan Delay</label>
                         <input id=cast_scan_delay type="text" placeholder="0.01">
                     </div>
-                    <div class="box-grid">
-                        <div class="simple-box">
-                            <p>Under 700px/s</p>
-                            <input id="perfect_cast_timing_700" type="text" placeholder="0.1">
-                        </div>
-                        <div class="simple-box">
-                            <p>700-800 px/s</p>
-                            <input id="perfect_cast_timing_800" type="text" placeholder="0.08">
-                        </div>
-                        <div class="simple-box">
-                            <p>800-900 px/s</p>
-                            <input id="perfect_cast_timing_900" type="text" placeholder="0.06">
-                        </div>
-                        <div class="simple-box">
-                            <p>900-1000 px/s</p>
-                            <input id="perfect_cast_timing_1000" type="text" placeholder="0.04">
-                        </div>
-                        <div class="simple-box">
-                            <p>1000-1100 px/s</p>
-                            <input id="perfect_cast_timing_1100" type="text" placeholder="0.02">
-                        </div>
-                        <div class="simple-box">
-                            <p>1100-1200 px/s</p>
-                            <input id="perfect_cast_timing_1200" type="text" placeholder="0">
-                        </div>
-                        <div class="simple-box">
-                            <p>1200-1300 px/s</p>
-                            <input id="perfect_cast_timing_1300" type="text" placeholder="-0.02">
-                        </div>
-                        <div class="simple-box">
-                            <p>1300-1400 px/s</p>
-                            <input id="perfect_cast_timing_1400" type="text" placeholder="-0.04">
-                        </div>
-                        <div class="simple-box">
-                            <p>1400-1500 px/s</p>
-                            <input id="perfect_cast_timing_1500" type="text" placeholder="-0.06">
-                        </div>
-                        <div class="simple-box">
-                            <p>1500-1600 px/s</p>
-                            <input id="perfect_cast_timing_1600" type="text" placeholder="-0.08">
-                        </div>
-                        <div class="simple-box">
-                            <p>1600+ px/s</p>
-                            <input id="perfect_cast_timing_1600_plus" type="text" placeholder="-0.1">
-                        </div>
+                    <div class="text">
+                        <label>Under 700px/s</label>
+                        <input id=perfect_cast_timing_700 type="text" placeholder="0.1">
                     </div>
-                </div>
+                    <div class="text">
+                        <label>700-800 px/s</label>
+                        <input id=perfect_cast_timing_800 type="text" placeholder="0.08">
+                    </div>
+                    <div class="text">
+                        <label>800-900 px/s</label>
+                        <input id=perfect_cast_timing_900 type="text" placeholder="0.06">
+                    </div>
+                    <div class="text">
+                        <label>900-1000 px/s</label>
+                        <input id=perfect_cast_timing_1000 type="text" placeholder="0.04">
+                    </div>
+                    <div class="text">
+                        <label>1000-1100 px/s</label>
+                        <input id=perfect_cast_timing_1100 type="text" placeholder="0.02">
+                    </div>
+                    <div class="text">
+                        <label>1100-1200 px/s</label>
+                        <input id=perfect_cast_timing_1200 type="text" placeholder="0.0">
+                    </div>
+                    <div class="text">
+                        <label>1200-1300 px/s</label>
+                        <input id=perfect_cast_timing_1300 type="text" placeholder="-0.02">
+                    </div>
+                    <div class="text">
+                        <label>1300-1400 px/s</label>
+                        <input id=perfect_cast_timing_1400 type="text" placeholder="-0.04">
+                    </div>
+                    <div class="text">
+                        <label>1400-1500 px/s</label>
+                        <input id=perfect_cast_timing_1500 type="text" placeholder="-0.06">
+                    </div>
+                    <div class="text">
+                        <label>1500-1600 px/s</label>
+                        <input id=perfect_cast_timing_1600 type="text" placeholder="-0.08">
+                    </div>
+                    <div class="text">
+                        <label>1600+ px/s</label>
+                        <input id=perfect_cast_timing_1600_plus type="text" placeholder="-0.1">
+                    </div>
+                </div>   
                 <div class="card">
                     <h3>Casting</h3>
                     <div class="text">
@@ -349,7 +310,6 @@
                         <select name="controller_mode" id="controller_mode" onchange="updateControllerMode()">
                         <option value="normal">Normal</option>
                         <option value="steady">Steady</option>
-                        <option value="spammy">Spammy</option>
                         <option value="predictive">Predictive</option>
                         </select>
                     </div>
@@ -357,42 +317,39 @@
                 <div class="card" id="controller-normal-card">
                     <h3>Controller (Normal)</h3>
                     <div class="text">
+                        <label>Position Smoothing</label>
+                        <input id=position_alpha type="text" placeholder="0.8">
+                    </div>
+                    <div class="text">
+                        <label>Fish Speed Responsiveness</label>
+                        <input id=fish_vel_alpha type="text" placeholder="0.4">
+                    </div>
+                    <div class="text">
+                        <label>Bar Speed Responsiveness</label>
+                        <input id=bar_vel_alpha type="text" placeholder="0.4">
+                    </div>
+                    <div class="text">
+                        <label>Output Smoothing</label>
+                        <input id=control_alpha type="text" placeholder="0.6">
+                    </div>
+                    <div class="text">
                         <label>KP (Proportional)</label>
-                        <input id=kp type="text" placeholder="0.4">
+                        <input id=kp type="text" placeholder="0.9">
                     </div>
                     <div class="text">
                         <label>KD (Derivative)</label>
-                        <input id=kd type="text" placeholder="0.5">
+                        <input id=kd type="text" placeholder="0.1">
                     </div>
                 </div>
                 <div class="card" id="controller-steady-card" style="display:none;">
                     <h3>Controller (Steady)</h3>
                     <div class="text">
                         <label>KP (Proportional)</label>
-                        <input id=kp type="text" placeholder="0.4">
+                        <input id=kp type="text" placeholder="0.93">
                     </div>
                     <div class="text">
                         <label>KD (Derivative)</label>
-                        <input id=kd type="text" placeholder="0.5">
-                    </div>
-                </div>
-                <div class="card" id="controller-spammy-card" style="display:none;">
-                    <h3>Controller (Steady)</h3>
-                    <div class="text">
-                        <label>Spam Ratio (Relative to Bar)</label>
-                        <input id=spam_ratio type="text" placeholder="0.3">
-                    </div>
-                    <div class="text">
-                        <label>Velocity Multiplier (Relative to FPS)</label>
-                        <input id=velocity_multiplier type="text" placeholder="3">
-                    </div>
-                    <div class="text">
-                        <label>Hold Frames</label>
-                        <input id=hold_frames type="text" placeholder="2">
-                    </div>
-                    <div class="text">
-                        <label>Release Frames</label>
-                        <input id=release_frames type="text" placeholder="2">
+                        <input id=kd type="text" placeholder="0.07">
                     </div>
                 </div>
                 <div class="card" id="controller-predictive-card" style="display:none;">
@@ -427,37 +384,11 @@
                         <label>Note Target Delay (Tranquility)</label>
                         <input id=target_delay type="text" placeholder="0">
                     </div>
-                    <div class="text">
-                        <label>Metronome Ratio (Lullaby)</label>
-                        <input id=lullaby_metronome_ratio type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Fishing Ratio (Lullaby)</label>
-                        <input id=lullaby_fishing_ratio type="text" placeholder="0.7">
-                    </div>
                 </div>
             </div>
             <!-- Utilities Tab -->
             <div id="utilities" class="tab-content">
-                <div class="card">
-                    <h3>Global</h3>
-                    <div class="text">
-                        <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
-                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
-                    </div>
-                    <div class="text">
-                        <label>Delay After E (Enchant, Angler)</label>
-                        <input id=e_delay type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Delay After Click (Appraisal, Enchant, Angler)</label>
-                        <input id=click_delay type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Delay After Click 2 (Enchant, Angler)</label>
-                        <input id=click_delay2 type="text" placeholder="0.5">
-                    </div>
-                </div>
+                <h1>Utilities</h1>
                 <div class="card">
                     <h3>Logging</h3>
                     <div class="dropdown">
@@ -555,6 +486,17 @@
                 <div class="card">
                     <h3>Appraisal/Enchantment (toggle in Basic tab)</h3>
                     <div class="text">
+                        <label>Tesseract Path</label>
+                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
+                    </div>
+                    <div class="dropdown">
+                        <label for="appraisal_enchant_mode">Appraisal Click mode:</label>
+                        <select name="appraisal_enchant_mode" id="appraisal_enchant_mode">
+                        <option value="search">Pixel Search</option>
+                        <option value="ratio">Ratio</option>
+                        </select>
+                    </div>
+                    <div class="text">
                         <label>Mutation/Enchant</label>
                         <input id=mutation_enchant type="text" placeholder="Darkened">
                     </div>
@@ -604,7 +546,6 @@
             </div>
         </div>
     </div>
-</div>
     <!-- Config Manager Modal -->
     <div id="config-modal-overlay" class="modal-overlay">
         <div class="modal-window">
@@ -620,39 +561,20 @@
                 <button onclick="newConfig()">
                     New Config
                 </button>
-
                 <button onclick="deleteConfig()">
                     Delete Config
                 </button>
-
-                <div class="button-row">
-                    <button onclick="importConfig()">
-                        Import Config
-                    </button>
-                    <button onclick="exportConfig()">
-                        Export Config
-                    </button>
-                </div>
-
                 <button onclick="refreshConfigs()">
                     Refresh Configs
                 </button>
-
                 <button onclick="openConfigsFolder()">
                     Open Configs Folder
                 </button>
-
-                <div class="button-row">
-                    <button onclick="resetSettings()">
-                        Reset Settings
-                    </button>
-                    <button onclick="resetColors()">
-                        Reset Colors
-                    </button>
-                </div>
-
-                <button onclick="resetAreas()">
-                    Reset Areas
+                <button onclick="resetSettings()">
+                    Reset Settings
+                </button>
+                <button onclick="resetColors()">
+                    Reset Colors
                 </button>
             </div>
         </div>
@@ -687,37 +609,6 @@
             </div>
         </div>
     </div>
-    <!-- Error Modal -->
-    <div id="error-modal-overlay" class="modal-overlay">
-        <div class="modal-window" style="max-width:900px;">
-            <div class="modal-header">
-                <h2>Macro Crashed</h2>
-                <button class="modal-close" onclick="closeErrorModal()">×</button>
-            </div>
-
-            <div class="modal-content">
-                <p>
-                    An unexpected error occurred. Please copy this traceback and
-                    send it in the bug reports channel.
-                </p>
-
-                <textarea
-                    id="error-traceback"
-                    style="
-                        width:100%;
-                        height:300px;
-                        font-family:monospace;
-                        resize:vertical;
-                    "
-                    readonly></textarea>
-
-                <br><br>
-
-                <button onclick="copyTraceback()">
-                    Copy Traceback
-                </button>
-            </div>
-        </div>
-    </div>
+    <script src="app.js"></script>
 </body>
 </html>

@@ -1,6 +1,3 @@
-const APP_VERSION = "4.3";
-const BETA_VERSION = "3";
-
 let currentConfig = null;
 window.setStatus = (message) => {
     const statusLabel = document.getElementById("status-label");
@@ -25,22 +22,6 @@ window.setStatus = (message) => {
             }
         }
     }
-
-    // Update Topbar Start/Stop Button
-    const topbarBtn = document.getElementById("topbar-start-btn");
-    if (topbarBtn) {
-        const lowerMsg = message.toLowerCase();
-        const isRunning = (lowerMsg.includes("scan") || lowerMsg.includes("active") || lowerMsg.includes("running") || lowerMsg.includes("fishing") || lowerMsg.includes("appraisal") || lowerMsg.includes("enchant") || lowerMsg.includes("angler")) && 
-                          !lowerMsg.includes("stop") && !lowerMsg.includes("closed") && !lowerMsg.includes("ready");
-                          
-        if (isRunning) {
-            topbarBtn.className = "topbar-btn stop";
-            topbarBtn.innerHTML = `<span class="btn-icon">■</span> Stop Macro`;
-        } else {
-            topbarBtn.className = "topbar-btn start";
-            topbarBtn.innerHTML = `<span class="btn-icon">▶</span> Start Macro`;
-        }
-    }
 };
 window.addEventListener("pywebviewready", async () => {
     await refreshConfigs();
@@ -49,8 +30,6 @@ window.addEventListener("pywebviewready", async () => {
     updateCastingMode();
     updateControllerMode();
     updateAccentColor();
-    bindColorPreviewInputs();
-    updateColorPreviews();
 });
 async function startMacro() {
     // Save current UI settings first
@@ -82,17 +61,6 @@ function switchTab(tabId) {
     });
     document.getElementById(tabId).classList.add("active");
     event.target.classList.add("active");
-
-    // Update breadcrumb
-    const breadcrumbTitle = document.getElementById("active-tab-title");
-    if (breadcrumbTitle) {
-        const titleMap = {
-            basic: "Basic",
-            automation: "Automation",
-            utilities: "Utilities"
-        };
-        breadcrumbTitle.textContent = titleMap[tabId] || "Settings";
-    }
 }
 // =========================
 // PERFECT CAST CARD
@@ -111,7 +79,6 @@ function updateControllerMode() {
 
     const normalCard = document.getElementById("controller-normal-card");
     const steadyCard = document.getElementById("controller-steady-card");
-    const spammyCard = document.getElementById("controller-spammy-card");
     const predictiveCard = document.getElementById("controller-predictive-card");
 
     // Hide all
@@ -124,8 +91,6 @@ function updateControllerMode() {
         normalCard.style.display = "block";
     } else if (mode === "steady") {
         steadyCard.style.display = "block";
-    } else if (mode === "spammy") {
-        spammyCard.style.display = "block";
     } else if (mode === "predictive") {
         predictiveCard.style.display = "block";
     }
@@ -161,7 +126,6 @@ function applySettings(settings) {
     updateCastingMode();
     updateControllerMode();
     updateAccentColor();
-    updateColorPreviews();
 }
 function setElementValue(element, value) {
     if (element.tagName !== "SELECT") {
@@ -178,7 +142,6 @@ async function syncSettings() {
     await pywebview.api.update_settings(
         getSettings()
     );
-    updateTopbarInfo();
 }
 function bindSettingsSync() {
     document.querySelectorAll("input, select").forEach(element => {
@@ -193,7 +156,6 @@ function bindSettingsSync() {
             element.addEventListener("input", updateAccentColor);
         }
     });
-    bindColorPreviewInputs();
 }
 async function switchConfig(newConfigName) {
     try {
@@ -406,83 +368,6 @@ async function resetColors() {
         );
     }
 }
-async function resetAreas() {
-    const configName =
-        document.getElementById(
-            "config-select"
-        ).value;
-
-    if (!configName) return;
-
-    const confirmed =
-        confirm(
-            `Reset areas for "${configName}"?`
-        );
-
-    if (!confirmed) return;
-
-    const result =
-        await pywebview.api.reset_areas(
-            configName
-        );
-
-    if (result.success) {
-        await loadConfig(configName);
-        setStatus("Areas reset");
-    } else {
-        setStatus("Reset failed");
-    }
-}
-async function exportConfig() {
-    try {
-        const settings = getSettings();
-
-        const result = await pywebview.api.export_config(
-            settings
-        );
-
-        if (result.success) {
-            setStatus(`Exported: ${result.path}`);
-        } else {
-            setStatus(`Export failed: ${result.error}`);
-        }
-    } catch (err) {
-        console.error(err);
-        setStatus("Export failed");
-    }
-}
-
-async function importConfig() {
-    try {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = ".json,application/json";
-
-        input.onchange = async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-
-            try {
-                const text = await file.text();
-                const settings = JSON.parse(text);
-
-                applySettings(settings);
-                await syncSettings();
-                await saveConfig();
-
-                setStatus(`Imported: ${file.name}`);
-            } catch (err) {
-                console.error(err);
-                setStatus("Invalid config file");
-            }
-        };
-
-        input.click();
-    } catch (err) {
-        console.error(err);
-        setStatus("Import failed");
-    }
-}
 async function openConfigsFolder() {
     await pywebview.api.open_base_folder();
 }
@@ -491,10 +376,6 @@ async function testLogging() {
 }
 async function startEyedropper() {
     await pywebview.api.start_eyedropper();
-}
-async function takeScreenshot() {
-    setStatus("Saved debug screenshots (JavaScript)");
-    await pywebview.api.take_debug_screenshot();
 }
 async function openLink(link) {
     if (!link) {
@@ -513,24 +394,6 @@ async function openLink(link) {
             `Could not open link`
         );
     }
-}
-
-function showErrorModal(traceback) {
-    document.getElementById("error-traceback").value = traceback;
-    document.getElementById("error-modal-overlay").style.display = "flex";
-}
-
-function closeErrorModal() {
-    document.getElementById("error-modal-overlay").style.display = "none";
-}
-
-function copyTraceback() {
-    const tb = document.getElementById("error-traceback");
-
-    tb.select();
-    tb.setSelectionRange(0, 999999);
-
-    navigator.clipboard.writeText(tb.value);
 }
 function openSupportTab() {
     document
@@ -569,67 +432,38 @@ document.addEventListener("click", (e) => {
         closeConfigManager();
     }
 });
-const validHexColor = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
-
-function normalizeHexColor(hex) {
-    hex = String(hex || "").trim();
-    if (!validHexColor.test(hex)) {
-        return "";
-    }
-    if (hex.length === 4) {
-        hex = "#" + hex
-            .slice(1)
-            .split("")
-            .map(char => char + char)
-            .join("");
-    }
-    return hex;
-}
-
-function updateColorPreview(input) {
-    const value = normalizeHexColor(input.value);
-    if (value) {
-        input.style.border = `2px solid ${value}`;
-        input.style.boxShadow = `0 0 10px ${value}88`;
-    } else {
-        input.style.border = "2px solid rgba(255,255,255,0.08)";
-        input.style.boxShadow = "none";
-    }
-}
-
-function getColorPreviewInputs() {
-    return document.querySelectorAll(
-        '.simple-box input[type="text"][id$="_color"]'
-    );
-}
-
-function updateColorPreviews() {
-    getColorPreviewInputs().forEach(updateColorPreview);
-}
-
-function bindColorPreviewInputs() {
-    getColorPreviewInputs().forEach(input => {
-        if (input.dataset.colorPreviewBound === "true") {
-            return;
+document.querySelectorAll(
+    '.color-box input[type="text"]'
+).forEach(input => {
+    function updateColorPreview() {
+        const value = input.value.trim();
+        const isValid =
+            /^#([0-9A-F]{3}){1,2}$/i.test(value);
+        if (isValid) {
+            input.style.border =
+                `2px solid ${value}`;
+            input.style.boxShadow =
+                `0 0 10px ${value}88`;
+        } else {
+            input.style.border =
+                "2px solid rgba(255,255,255,0.08)";
+            input.style.boxShadow = "none";
         }
-        input.dataset.colorPreviewBound = "true";
-        input.addEventListener("input", () => {
-            updateColorPreview(input);
-            updateAccentColor();
-        });
-        input.addEventListener("change", () => {
-            updateColorPreview(input);
-            updateAccentColor();
-        });
-        input.addEventListener("focus", () => updateColorPreview(input));
-        updateColorPreview(input);
-    });
-}
-function hexBrightness(hex) {
-    hex = normalizeHexColor(hex);
-    if (!hex) {
-        return 0;
     }
+    input.addEventListener(
+        "input",
+        () => {
+            updateColorPreview();
+            updateAccentColor();
+        }
+    );
+    input.addEventListener(
+        "focus",
+        updateColorPreview
+    );
+    updateColorPreview();
+});
+function hexBrightness(hex) {
     const r = parseInt(hex.substr(1,2), 16);
     const g = parseInt(hex.substr(3,2), 16);
     const b = parseInt(hex.substr(5,2), 16);
@@ -640,6 +474,7 @@ function hexBrightness(hex) {
     );
 }
 function updateAccentColor() {
+    updateButtonContrast();
     const leftElement = document.getElementById("left_color");
     const rightElement = document.getElementById("right_color");
     const arrowElement = document.getElementById("arrow_color");
@@ -647,15 +482,14 @@ function updateAccentColor() {
     const left = leftElement ? leftElement.value.trim() : "";
     const right = rightElement ? rightElement.value.trim() : "";
     const arrow = arrowElement ? arrowElement.value.trim() : "";
+    const validHex = /^#([0-9A-F]{3}){1,2}$/i;
     const colors = [];
     // Compare left/right first
-    const normalizedLeft = normalizeHexColor(left);
-    const normalizedRight = normalizeHexColor(right);
-    if (normalizedLeft) {
-        colors.push(normalizedLeft);
+    if (validHex.test(left)) {
+        colors.push(left);
     }
-    if (normalizedRight) {
-        colors.push(normalizedRight);
+    if (validHex.test(right)) {
+        colors.push(right);
     }
     let brightestBar = "#3b5cff";
     if (colors.length > 0) {
@@ -679,13 +513,13 @@ function updateAccentColor() {
         .style
         .setProperty(
             "--left-gradient",
-            normalizedLeft || finalAccent
+            left || finalAccent
         );
     document.documentElement
         .style
         .setProperty(
             "--right-gradient",
-            normalizedRight || finalAccent
+            right || finalAccent
         );
     // Glow version
     const r =
@@ -700,7 +534,6 @@ function updateAccentColor() {
             "--accent-glow",
             `rgba(${r}, ${g}, ${b}, 0.4)`
         );
-    updateButtonContrast();
 }
 function hexToRgb(hex) {
     hex = hex.replace("#", "");
@@ -727,8 +560,8 @@ function updateButtonContrast() {
         getComputedStyle(document.documentElement)
         .getPropertyValue("--right-gradient")
         .trim();
-    const leftBrightness = getBrightness(normalizeHexColor(left) || "#3b82f6");
-    const rightBrightness = getBrightness(normalizeHexColor(right) || "#8b5cf6");
+    const leftBrightness = getBrightness(left);
+    const rightBrightness = getBrightness(right);
     const average = (leftBrightness + rightBrightness) / 2;
     const textColor =
         average > 170
@@ -739,42 +572,5 @@ function updateButtonContrast() {
         textColor
     );
 }
-document.addEventListener("DOMContentLoaded", () => {
-    bindColorPreviewInputs();
-    updateAccentColor();
-    updateButtonContrast();
-});
-
-// =========================
-// TOP BAR HELPERS
-// =========================
-function updateTopbarInfo() {
-    const configSelect = document.getElementById("config-select");
-    const macroModeSelect = document.getElementById("macro_mode");
-    
-    const configNameEl = document.getElementById("topbar-config-name");
-    const macroModeEl = document.getElementById("topbar-macro-mode");
-    
-    if (configNameEl && configSelect) {
-        configNameEl.textContent = configSelect.value || "Default";
-    }
-    if (macroModeEl && macroModeSelect) {
-        const val = macroModeSelect.value;
-        macroModeEl.textContent = val ? val.charAt(0).toUpperCase() + val.slice(1) : "None";
-    }
-}
-
-async function toggleMacroFromTopbar() {
-    const btn = document.getElementById("topbar-start-btn");
-    if (btn) {
-        if (btn.classList.contains("start")) {
-            btn.className = "topbar-btn stop";
-            btn.innerHTML = `<span class="btn-icon">■</span> Stop Macro`;
-            await startMacro();
-        } else {
-            btn.className = "topbar-btn start";
-            btn.innerHTML = `<span class="btn-icon">▶</span> Start Macro`;
-            await pywebview.api.stop_macro();
-        }
-    }
-}
+updateAccentColor();
+updateButtonContrast();

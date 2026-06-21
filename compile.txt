@@ -17,4 +17,4 @@ hdiutil create -volname "VolumeName" -srcfolder cd /Users/YourName/directory/PyW
 For me, the first line of code in the terminal looks like this:
 cd "/Users/hoangphuc/Documents/Apps/Macros/PyWare Fishing V4"
 Third line:
-hdiutil create -volname "PyWareFishingSetup.dmg" -srcfolder "/Users/hoangphuc/Documents/Apps/Macros/PyWare Fishing V4/dist" -ov -format UDZO PyWareFishingSetup.dmg
+hdiutil create -volname "macOS.dmg" -srcfolder "/Users/hoangphuc/Documents/Apps/Macros/PyWare Fishing V4/dist" -ov -format UDZO macOS.dmg

@@ -1,30 +1,30 @@
 {
-    "last_config": "Ruinous Oath",
+    "last_config": "Merlin Staff",
     "last_rod": "Basic Rod",
     "bar_areas": {
         "shake": {
-            "x": 199,
-            "y": 130,
-            "width": 1520,
-            "height": 752
+            "x": 199.0,
+            "y": 99.0,
+            "width": 1520.0,
+            "height": 752.0
         },
         "fish": {
-            "x": 546,
-            "y": 892,
-            "width": 825,
-            "height": 42
+            "x": 546.0,
+            "y": 861.0,
+            "width": 825.0,
+            "height": 42.0
         },
         "friend": {
-            "x": 7,
-            "y": 974,
-            "width": 68,
-            "height": 89
+            "x": 8.0,
+            "y": 926.0,
+            "width": 68.0,
+            "height": 89.0
         },
         "totem": {
-            "x": 1829,
-            "y": 930,
-            "width": 40,
-            "height": 50
+            "x": 1829.0,
+            "y": 899.0,
+            "width": 40.0,
+            "height": 50.0
         }
     }
 }
