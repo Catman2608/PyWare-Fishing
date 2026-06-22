@@ -332,9 +332,9 @@ class Api:
         self.load_misc_settings()
     def start_eyedropper(self):
         pass
-    # ---------------------
+    # 
     # Save Config
-    # ---------------------
+    # 
     def save_config(self, config_name, settings):
         try:
             if not config_name:
@@ -368,9 +368,9 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # ---------------------
+    # 
     # Load Config
-    # ---------------------
+    # 
     def load_config(self, config_name):
         try:
             if not config_name:
@@ -397,9 +397,9 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # ---------------------
+    # 
     # List Configs
-    # ---------------------
+    # 
     def list_configs(self):
         try:
             configs = []
@@ -413,9 +413,9 @@ class Api:
             return configs
         except Exception as e:
             return []
-    # ---------------------
+    # 
     # Settings State
-    # ---------------------
+    # 
     def update_settings(self, settings):
         self.vars.update(settings)
         return {
@@ -476,9 +476,9 @@ class Api:
         if result.get("success"):
             result["config_name"] = config_name
         return result
-    # ---------------------
+    # 
     # Delete Config
-    # ---------------------
+    # 
     def delete_config(self, config_name):
         try:
             folder = os.path.join(
@@ -866,7 +866,7 @@ class Api:
                     "🐞 AUTO BUG REPORT\n"
                     f"📂 Phase: {phase}\n"
                     f"🕐 {timestamp}\n"
-                    "--------------------------------------------------\n"
+                    "--------\n"
                     f"{report_text}\n"
                     "==========\n\n"
                 )

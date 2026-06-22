@@ -1,5 +1,5 @@
 const APP_VERSION = "4.3";
-const BETA_VERSION = "3";
+const BETA_VERSION = "0";
 
 let currentConfig = null;
 window.setStatus = (message) => {
@@ -135,12 +135,11 @@ function getSettings() {
     const settings = {};
     // Get all input elements
     document.querySelectorAll("input, select").forEach(element => {
-        if (element.id) {
-            if (element.type === "checkbox") {
-                settings[element.id] = element.checked ? "on" : "off";
-            } else {
-                settings[element.id] = element.value;
-            }
+        if (!element.id || element.id === "config-select") return;
+        if (element.type === "checkbox") {
+            settings[element.id] = element.checked ? "on" : "off";
+        } else {
+            settings[element.id] = element.value;
         }
     });
     return settings;
@@ -148,7 +147,8 @@ function getSettings() {
 function applySettings(settings) {
     // Apply all settings to form elements
     document.querySelectorAll("input, select").forEach(element => {
-        if (element.id && settings.hasOwnProperty(element.id)) {
+        if (!element.id || element.id === "config-select") return;
+        if (settings.hasOwnProperty(element.id)) {
             if (element.type === "checkbox") {
                 element.checked =
                     settings[element.id] === true ||
@@ -276,11 +276,13 @@ async function loadStartupConfig() {
             document.getElementById(
                 "config-select"
             );
-        select.value = result.config_name;
         currentConfig = result.config_name;
         applySettings(
             result.settings
         );
+        if (select) {
+            select.value = currentConfig;
+        }
         await syncSettings();
         setStatus(`Loaded: ${currentConfig}`);
     } else {
@@ -750,7 +752,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // =========================
 function updateTopbarInfo() {
     const configSelect = document.getElementById("config-select");
-    const macroModeSelect = document.getElementById("macro_mode");
+    const macroModeSelect = document.getElementById("automation_mode");
     
     const configNameEl = document.getElementById("topbar-config-name");
     const macroModeEl = document.getElementById("topbar-macro-mode");

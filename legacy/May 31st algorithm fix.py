@@ -1308,7 +1308,7 @@ class Api:
                     "🐞 AUTO BUG REPORT\n"
                     f"📂 Phase: {phase}\n"
                     f"🕐 {timestamp}\n"
-                    "--------------------------------------------------\n"
+                    "--------\n"
                     f"{report_text}\n"
                     "==========\n\n"
                 )
@@ -2031,18 +2031,18 @@ class Api:
             return
 
         self._keys_held.discard(key)
-        macro_mode = self.vars["macro_mode"]
-        if not macro_mode == "disabled":
+        automation_mode = self.vars["automation_mode"]
+        if not automation_mode == "disabled":
             if key == "f5":
                 if self.macro_running == False:
                                         #Save Current Settings To Config Before Starting                    self.save_config(self.current_config, self.vars)
-                    if macro_mode == "fishing" or macro_mode == "tranquility":
+                    if automation_mode == "fishing" or automation_mode == "tranquility":
                         threading.Thread(target=self.start_fishing, daemon=True).start()
-                    elif macro_mode == "appraisal":
+                    elif automation_mode == "appraisal":
                         threading.Thread(target=self.start_appraisal, daemon=True).start()
-                    elif macro_mode == "enchant":
+                    elif automation_mode == "enchant":
                         threading.Thread(target=self.start_enchantment, daemon=True).start()
-                    elif macro_mode == "angler":
+                    elif automation_mode == "angler":
                         threading.Thread(target=self.start_angler, daemon=True).start()
                 else:
                     return
@@ -2620,7 +2620,7 @@ class Api:
         auto_refresh = self.vars.get("auto_refresh", "off")
         casting_mode = self.vars.get("casting_mode", "Normal")
         shake_mode = self.vars.get("shake_mode", "Navigation")
-        macro_mode = self.vars["macro_mode"]
+        automation_mode = self.vars["automation_mode"]
         if auto_zoom == "on":
             for _ in range(20):
                 mouse_controller.scroll(0, 1)
@@ -2652,7 +2652,7 @@ class Api:
                 self._execute_shake_navigation()
             else:
                 self._execute_shake_click(shake_mode)
-                        #Minigame            if macro_mode == "tranquility" or macro_mode == "Tranquility":
+                        #Minigame            if automation_mode == "tranquility" or automation_mode == "Tranquility":
                 self._enter_minigame_tranquility()
             else:
                 self._enter_minigame()

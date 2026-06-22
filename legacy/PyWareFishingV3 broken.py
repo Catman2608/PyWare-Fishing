@@ -2553,7 +2553,7 @@ class App(CTk):
                     "🐞 AUTO BUG REPORT\n"
                     f"📂 Phase: {phase}\n"
                     f"🕐 {timestamp}\n"
-                    "--------------------------------------------------\n"
+                    "--------\n"
                     f"{report_text}\n"
                     "==========\n\n"
                 )

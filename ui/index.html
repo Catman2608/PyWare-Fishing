@@ -22,9 +22,11 @@
                 Utilities
             </button>
             <div class="config-section">
+                <p>Active Configuration</p>
                 <select id="config-select" onchange="switchConfig(this.value)"></select>
+                <p>Macro Mode</p>
                 <div class="dropdown">
-                    <select name="macro_mode" id="macro_mode">
+                    <select name="automation_mode" id="automation_mode">
                     <option value="fishing">Fishing</option>
                     <option value="appraisal">Appraisal</option>
                     <option value="enchant">Enchant</option>
@@ -569,13 +571,6 @@
                 </div>
                 <div class="card">
                     <h3>Angler/Quests (toggle in Basic tab)</h3>
-                    <div class="dropdown">
-                        <label for="angler_click_mode">Angler Click mode:</label>
-                        <select name="angler_click_mode" id="angler_click_mode">
-                        <option value="search">Pixel Search</option>
-                        <option value="ratio">Ratio</option>
-                        </select>
-                    </div>
                     <div class="text">
                         <label>Click X (Ratio)</label>
                         <input id=angler_click_x type="text" placeholder="0.5">

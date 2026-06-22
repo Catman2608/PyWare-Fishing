@@ -864,9 +864,9 @@ class Api:
         # Create and show eyedropper
         self.eyedropper = Eyedropper(parent=self)
         self.set_status("Eyedropper opened • Hover to preview • Click to pick • Esc to cancel")
-    # ---------------------
+    # 
     # Save Config
-    # ---------------------
+    # 
     def _get_prompt_defaults(self):
         defaults = {}
         index_path = os.path.join(UI_PATH, "index.html")
@@ -970,9 +970,9 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # ---------------------
+    # 
     # Load Config
-    # ---------------------
+    # 
     def load_config(self, config_name):
         try:
             if not config_name:
@@ -999,9 +999,9 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # ---------------------
+    # 
     # List Configs
-    # ---------------------
+    # 
     def list_configs(self):
         try:
             configs = []
@@ -1015,9 +1015,9 @@ class Api:
             return configs
         except Exception as e:
             return []
-    # ---------------------
+    # 
     # Settings State
-    # ---------------------
+    # 
     def update_settings(self, settings):
         self.vars.update(settings)
         self._apply_fish_overlay_state()
@@ -1080,9 +1080,9 @@ class Api:
         if result.get("success"):
             result["config_name"] = config_name
         return result
-    # ---------------------
+    # 
     # Delete Config
-    # ---------------------
+    # 
     def delete_config(self, config_name):
         try:
             folder = os.path.join(
@@ -1475,21 +1475,21 @@ class Api:
     def on_key_press(self, key):
         key = self.normalize_key(key)
         start_key, bar_areas_key, stop_key = self._get_hotkeys()
-        macro_mode = self.vars["macro_mode"]
-        if not macro_mode == "disabled":
+        automation_mode = self.vars["automation_mode"]
+        if not automation_mode == "disabled":
             if key == start_key:
                 if self.macro_running == True:
                     return
                 else:
                     # Save current settings to config before starting
                     self.save_config(self.current_config, self.vars)
-                    if macro_mode == "fishing" or macro_mode == "tranquility":
+                    if automation_mode == "fishing" or automation_mode == "tranquility":
                         threading.Thread(target=self.start_fishing, daemon=True).start()
-                    elif macro_mode == "appraisal":
+                    elif automation_mode == "appraisal":
                         threading.Thread(target=self.start_appraisal, daemon=True).start()
-                    elif macro_mode == "enchant":
+                    elif automation_mode == "enchant":
                         threading.Thread(target=self.start_enchantment, daemon=True).start()
-                    elif macro_mode == "angler":
+                    elif automation_mode == "angler":
                         threading.Thread(target=self.start_angler, daemon=True).start()
             elif key == bar_areas_key:
                 self.open_area_selector()
@@ -2703,7 +2703,7 @@ class Api:
                     "🐞 AUTO BUG REPORT\n"
                     f"📂 Phase: {phase}\n"
                     f"🕐 {timestamp}\n"
-                    "--------------------------------------------------\n"
+                    "--------\n"
                     f"{report_text}\n"
                     "==========\n\n"
                 )
@@ -3104,7 +3104,7 @@ class Api:
         auto_refresh = self.vars.get("auto_refresh", "off")
         casting_mode = self.vars.get("casting_mode", "Normal")
         shake_mode = self.vars.get("shake_mode", "Navigation")
-        macro_mode = self.vars["macro_mode"]
+        automation_mode = self.vars["automation_mode"]
         if auto_zoom == "on":
             for _ in range(20):
                 mouse_controller.scroll(0, 1)
@@ -3141,7 +3141,7 @@ class Api:
             else:
                 self._execute_shake_click(shake_mode)
             # Minigame
-            if macro_mode == "tranquility" or macro_mode == "Tranquility":
+            if automation_mode == "tranquility" or automation_mode == "Tranquility":
                 self._enter_minigame_tranquility()
             else:
                 catch_success = self._enter_minigame()

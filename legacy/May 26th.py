@@ -620,9 +620,9 @@ class Api:
         # Create and show eyedropper
         self.eyedropper = Eyedropper(parent=self)
         self.set_status("Eyedropper opened • Hover to preview • Click to pick • Esc to cancel")
-    # ---------------------
+    # 
     # Save Config
-    # ---------------------
+    # 
     def save_config(self, config_name, settings):
         try:
             if not config_name:
@@ -656,9 +656,9 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # ---------------------
+    # 
     # Load Config
-    # ---------------------
+    # 
     def load_config(self, config_name):
         try:
             if not config_name:
@@ -685,9 +685,9 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # ---------------------
+    # 
     # List Configs
-    # ---------------------
+    # 
     def list_configs(self):
         try:
             configs = []
@@ -701,9 +701,9 @@ class Api:
             return configs
         except Exception as e:
             return []
-    # ---------------------
+    # 
     # Settings State
-    # ---------------------
+    # 
     def update_settings(self, settings):
         self.vars.update(settings)
         self._apply_fish_overlay_state()
@@ -765,9 +765,9 @@ class Api:
         if result.get("success"):
             result["config_name"] = config_name
         return result
-    # ---------------------
+    # 
     # Delete Config
-    # ---------------------
+    # 
     def delete_config(self, config_name):
         try:
             folder = os.path.join(
@@ -1227,7 +1227,7 @@ class Api:
                     "🐞 AUTO BUG REPORT\n"
                     f"📂 Phase: {phase}\n"
                     f"🕐 {timestamp}\n"
-                    "--------------------------------------------------\n"
+                    "--------\n"
                     f"{report_text}\n"
                     "==========\n\n"
                 )
@@ -2038,14 +2038,14 @@ class Api:
         if key not in self._keys_held:
             return
         self._keys_held.discard(key)
-        macro_mode = self.vars["macro_mode"]
+        automation_mode = self.vars["automation_mode"]
         if key == "f5":
             if self.macro_running == False:
                 # Save current settings to config before starting
                 self.save_config(self.current_config, self.vars)
-                if macro_mode == "fishing":
+                if automation_mode == "fishing":
                     threading.Thread(target=self.start_fishing, daemon=True).start()
-                elif macro_mode == "appraisal":
+                elif automation_mode == "appraisal":
                     threading.Thread(target=self.start_appraisal, daemon=True).start()
             else:
                 return

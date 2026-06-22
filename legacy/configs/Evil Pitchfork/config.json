@@ -1,6 +1,6 @@
 {
     "config-select": "Fabulous",
-    "macro_mode": "fishing",
+    "automation_mode": "fishing",
     "start_stop": "",
     "change_areas": "",
     "force_stop": "",

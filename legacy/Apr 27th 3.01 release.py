@@ -640,17 +640,17 @@ class TermsOfServiceDialog(CTkToplevel):
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
-    # ------------------------
+    # ---
     # PAGE SYSTEM
-    # ------------------------
+    # ---
     def show_page(self, name):
         for page in self.pages.values():
             page.pack_forget()
         self.pages[name].pack(fill="both", expand=True)
 
-    # ------------------------
+    # ---
     # PAGE 1: TOS
-    # ------------------------
+    # ---
     def _build_tos_page(self):
         page = CTkFrame(self.container)
         self.pages["tos"] = page
@@ -756,9 +756,9 @@ If you do not agree, please remove the software from your device.
         )
         self.accept_btn.pack(side="right")
 
-    # ------------------------
+    # ---
     # PAGE 2: SETUP GUIDE
-    # ------------------------
+    # ---
     def _build_setup_page(self):
         page = CTkFrame(self.container)
         self.pages["setup"] = page
@@ -809,9 +809,9 @@ Please subscribe to support development!
             command=self._on_finish
         ).pack(side="right")
 
-    # ------------------------
+    # ---
     # LOGIC
-    # ------------------------
+    # ---
     def _restore_parent(self):
         if self.parent and self.parent.winfo_exists():
             self.parent.deiconify()

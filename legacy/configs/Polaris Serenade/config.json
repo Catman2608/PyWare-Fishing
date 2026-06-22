@@ -1,6 +1,6 @@
 {
     "config-select": "Default",
-    "macro_mode": "enchant",
+    "automation_mode": "enchant",
     "start_stop": "",
     "change_areas": "",
     "force_stop": "",

@@ -1,6 +1,6 @@
 {
     "config-select": "Rod Of Shadow",
-    "macro_mode": "tranquility",
+    "automation_mode": "tranquility",
     "start_stop": "F5",
     "change_areas": "F6",
     "force_stop": "F7",

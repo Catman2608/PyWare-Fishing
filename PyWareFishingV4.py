@@ -1,28 +1,22 @@
-# GUI
+# Imports
+# GUI (Primary and fallback)
 import webview
-import json
-import os
-import re
-import time
-import sys
-import webbrowser
-# Error handling
 import customtkinter as ctk
-# OCR
-import pytesseract
-pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
-# Keyboard And Mouse
+# Text parsing
+import json
+import re
+# OCR (with fallback if user didn't install Tesseract)
+try:
+    import pytesseract
+    pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+except:
+    pytesseract = None
+# Keyboard and Mouse clicks (platform-specific)
+from pynput.keyboard import Listener as KeyListener, Key
 from pynput import keyboard, mouse
 from pynput.keyboard import Controller as KeyboardController
 from pynput.mouse import Controller as MouseController
 from pynput.mouse import Button
-# Key Listeners
-import threading
-from pynput.keyboard import Listener as KeyListener, Key
-# OpenCV/Numpy/MSS
-import cv2
-import numpy as np
-import mss
 if sys.platform == "win32":
     import ctypes
     from ctypes import wintypes
@@ -32,17 +26,89 @@ elif sys.platform == "darwin":
 elif sys.platform == "linux":
     from Xlib import X, XK, display as Xdisplay
     from Xlib.ext import xtest
+# Mathematics and Detection
+import cv2
+import numpy as np
+import mss
 import math
+# Misc
+import threading
 import subprocess
-# Logging
 import requests
 import io
-# Initialize Controllers
+import time
+import sys
+import webbrowser
+import os
+# Define platform-specific constants
+# All platforms
 keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-# Ctypes & Quartz for Mouse Clicks and Special Window Properties
+APP_VERSION = "4.3"
+BETA_VERSION = 0
+def get_macos_menu_offset():
+    if sys.platform != "darwin":
+        return 0
+    try:
+        import AppKit
+        screen = AppKit.NSScreen.mainScreen()
+        full_frame = screen.frame()
+        visible_frame = screen.visibleFrame()
+        return int(full_frame.size.height - visible_frame.size.height)
+    except Exception:
+        return 0
+def cgimage_to_srgb_numpy(image):
+    if sys.platform == "darwin":
+        width = Quartz.CGImageGetWidth(image)
+        height = Quartz.CGImageGetHeight(image)
+        bytes_per_row = width * 4
+        # Create sRGB color space
+        color_space = Quartz.CGColorSpaceCreateWithName(
+            Quartz.kCGColorSpaceSRGB
+        )
+        # Allocate buffer
+        raw = np.empty((height, width, 4), dtype=np.uint8)
+        # Create bitmap context targeting numpy buffer
+        context = Quartz.CGBitmapContextCreate(
+            raw,
+            width,
+            height,
+            8,
+            bytes_per_row,
+            color_space,
+            Quartz.kCGImageAlphaPremultipliedLast |
+            Quartz.kCGBitmapByteOrder32Big
+        )
+        # Draw image into sRGB context
+        Quartz.CGContextDrawImage(
+            context,
+            Quartz.CGRectMake(0, 0, width, height),
+            image
+        )
+        # RGBA -> BGR
+        bgr = raw[:, :, :3][:, :, ::-1]
+        return bgr.copy()
+    else:
+        return image
+# Screen dimensions via mss — use monitor[1] (primary) not monitor[0] (virtual combined).
+# On Windows with DPI scaling, pywebview's x/y/width/height use physical pixels,
+# so we must query the raw physical resolution, not the scaled logical resolution.
+try:
+    MSS = mss.MSS
+except AttributeError:
+    MSS = mss.mss
+with MSS() as _sct:
+    if len(_sct.monitors) > 1:
+        _m = _sct.monitors[1]   # Primary monitor
+    else:
+        _m = _sct.monitors[0]   # Fallback: only one entry exists
+    SCREEN_WIDTH  = _m["width"]
+    SCREEN_HEIGHT = _m["height"]
+    SCREEN_LEFT   = _m["left"]
+    SCREEN_TOP    = _m["top"]
+# Windows (Transparency and Ctypes WinDLL)
 if sys.platform == "win32":
     windll = ctypes.windll.user32
     MOUSEEVENTF_MOVE = 0x0001
@@ -118,6 +184,7 @@ if sys.platform == "win32":
         # Range is 0 (fully transparent) to 255 (fully opaque).
         opacity_alpha = int(255 * transparency)
         return bool(user32.SetLayeredWindowAttributes(hwnd, 0, opacity_alpha, LWA_ALPHA))
+# macOS (Keyboard, scale factor, mouse button)
 elif sys.platform == "darwin":
     _scale_cache = None
     MAC_KEY_MAP = {
@@ -217,6 +284,7 @@ elif sys.platform == "darwin":
             )
     def make_window_translucent(window, transparency):
         pass
+# Linux (Mouse positions and Xdisplay)
 elif sys.platform.startswith("linux"):
     _xdisplay = None
     def _get_xdisplay():
@@ -278,77 +346,7 @@ elif sys.platform.startswith("linux"):
         d.sync()
     def make_window_translucent(window, transparency):
         pass
-def get_macos_menu_offset():
-    if sys.platform != "darwin":
-        return 0
-    try:
-        import AppKit
-        screen = AppKit.NSScreen.mainScreen()
-        full_frame = screen.frame()
-        visible_frame = screen.visibleFrame()
-        return int(full_frame.size.height - visible_frame.size.height)
-    except Exception:
-        return 0
-# Open base folder
-def open_base_folder():
-    folder = BASE_PATH
-    if sys.platform == "win32":
-        os.startfile(folder)
-    elif sys.platform == "darwin":  # Macos
-        subprocess.run(["open", folder])
-    else:  # Linux
-        subprocess.run(["xdg-open", folder])
-def cgimage_to_srgb_numpy(image):
-    if sys.platform == "darwin":
-        width = Quartz.CGImageGetWidth(image)
-        height = Quartz.CGImageGetHeight(image)
-        bytes_per_row = width * 4
-        # Create sRGB color space
-        color_space = Quartz.CGColorSpaceCreateWithName(
-            Quartz.kCGColorSpaceSRGB
-        )
-        # Allocate buffer
-        raw = np.empty((height, width, 4), dtype=np.uint8)
-        # Create bitmap context targeting numpy buffer
-        context = Quartz.CGBitmapContextCreate(
-            raw,
-            width,
-            height,
-            8,
-            bytes_per_row,
-            color_space,
-            Quartz.kCGImageAlphaPremultipliedLast |
-            Quartz.kCGBitmapByteOrder32Big
-        )
-        # Draw image into sRGB context
-        Quartz.CGContextDrawImage(
-            context,
-            Quartz.CGRectMake(0, 0, width, height),
-            image
-        )
-        # RGBA -> BGR
-        bgr = raw[:, :, :3][:, :, ::-1]
-        return bgr.copy()
-    else:
-        return image
-# Screen dimensions via mss — use monitor[1] (primary) not monitor[0] (virtual combined).
-# On Windows with DPI scaling, pywebview's x/y/width/height use physical pixels,
-# so we must query the raw physical resolution, not the scaled logical resolution.
-try:
-    MSS = mss.MSS
-except AttributeError:
-    MSS = mss.mss
-with MSS() as _sct:
-    if len(_sct.monitors) > 1:
-        _m = _sct.monitors[1]   # Primary monitor
-    else:
-        _m = _sct.monitors[0]   # Fallback: only one entry exists
-    SCREEN_WIDTH  = _m["width"]
-    SCREEN_HEIGHT = _m["height"]
-    SCREEN_LEFT   = _m["left"]
-    SCREEN_TOP    = _m["top"]
-APP_VERSION = "4.3"
-BETA_VERSION = 3
+# Config management
 def get_base_path():
     """Unified base directory for app data."""
     if not BETA_VERSION == 0:
@@ -375,30 +373,28 @@ def get_base_path():
     compiled = False
     # Dev Mode → Project Directory
     return os.path.dirname(os.path.abspath(__file__)), compiled
-BASE_PATH, IS_COMPILED = get_base_path()
-# Get correct legacy folder
+def open_base_folder():
+    folder = BASE_PATH
+    if sys.platform == "win32":
+        os.startfile(folder)
+    elif sys.platform == "darwin":  # Macos
+        subprocess.run(["open", folder])
+    else:  # Linux
+        subprocess.run(["xdg-open", folder])
+# Legacy version
 script_path = os.path.abspath(__file__)
 folder_path = os.path.dirname(script_path)
 filename_with_ext = os.path.basename(script_path)
 filename_without_ext = os.path.splitext(filename_with_ext)[0]
+# Final paths
+BASE_PATH, IS_COMPILED = get_base_path()
+os.makedirs(BASE_PATH, exist_ok=True)
 if "legacy" in folder_path.lower() and not str(IS_COMPILED) == "True":
     UI_PATH = os.path.join(BASE_PATH, filename_without_ext, "ui")
 else:
     UI_PATH = os.path.join(BASE_PATH, "ui")
-# Configs folder
-os.makedirs(BASE_PATH, exist_ok=True)
 CONFIGS_FOLDER = os.path.join(BASE_PATH, "configs")
 LAST_CONFIG_FILE = os.path.join(BASE_PATH, "last_config.json")
-# On Windows, mss reports logical (DPI-scaled) pixel dimensions.
-# pywebview's create_window width/height also use logical pixels, so they match.
-# However we must account for the monitor's top-left offset (multi-monitor setups
-# where the primary isn't at 0,0) when positioning overlay windows.
-if sys.platform == "win32":
-    try:
-        import ctypes as _ctypes
-        _ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-monitor DPI aware
-    except Exception:
-        pass
 CONFIG_DIR = CONFIGS_FOLDER
 IMAGES_PATH = os.path.join(BASE_PATH, "images")
 DEBUG_DIR = BASE_PATH
@@ -1158,9 +1154,9 @@ class Api:
         # Create and show eyedropper
         self.eyedropper = Eyedropper(parent=self)
         self.set_status("Eyedropper opened • Hover to preview • Click to pick • Esc to cancel")
-    # ---------------------
+    # 
     # Save Config
-    # ---------------------
+    # 
     def _get_prompt_defaults(self):
         defaults = {}
         index_path = os.path.join(UI_PATH, "index.html")
@@ -1188,8 +1184,6 @@ class Api:
             re.IGNORECASE,
         )
         for field_id, body in select_pattern.findall(html):
-            if field_id == "config-select":
-                continue
             match = option_pattern.search(body)
             if match:
                 defaults[field_id] = match.group(1).strip()
@@ -1264,9 +1258,9 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # ---------------------
+    # 
     # Load Config
-    # ---------------------
+    # 
     def load_config(self, config_name):
         try:
             if not config_name:
@@ -1293,25 +1287,19 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # ---------------------
+    # 
     # List Configs
-    # ---------------------
     def list_configs(self):
         try:
-            configs = []
-            for folder in os.listdir(CONFIGS_FOLDER):
-                full_path = os.path.join(
-                    CONFIGS_FOLDER,
-                    folder
-                )
-                if os.path.isdir(full_path):
-                    configs.append(folder)
+            configs = sorted([
+                folder for folder in os.listdir(CONFIGS_FOLDER)
+                if os.path.isdir(os.path.join(CONFIGS_FOLDER, folder))
+            ])
             return configs
-        except Exception as e:
+        except Exception:
             return []
-    # ---------------------
     # Settings State
-    # ---------------------
+    # 
     def update_settings(self, settings):
         self.vars.update(settings)
         self._apply_fish_overlay_state()
@@ -1374,9 +1362,9 @@ class Api:
         if result.get("success"):
             result["config_name"] = config_name
         return result
-    # ---------------------
+    # 
     # Delete Config
-    # ---------------------
+    # 
     def delete_config(self, config_name):
         try:
             folder = os.path.join(
@@ -1757,21 +1745,21 @@ class Api:
     def on_key_press(self, key):
         key = self.normalize_key(key)
         start_key, bar_areas_key, stop_key = self._get_hotkeys()
-        macro_mode = self.vars["macro_mode"]
-        if not macro_mode == "disabled":
+        automation_mode = self.vars["automation_mode"]
+        if not automation_mode == "disabled":
             if key == start_key:
                 if self.macro_running == True:
                     return
                 else:
                     # Save current settings to config before starting
                     self.save_config(self.current_config, self.vars)
-                    if macro_mode == "fishing":
+                    if automation_mode == "fishing":
                         threading.Thread(target=self.start_fishing, daemon=True).start()
-                    elif macro_mode == "appraisal":
+                    elif automation_mode == "appraisal":
                         threading.Thread(target=self.start_appraisal, daemon=True).start()
-                    elif macro_mode == "enchant":
+                    elif automation_mode == "enchant":
                         threading.Thread(target=self.start_enchantment, daemon=True).start()
-                    elif macro_mode == "angler":
+                    elif automation_mode == "angler":
                         threading.Thread(target=self.start_angler, daemon=True).start()
             elif key == bar_areas_key:
                 self.open_area_selector()
@@ -1889,7 +1877,7 @@ class Api:
             # Use a local dict rather than self._monitor to avoid concurrent mutation
             m = {"left": left, "top": top, "width": width, "height": height}
             if not hasattr(self._thread_local, "sct"):
-                self._thread_local.sct = MSS
+                self._thread_local.sct = MSS()
             img = self._thread_local.sct.grab(m)
             # MSS Returns BGRA. We convert the memory view to a standard numpy array safely.
             frame = np.array(img, dtype=np.uint8) 
@@ -1920,7 +1908,7 @@ class Api:
             return frame[0:height, 0:width]
         else:
             if not hasattr(thread_local, "sct"):
-                thread_local.sct = MSS
+                thread_local.sct = MSS()
             cached = getattr(thread_local, "monitor", None)
             if cached is None or cached["width"] != width or cached["height"] != height:
                 thread_local.monitor = {
@@ -2967,15 +2955,15 @@ class Api:
             self._pid_last_scan_time = now
             self._pid_last_error = error
             return 0.0
-        dt = now - self._pid_last_scan_time
-        dt = min(0.15, dt)
-        if dt <= 0:
+        time_delta = now - self._pid_last_scan_time
+        time_delta = min(0.15, time_delta)
+        if time_delta <= 0:
             return 0.0
         kp       = self._get_var_number("kp", 0.6)
         kd       = self._get_var_number("kd", 0.5)
         # Derivative
-        derivative = (error - self._pid_last_error) / dt
-        output = (kp * error + kd * derivative)
+        bar_velocity = (error - self._pid_last_error) / time_delta
+        output = (kp * error + kd * bar_velocity)
         self._pid_last_error = error
         self._pid_last_scan_time = now
         return output
@@ -3006,23 +2994,28 @@ class Api:
             and self._pid_last_error is not None
         ):
             time_delta = current_time - self._pid_last_scan_time
-            if time_delta > 0.001:
-                # Bar velocity: how fast the bar centre moved since last frame
-                last_bar_x   = self._pid_last_target_x - self._pid_last_error
-                bar_velocity = (bar_center_x - last_bar_x) / time_delta
-                error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
-                bar_moving_toward_target = (
-                    (bar_velocity > 0 and error > 0)
-                    or (bar_velocity < 0 and error < 0)
-                )
-                # print("error_magnitude_decreasing: ", abs(error), abs(self._pid_last_error))
-                # print("bar_moving_toward_target: ", bar_velocity, error)
-                if error_magnitude_decreasing and bar_moving_toward_target:
-                    # APPROACHING – strong damping to prevent overshoot
-                    d_term = -kd * 5.0 * bar_velocity
-                else:
-                    # CHASING – light damping to allow fast movement
-                    d_term = -kd * 0.2 * bar_velocity
+            time_delta = min(0.15, time_delta)
+            if time_delta <= 0:
+                return 0.0
+            # Bar velocity: how fast the bar centre moved since last frame
+            last_bar_x   = self._pid_last_target_x - self._pid_last_error
+            bar_velocity = (bar_center_x - last_bar_x) / time_delta
+            error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
+            bar_moving_toward_target = (
+                (bar_velocity > 0 and error > 0)
+                or (bar_velocity < 0 and error < 0)
+            )
+            # print("error_magnitude_decreasing: ", abs(error), abs(self._pid_last_error), error_magnitude_decreasing)
+            # print("bar_moving_toward_target: ", bar_velocity, error, bar_moving_toward_target)
+            if error_magnitude_decreasing and bar_moving_toward_target:
+                # APPROACHING – strong damping to prevent overshoot
+                d_term = -kd * 5.0 * bar_velocity
+            else:
+                # CHASING – light damping to allow fast movement
+                d_term = -kd * 0.2 * bar_velocity
+            # FIX: Clamp the d_term so it can never completely overpower the controller
+            d_term_clamp = 80.0 # Leave some headroom for the p_term within your 100.0 pd_clamp
+            d_term = max(-d_term_clamp, min(d_term_clamp, d_term))
         # Update state for next frame
         self._pid_last_error      = error
         self._pid_last_target_x   = target_line_last_x
@@ -3412,7 +3405,7 @@ class Api:
                     "🐞 AUTO BUG REPORT\n"
                     f"📂 Phase: {phase}\n"
                     f"🕐 {timestamp}\n"
-                    "--------------------------------------------------\n"
+                    "--------\n"
                     f"{report_text}\n"
                     "==========\n\n"
                 )
@@ -3554,15 +3547,12 @@ class Api:
     def start_angler(self):
         self._stop_active_capture()
         self.macro_running = True
-        dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
-        backpack_left, backpack_top, backpack_right, backpack_bottom, _, _ = self._get_areas("fish")
+        dialogue_left, dialogue_top, _, _, dialogue_width, dialogue_height = self._get_areas("shake")
+        backpack_left, backpack_top, _, _, backpack_width, backpack_height = self._get_areas("fish")
         quest_left, quest_top, quest_right, quest_bottom, _, _ = self._get_areas("friend")
         tesseract_path = self.vars["tesseract_path"]
-        tolerance = int(self.vars["shake_tolerance"])
-        shake_pixel = self.vars["shake_color"]
         backpack_key = str(self.vars["backpack_key"])
         angler_cd = int(self.vars["angler_cd"])
-        angler_click_mode = self.vars["angler_click_mode"].capitalize()
         # Angler Key
         angler_x_ratio = float(self.vars["angler_click_x"])
         angler_y_ratio = float(self.vars["angler_click_y"])
@@ -3571,8 +3561,8 @@ class Api:
         # Backpack Key
         backpack_x_ratio = self.vars["backpack_x"]
         backpack_y_ratio = self.vars["backpack_y"]
-        backpack_x = int(dialogue_width * backpack_x_ratio) + dialogue_left
-        backpack_y = int(dialogue_height * backpack_y_ratio) + dialogue_top
+        backpack_x = int(backpack_width * backpack_x_ratio) + backpack_left
+        backpack_y = int(backpack_height * backpack_y_ratio) + backpack_top
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
         # Check for utilities
         self._check_logging_trigger(-1)
@@ -3581,24 +3571,11 @@ class Api:
             time.sleep(0.1)
             # STEP 1: CLICK E → OPEN QUEST DIALOGUE
             self._send_key("e")
-            time.sleep(1.2)
-            img = self._grab_screen_full()
-            shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
-            if angler_click_mode == "Search":
-                try:
-                    dialogue = self._find_first_pixel(shake, shake_pixel, tolerance)
-                    if dialogue is not None:
-                        dialogue_x, dialogue_y = dialogue
-                        self._click_at(dialogue_left + dialogue_x, dialogue_top + dialogue_y)
-                    time.sleep(1.2)
-                except Exception as e:
-                    self.set_status(e)
-                    self.stop_macro(f"Angler/Quest failed: {e}")
-                    break
-            else:
-                self._click_at(angler_click_x, angler_click_y)
+            time.sleep(1.5)
+            # Click at angler area (accept quest)
+            self._click_at(angler_click_x, angler_click_y)
             # STEP 2: OCR QUEST AREA — GET REQUIRED FISH TEXT
-            time.sleep(2)
+            time.sleep(3)
             img = self._grab_screen_full()
             quest = img[quest_top:quest_bottom, quest_left:quest_right]
             gray = cv2.cvtColor(quest, cv2.COLOR_BGR2GRAY)
@@ -3621,20 +3598,11 @@ class Api:
             time.sleep(0.5)
             # STEP 4: CLICK SEARCH BAR + TYPE FISH NAME
             self._click_at(backpack_x, backpack_y)
-            time.sleep(0.25)
-            # Clear previous search
-            keyboard.press("ctrl")
-            keyboard.press("a")
-            keyboard.release("a")
-            keyboard.release("ctrl")
-            time.sleep(0.1)
-            keyboard.press("backspace")
-            keyboard.release("backspace")
-            time.sleep(0.1)
+            time.sleep(0.5)
             # Type fish name
             for char in required_fish:
                 self._send_key(char)
-            time.sleep(0.5)
+            time.sleep(1.5)
             # STEP 5: LOCATE quest_text IN QUEST AREA VIA OCR AND CLICK IT
             img = self._grab_screen_full()
             quest_region = img[quest_top:quest_bottom, quest_left:quest_right]
@@ -3681,16 +3649,8 @@ class Api:
             # STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)
             self._send_key("e")
             time.sleep(1.2)
-            img = self._grab_screen_full()
-            shake = img[dialogue_top:dialogue_bottom, dialogue_left:dialogue_right]
-            if angler_click_mode == "Search":
-                dialogue = self._find_first_pixel(shake, shake_pixel, tolerance)
-                if dialogue is not None:
-                    dialogue_x, dialogue_y = dialogue
-                    self._click_at(dialogue_left + dialogue_x, dialogue_top + dialogue_y)
-                time.sleep(1.2)
-            else:
-                self._click_at(angler_click_x, angler_click_y)
+            # Click at angler area
+            self._click_at(angler_click_x, angler_click_y)
             # STEP 8: COOLDOWN
             time.sleep(angler_cd)
     # Start enchanting
@@ -3790,7 +3750,7 @@ class Api:
         auto_refresh = self.vars.get("auto_refresh", "off")
         casting_mode = self.vars.get("casting_mode", "Normal")
         shake_mode = self.vars.get("shake_mode", "Navigation")
-        macro_mode = self.vars["macro_mode"]
+        automation_mode = self.vars["automation_mode"]
         fishing_profile = self.vars["fishing_profile"].lower()
         if self.macro_running == True:
             if auto_zoom == "on":
@@ -4560,10 +4520,15 @@ class Api:
                 self._set_fish_overlay_mode("idle")
                 return
             # Step 2: Crop image into fish and friend areas
+            self.fish_overlay.clear()
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
             fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
             # Step 3: Pixel Search
-            fish_x, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
+            fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
+            try:
+                fish_x = int((fish_pos_left + fish_pos_right) / 2)
+            except:
+                fish_x = None
             detection_source = 0
             arrow_indicator_x, _, _ = self._find_color_cluster(fish_img, arrow_hex, arrow_tol)
             try:
@@ -4574,6 +4539,10 @@ class Api:
                 bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, mouse_down, fish_width)
                 detection_source = 1
             bar_size = right_x - left_x
+            try:
+                bar_center = left_x + int(bar_size / 2)
+            except:
+                bar_center = None
             canvas_offset = 0
             # Step 4: Restart (friend area)
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
@@ -5222,7 +5191,7 @@ if show_setup_guide == False:
     # =========================
     api = Api()
     window = webview.create_window(
-        "PyWare Fishing V4.21",
+        f"PyWare Fishing V{APP_VERSION}",
         os.path.join(UI_PATH, "index.html"),
         js_api=api,
         width=1000,

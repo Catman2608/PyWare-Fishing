@@ -1,6 +1,6 @@
 {
     "config-select": "Requiem",
-    "macro_mode": "disabled",
+    "automation_mode": "disabled",
     "start_stop": "F5",
     "change_areas": "F6",
     "force_stop": "F7",

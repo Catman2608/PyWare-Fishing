@@ -1,6 +1,6 @@
 {
     "config-select": "Ruinous Oath",
-    "macro_mode": "enchant",
+    "automation_mode": "enchant",
     "start_stop": "F5",
     "change_areas": "F6",
     "force_stop": "F7",
