@@ -1,5 +1,4 @@
 {
-    "config-select": "Default",
     "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -101,7 +100,6 @@
     "mutation_enchant": "Darkened",
     "appraisal_enchant_x": "0.5",
     "appraisal_enchant_y": "0.5",
-    "angler_click_mode": "search",
     "angler_click_x": "0.5",
     "angler_click_y": "0.5",
     "backpack_key": "G",

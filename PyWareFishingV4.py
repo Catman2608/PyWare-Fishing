@@ -11,6 +11,15 @@ try:
     pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 except:
     pytesseract = None
+# Misc
+import threading
+import subprocess
+import requests
+import io
+import time
+import sys
+import webbrowser
+import os
 # Keyboard and Mouse clicks (platform-specific)
 from pynput.keyboard import Listener as KeyListener, Key
 from pynput import keyboard, mouse
@@ -31,15 +40,6 @@ import cv2
 import numpy as np
 import mss
 import math
-# Misc
-import threading
-import subprocess
-import requests
-import io
-import time
-import sys
-import webbrowser
-import os
 # Define platform-specific constants
 # All platforms
 keyboard_controller = KeyboardController()
