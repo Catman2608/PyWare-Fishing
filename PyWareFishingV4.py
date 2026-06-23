@@ -46,7 +46,7 @@ keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-APP_VERSION = "4.3"
+APP_VERSION = "67"
 BETA_VERSION = 0
 def get_macos_menu_offset():
     if sys.platform != "darwin":
@@ -716,14 +716,11 @@ class Eyedropper:
         """
         if not self._open:
             return
-
         self._open = False
-
         try:
             self.parent.set_status("Eyedropper cancelled")
         except Exception:
             pass
-
         try:
             self._win.destroy()
         except Exception:
@@ -740,16 +737,13 @@ class Eyedropper:
         except Exception:
             pass
         # Any additional cleanup (e.g. releasing capture buffer) can go here
-
     def close(self):
         """
         Force-close from Python during application shutdown.
         """
         if not self._open:
             return
-
         self._open = False
-
         try:
             self._win.destroy()
         except Exception:
@@ -868,7 +862,6 @@ class FishOverlay:
             + json.dumps(shape)
             + ")"
         )
-
     def draw_circle(self, lane, ratio, color):
         """
         Draw a circle indicator for tranquility mode lanes.
@@ -895,7 +888,6 @@ class FishOverlay:
         except Exception:
             # Silently ignore if JS side doesn't support drawCircle yet
             pass
-
     def close(self):
         if self._win and self._open:
             self._open = False
@@ -915,14 +907,14 @@ class SetupGuide(ctk.CTk):
             self.geometry("500x450")
         else:
             self.geometry("600x550")
-        self.title("PyWare Fishing Setup Guide")
+        self.title(f"PyWare Fishing V{APP_VERSION} (Setup Guide)")
         self.configure(fg_color="#05051b")
         # Start hotkey listener at the beginning for macOS (only if needed)
         if not sys.platform == "win32":
             self.start_hotkey_listener()
         ctk.CTkLabel(
             self,
-            text="PyWare Fishing Setup Guide",
+            text=f"PyWare Fishing V{APP_VERSION} (Setup Guide)",
             font=(ctk.CTkFont, 24, "bold")
         ).pack(pady=(20, 10))
         ctk.CTkLabel(
@@ -968,13 +960,18 @@ class SetupGuide(ctk.CTk):
         ctk.CTkLabel(
             self,
             text=(
-                "\nRequired folders:\n\n"
-                "✓ configs\n"
-                "✓ images\n"
-                "✓ ui"
+                "Do you want to do this automatically or move manually?\n\n"
+                "YES → Click Move Folder, PyWare does this process automatically.\n"
+                "NO → Move configs, images and UI manually into the PyWare Fishing folder."
             ),
-            justify="left"
-        ).pack(pady=20)
+            justify="left",
+            wraplength=500
+        ).pack(pady=(5, 10))
+        ctk.CTkButton(
+            self,
+            text="Move Folder Automatically",
+            command=self.move_folders
+        ).pack(pady=5)
         ctk.CTkButton(
             self,
             text="Open PyWare Fishing Folder",
@@ -985,6 +982,53 @@ class SetupGuide(ctk.CTk):
             text="Quit",
             command=self.destroy
         ).pack(side="bottom", pady=20)
+    def move_folders(self):
+        import shutil
+        from tkinter import messagebox
+        source = os.path.dirname(sys.executable)
+        folders = {
+            "configs": True,
+            "images": False,
+            "UI": False
+        }
+        os.makedirs(BASE_PATH, exist_ok=True)
+        keep_configs = messagebox.askyesno(
+            "Keep Configs?",
+            "Do you want to keep your existing configs?\n\n"
+            "Yes: Keep your configs and add new configs from this update.\n"
+            "No: Replace configs with the new version."
+        )
+        for folder, is_config in folders.items():
+            old = os.path.join(source, folder)
+            new = os.path.join(BASE_PATH, folder)
+            if not os.path.exists(old):
+                continue
+            # Configs
+            if is_config:
+                if keep_configs:
+                    # Merge new configs
+                    shutil.copytree(
+                        old,
+                        new,
+                        dirs_exist_ok=True
+                    )
+                else:
+                    # Replace configs
+                    if os.path.exists(new):
+                        shutil.rmtree(new)
+                    shutil.copytree(old, new)
+            # Images/UI
+            else:
+                if os.path.exists(new):
+                    shutil.rmtree(new)
+                shutil.copytree(old, new)
+            # Remove old folder from EXE directory
+            shutil.rmtree(old)
+        messagebox.showinfo(
+            "Migration Complete",
+            "Files have been moved successfully."
+        )
+        self.destroy()
     def start_hotkey_listener(self):
         """Start the hotkey listener to avoid trace trap errors"""
         try:
@@ -1154,9 +1198,7 @@ class Api:
         # Create and show eyedropper
         self.eyedropper = Eyedropper(parent=self)
         self.set_status("Eyedropper opened • Hover to preview • Click to pick • Esc to cancel")
-    # 
     # Save Config
-    # 
     def _get_prompt_defaults(self):
         defaults = {}
         index_path = os.path.join(UI_PATH, "index.html")
@@ -1258,9 +1300,7 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # 
     # Load Config
-    # 
     def load_config(self, config_name):
         try:
             if not config_name:
@@ -1287,7 +1327,6 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    # 
     # List Configs
     def list_configs(self):
         try:
@@ -1299,7 +1338,6 @@ class Api:
         except Exception:
             return []
     # Settings State
-    # 
     def update_settings(self, settings):
         self.vars.update(settings)
         self._apply_fish_overlay_state()
@@ -1362,9 +1400,7 @@ class Api:
         if result.get("success"):
             result["config_name"] = config_name
         return result
-    # 
     # Delete Config
-    # 
     def delete_config(self, config_name):
         try:
             folder = os.path.join(
@@ -2419,21 +2455,17 @@ class Api:
         """
         if frame is None:
             return None
-
         # Color Mask (Vectorized)
         target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int32)
         frame_int = frame.astype(np.int32)
         tol = int(np.clip(tolerance, 0, 255))
         mask = (np.sqrt(np.sum((frame_int - target_bgr) ** 2, axis=2)) <= tol).astype(np.uint8)
-
         if not np.any(mask):
             return None, None, None
-
         # Connected Components (Cluster Detection)
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
         if num_labels <= 1:
             return None, None, None  # Only background
-
         # Find largest cluster (skip label 0 = background)
         largest_label = None
         largest_area = 0
@@ -2442,27 +2474,21 @@ class Api:
             if area > largest_area and area >= min_area:
                 largest_area = area
                 largest_label = label
-
         if largest_label is None:
             return None, None, None
-
         # Get all pixel coordinates belonging to the largest cluster
         ys, xs = np.where(labels == largest_label)
         if len(xs) == 0:
             return None, None, None
-
         # Center = centroid (from connectedComponentsWithStats)
         center_x, center_y = centroids[largest_label]
         center = (int(center_x), int(center_y))
-
         # Leftmost point of cluster (minimum x)
         left_idx = np.argmin(xs)
         left = (int(xs[left_idx]), int(ys[left_idx]))
-
         # Rightmost point of cluster (maximum x)
         right_idx = np.argmax(xs)
         right = (int(xs[right_idx]), int(ys[right_idx]))
-
         return center, left, right
     def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
         """
@@ -2621,7 +2647,6 @@ class Api:
         if len(line_coordinates) >= 2:
             # Reset fish lost timer
             fish_lost_timer = 0.0
-
             if is_initial_run or initial_target_gap is None:
                 # INITIAL RUN: Find 2 closest lines to center as target lines
                 distance_coords = sorted([(abs(coord - fish_area_center), coord) for coord in line_coordinates], key=lambda x: x[0])
@@ -2629,58 +2654,47 @@ class Api:
                 target_left_x = target_pair[0]
                 target_right_x = target_pair[1]
                 initial_target_gap = target_right_x - target_left_x
-
                 # Find bars - closest to left of left target, closest to right of right target
                 left_candidates = [x for x in line_coordinates if x < target_left_x]
                 right_candidates = [x for x in line_coordinates if x > target_right_x]
-                
                 left_bar_x = max(left_candidates) if left_candidates else target_left_x
                 right_bar_x = min(right_candidates) if right_candidates else target_right_x
-
                 # Store for next run
                 self.last_target_left_x = target_left_x
                 self.last_target_right_x = target_right_x
                 self.last_left_x = left_bar_x
                 self.last_right_x = right_bar_x
-
                 print(f"📏 Initial: Target=({target_left_x}, {target_right_x}), Gap={initial_target_gap}, Bars=({left_bar_x}, {right_bar_x})")
                 is_initial_run = False
-
             else:
                 # SUBSEQUENT RUNS: Simple rules
                 # Rule 1: Find pair with gap matching initial_target_gap
                 best_gap_diff = float('inf')
                 target_left_x = self.last_target_left_x
                 target_right_x = self.last_target_right_x
-
                 for i in range(len(line_coordinates) - 1):
                     curr_left = line_coordinates[i]
                     curr_right = line_coordinates[i + 1]
                     curr_gap = curr_right - curr_left
                     gap_diff = abs(curr_gap - initial_target_gap)
-
                     if gap_diff < best_gap_diff:
                         best_gap_diff = gap_diff
                         target_left_x = curr_left
                         target_right_x = curr_right
-                
                 # If best gap is more than 4x initial gap, keep old positions
                 actual_gap = target_right_x - target_left_x
                 if actual_gap > initial_target_gap * 4:
                     target_left_x = self.last_target_left_x
                     target_right_x = self.last_target_right_x
-                
                 # Rule 2: Bars = line closest to old bar position
                 # CRITICAL: Exclude target lines from bar candidates
                 other_lines = [x for x in line_coordinates if x != target_left_x and x != target_right_x]
-                
                 if len(other_lines) >= 2:
                     # We have at least 2 non-target lines - pick closest to last positions
                     if self.last_left_x is not None:
                         left_bar_x = min(other_lines, key=lambda x: abs(x - self.last_left_x))
                     else:
                         left_bar_x = other_lines[0]
-                    
                     # Find closest to last right bar (excluding the one we picked for left)
                     remaining_lines = [x for x in other_lines if x != left_bar_x]
                     if remaining_lines and self.last_right_x is not None:
@@ -2690,17 +2704,14 @@ class Api:
                     else:
                         # Should not happen if len(other_lines) >= 2
                         right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x
-                
                 elif len(other_lines) == 1:
                     # Only 3 total lines (2 target + 1 other)
                     # Assign the single line to closest bar, use last position for the other
                     single_line = other_lines[0]
-                    
                     if self.last_left_x is not None and self.last_right_x is not None:
                         # Determine which bar this line is closer to
                         dist_to_left = abs(single_line - self.last_left_x)
                         dist_to_right = abs(single_line - self.last_right_x)
-                        
                         if dist_to_left < dist_to_right:
                             left_bar_x = single_line
                             right_bar_x = self.last_right_x  # Use last position
@@ -2711,13 +2722,11 @@ class Api:
                         # No previous positions - just assign to left bar
                         left_bar_x = single_line
                         right_bar_x = target_right_x  # Fallback
-                
                 else:
                     # No other lines besides targets (only 2 total lines)
                     # Use last known bar positions ONLY - never use target lines as bars
                     left_bar_x = self.last_left_x if self.last_left_x is not None else target_left_x
                     right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x
-
             # Percentage-based anti-teleport validation
             # Check if lines jumped more than threshold (likely detection error or occlusion)
             if self.last_target_left_x is not None and self.last_target_right_x is not None:
@@ -2726,16 +2735,13 @@ class Api:
                 target_right_jump = abs(target_right_x - self.last_target_right_x)
                 left_bar_jump = abs(left_bar_x - self.last_left_x) if self.last_left_x is not None else 0
                 right_bar_jump = abs(right_bar_x - self.last_right_x) if self.last_right_x is not None else 0
-                
                 max_jump = max(target_left_jump, target_right_jump, left_bar_jump, right_bar_jump)
-
                 # Teleport detection variables - prevent sudden jumps unless consistent
                 # Use percentage-based threshold: if line moves > 50% of screen width, it's likely detection error
                 # At 1032px width, 50% = ~516px, which catches major detection errors while allowing natural movement
                 TELEPORT_THRESHOLD_PERCENT = 0.50  # 50% of fish area width
                 TELEPORT_THRESHOLD = int(fish_area_center * TELEPORT_THRESHOLD_PERCENT)  # Convert to pixels
                 TELEPORT_CONFIRM_TIME = 0.15  # Time in seconds to confirm a teleport (150ms)
-
                 # If movement exceeds threshold percentage of screen width, it might be a teleport
                 if max_jump > TELEPORT_THRESHOLD:
                     # Potential teleport - check if it's consistent at this new position
@@ -2746,7 +2752,6 @@ class Api:
                         # Same position detected again - track time
                         if teleport_first_detected_time is None:
                             teleport_first_detected_time = current_time
-                        
                         # Check if teleport has been consistent long enough
                         time_since_first_detection = current_time - teleport_first_detected_time
                         if time_since_first_detection >= TELEPORT_CONFIRM_TIME:
@@ -2756,7 +2761,6 @@ class Api:
                             self.last_target_right_x = target_right_x
                             self.last_left_x = left_bar_x
                             self.last_right_x = right_bar_x
-                            
                             # Reset teleport tracking
                             potential_teleport_target_left = None
                             potential_teleport_target_right = None
@@ -2777,7 +2781,6 @@ class Api:
                         potential_teleport_left_bar = left_bar_x
                         potential_teleport_right_bar = right_bar_x
                         teleport_first_detected_time = current_time
-                        
                         # Use old positions while confirming
                         print(f"🔍 New teleport candidate detected (jump: {max_jump:.0f}px > {TELEPORT_THRESHOLD}px threshold) - Starting confirmation")
                         target_left_x = self.last_target_left_x
@@ -2807,13 +2810,10 @@ class Api:
         Detect vertical lines in frame using Laplacian edge detection.
         Based on b.py line detection pipeline with brightness and density filtering.
         NLM denoising removed for 10x speedup (30 FPS -> 300 FPS).
-        
         Frame is normalized to reference fish box dimensions (1035x43 at 2560x1440)
         for consistent detection across all resolutions. Line coordinates are scaled
         back to match the original frame dimensions.
-        
         Returns list of x-coordinates of detected vertical lines.
-
         Args:
             frame: BGR image from dxcam/mss
             original_width: Original frame width before normalization (for coordinate scaling back)
@@ -2822,39 +2822,31 @@ class Api:
             # Get minimum line density from settings (configurable via GUI)
             MIN_LINE_DENSITY = self._get_rod_specific_setting("fish_line_min_density", 0.8)
             BRIGHTNESS_THRESHOLD = 10  # Minimum brightness for edge pixels
-            
             # Reference fish box dimensions at 1280x720 (lower detail for better edge detection)
             # At 1280x720: fish box is 762*(1280/2560) to 1797*(1280/2560) = 381 to 898 (width=517)
             # Height: 1215*(720/1440) to 1258*(720/1440) = 607 to 629 (height=22)
             REFERENCE_FISH_WIDTH = 517   # Fish box width at 720p
             REFERENCE_FISH_HEIGHT = 22   # Fish box height at 720p
-            
             # Store original dimensions for coordinate scaling
             original_height, original_frame_width = frame.shape[:2]
             if original_width is None:
                 original_width = original_frame_width
-            
             # Normalize frame to reference dimensions for consistent detection
             if original_frame_width != REFERENCE_FISH_WIDTH or original_height != REFERENCE_FISH_HEIGHT:
                 frame = cv2.resize(frame, (REFERENCE_FISH_WIDTH, REFERENCE_FISH_HEIGHT), interpolation=cv2.INTER_LINEAR)
                 width_scale = original_width / REFERENCE_FISH_WIDTH
             else:
                 width_scale = 1.0
-
             # Step 1: Convert to grayscale
             grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
             # Step 2: Laplacian edge detection (NLM removed for 10x speedup)
             laplacian = cv2.Laplacian(grayscale, cv2.CV_8U)
-
             # Step 3: Filter vertical lines by brightness threshold and density
             # Keep only columns where at least MIN_LINE_DENSITY of pixels are above BRIGHTNESS_THRESHOLD
             height, width = laplacian.shape
-            
             # Vectorized column density calculation (10x faster than Python loop)
             column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
             line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
-
             # Merge adjacent lines (consecutive x-coordinates) into single lines
             # Takes the middle position of each group of adjacent pixels
             # Lines must be within 2 pixels to be considered part of the same group
@@ -2862,7 +2854,6 @@ class Api:
                 merged_lines = []
                 group_start = line_coordinates[0]
                 group_end = line_coordinates[0]
-                
                 for i in range(1, len(line_coordinates)):
                     if line_coordinates[i] <= group_end + 2:
                         # Within 2 pixels, extend current group
@@ -2874,22 +2865,16 @@ class Api:
                         # Start new group
                         group_start = line_coordinates[i]
                         group_end = line_coordinates[i]
-                
                 # Don't forget the last group
                 middle = (group_start + group_end) // 2
                 merged_lines.append(middle)
-                
                 line_coordinates = merged_lines
-
             # Scale line coordinates back to original frame dimensions
             if width_scale != 1.0:
                 line_coordinates = [int(x * width_scale) for x in line_coordinates]
-
             # REMOVED: Old limit of 5 lines - now handles any number of lines
             # The fish stage will intelligently pick the best 4 lines from any number detected
-
             return line_coordinates
-
         except Exception as e:
             print(f"    Error in line detection: {e}")
             return []
@@ -4587,7 +4572,6 @@ class Api:
         friend_tol = int(self.vars["friends_tolerance"])
         note_box_tol = self._get_var_number("tracking_tolerance", 8)
         arrow_tol = self._get_var_number("arrow_tolerance", 8)
-
         fish_hex = self.vars["fish_color"]
         left_bar_hex = self.vars["left_color"]
         right_bar_hex = self.vars["right_color"]
@@ -4607,7 +4591,6 @@ class Api:
         lock_cursor = (self.vars["lock_cursor"])
         fishing_mode = (self.vars["fishing_mode"])
         minigame_controller_mode = self.vars["controller_mode"].lower()
-
         lullaby_metronome_ratio = float(self.vars["lullaby_metronome_ratio"])
         lullaby_fishing_ratio = float(self.vars["lullaby_fishing_ratio"])
         # Utility Settings
@@ -4908,7 +4891,6 @@ class Api:
                         catch_success = False
                 except TypeError:
                     pass
-
             # ============================================================
             # METRONOME RHYTHM MODE (Lullaby-style minigame)
             # ============================================================
@@ -4940,10 +4922,8 @@ class Api:
                 else:
                     # No valid detection → stay safe (released)
                     release_mouse()
-
                 time.sleep(scan_delay)
                 continue   # skip all normal controller / overlay / dual logic
-
             # Step 11: Controller mode selection
             controller_mode = 0
             if bar_center is not None and fish_x is not None:
@@ -5126,22 +5106,18 @@ def check_setup_guide():
     cleaned = 0 # Failsafe
     beta_ver = int(BETA_VERSION) if isinstance(BETA_VERSION, str) else BETA_VERSION
     beta_version_message = f"beta {beta_ver}" if beta_ver > 0 else ""
-    
     if beta_ver == 0:
         error_message = "You have downloaded PyWare Fishing for the first time."
     else:
         error_message = """You have downloaded a beta version of PyWare Fishing.
 This uses a different folder to prevent crashes on the stable version"""
-    
     try:
         with open(os.path.join(UI_PATH, "app.js"), "r") as file:
             # Read first two lines
             lines = [file.readline().strip() for _ in range(2)]
-            
             # Parse first line for APP_VERSION
             first_line = lines[0]
             cleaned = first_line.replace("const APP_VERSION = ", "").replace('"', "").replace(";", "")
-            
             # Parse second line for BETA_VERSION if it exists
             js_beta_version = None
             if len(lines) > 1 and lines[1]:
@@ -5149,22 +5125,18 @@ This uses a different folder to prevent crashes on the stable version"""
                 if "BETA_VERSION" in second_line:
                     js_beta_version = second_line.replace("const BETA_VERSION = ", "").replace('"', "").replace(";", "").strip()
                     js_beta_version = int(js_beta_version) if js_beta_version.isdigit() else None
-        
         # Check both release version and beta version
         if cleaned == APP_VERSION and (js_beta_version is None or js_beta_version == beta_ver):
             show_setup_guide = False
         else:
             show_setup_guide = True
-            
             # Build detailed version mismatch message
             version_info = []
             if cleaned != APP_VERSION:
                 version_info.append(f"Release version: {cleaned} → {APP_VERSION}")
             if js_beta_version is not None and js_beta_version != beta_ver:
                 version_info.append(f"Beta version: {js_beta_version} → {beta_ver}")
-            
             version_change = " & ".join(version_info)
-            
             if APP_VERSION > cleaned or (APP_VERSION == cleaned and beta_ver > js_beta_version):
                 error_message = f"""
 You have updated from {version_change}.
@@ -5173,12 +5145,10 @@ Please open the base folder and move the new configs (optional), images and UI f
                 error_message = f"""
 The macro automatically updated from {version_change}. 
 Please redownload the application from the Google Drive."""
-                
     except Exception as e:
         show_setup_guide = True
         # Optional: log the error for debugging
         # print(f"Error reading app.js: {e}")
-    
     return show_setup_guide, error_message
 show_setup_guide, error_message = check_setup_guide()
 if show_setup_guide == True:
@@ -5199,45 +5169,38 @@ if show_setup_guide == False:
     )
     def on_main_window_closed():
         """Clean shutdown for all background systems."""
-
         try:
             api.macro_running = False
         except:
             pass
-
         try:
             api._stop_active_capture(join_timeout=1.0)
         except:
             pass
-
         try:
             if getattr(api, "area_selector", None):
                 api.area_selector.close()
                 api.area_selector = None
         except:
             pass
-
         try:
             if getattr(api, "eyedropper", None):
                 api.eyedropper.close()
                 api.eyedropper = None
         except Exception as e:
             print(f"Eyedropper cleanup error: {e}")
-
         try:
             if getattr(api, "fish_overlay", None):
                 api.fish_overlay.close()
                 api.fish_overlay = None
         except:
             pass
-
         try:
             if getattr(api, "key_listener", None):
                 api.key_listener.stop()
                 api.key_listener = None
         except:
             pass
-
         try:
             if hasattr(api._thread_local, "sct"):
                 api._thread_local.sct.close()
