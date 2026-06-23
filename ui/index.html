@@ -682,37 +682,5 @@
             </div>
         </div>
     </div>
-    <!-- Error Modal -->
-    <div id="error-modal-overlay" class="modal-overlay">
-        <div class="modal-window" style="max-width:900px;">
-            <div class="modal-header">
-                <h2>Macro Crashed</h2>
-                <button class="modal-close" onclick="closeErrorModal()">×</button>
-            </div>
-
-            <div class="modal-content">
-                <p>
-                    An unexpected error occurred. Please copy this traceback and
-                    send it in the bug reports channel.
-                </p>
-
-                <textarea
-                    id="error-traceback"
-                    style="
-                        width:100%;
-                        height:300px;
-                        font-family:monospace;
-                        resize:vertical;
-                    "
-                    readonly></textarea>
-
-                <br><br>
-
-                <button onclick="copyTraceback()">
-                    Copy Traceback
-                </button>
-            </div>
-        </div>
-    </div>
 </body>
 </html>

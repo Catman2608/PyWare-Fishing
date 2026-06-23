@@ -2,16 +2,12 @@
 # GUI (Primary and fallback)
 import webview
 import customtkinter as ctk
+from tkinter import messagebox
 # Text parsing
 import json
 import re
-# OCR (with fallback if user didn't install Tesseract)
-try:
-    import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
-except:
-    pytesseract = None
 # Misc
+import traceback
 import threading
 import subprocess
 import requests
@@ -20,6 +16,18 @@ import time
 import sys
 import webbrowser
 import os
+import shutil
+# OCR (with fallback if user didn't install Tesseract)
+try:
+    import pytesseract
+    if sys.platform == "win32":
+        possible = shutil.which("tesseract")
+        if possible:
+            pytesseract.pytesseract.tesseract_cmd = possible
+    else:
+        pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+except:
+    pytesseract = None
 # Keyboard and Mouse clicks (platform-specific)
 from pynput.keyboard import Listener as KeyListener, Key
 from pynput import keyboard, mouse
@@ -46,7 +54,7 @@ keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-APP_VERSION = "67"
+APP_VERSION = "4.3"
 BETA_VERSION = 0
 def get_macos_menu_offset():
     if sys.platform != "darwin":
@@ -983,7 +991,7 @@ class SetupGuide(ctk.CTk):
             command=self.destroy
         ).pack(side="bottom", pady=20)
     def move_folders(self):
-        import shutil
+        
         from tkinter import messagebox
         source = os.path.dirname(sys.executable)
         folders = {
@@ -3531,11 +3539,19 @@ class Api:
     # Start utilities
     def start_angler(self):
         self._stop_active_capture()
-        self.macro_running = True
+        try:
+            tesseract_path = self.vars["tesseract_path"]
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            self.macro_running = True
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            messagebox.showerror("Enchant error", full_error)
+            self.macro_running = False
+            self.stop_macro(f"Enchant error: {e}")
         dialogue_left, dialogue_top, _, _, dialogue_width, dialogue_height = self._get_areas("shake")
         backpack_left, backpack_top, _, _, backpack_width, backpack_height = self._get_areas("fish")
         quest_left, quest_top, quest_right, quest_bottom, _, _ = self._get_areas("friend")
-        tesseract_path = self.vars["tesseract_path"]
         backpack_key = str(self.vars["backpack_key"])
         angler_cd = int(self.vars["angler_cd"])
         # Angler Key
@@ -3548,7 +3564,6 @@ class Api:
         backpack_y_ratio = self.vars["backpack_y"]
         backpack_x = int(backpack_width * backpack_x_ratio) + backpack_left
         backpack_y = int(backpack_height * backpack_y_ratio) + backpack_top
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
         # Check for utilities
         self._check_logging_trigger(-1)
         # Main loop
@@ -3641,10 +3656,17 @@ class Api:
     # Start enchanting
     def start_enchantment(self):
         self._stop_active_capture()
-        self.macro_running = True
-        tesseract_path = self.vars["tesseract_path"]
+        try:
+            tesseract_path = self.vars["tesseract_path"]
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            self.macro_running = True
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            messagebox.showerror("Enchant error", full_error)
+            self.macro_running = False
+            self.stop_macro(f"Enchant error: {e}")
         mutation_enchant = self.vars["mutation_enchant"]
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
         dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
         x = float(self.vars["appraisal_enchant_x"])
         y = float(self.vars["appraisal_enchant_y"])
@@ -3679,22 +3701,29 @@ class Api:
             if mutation_enchant.lower() in text.lower():
                 self.stop_macro("Enchanting finished")
             if self.macro_running == False:
-                self.stop_macro("Macro Already Stopped")
+                self.stop_macro("")
             time.sleep(click_delay2)
     # Start appraisal
     def start_appraisal(self):
         self._stop_active_capture()
-        self.macro_running = True
-        dialogue_left, dialogue_top, dialogue_right, dialogue_bottom, dialogue_width, dialogue_height = self._get_areas("shake")
+        try:
+            tesseract_path = self.vars["tesseract_path"]
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            self.macro_running = True
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            messagebox.showerror("Appraisal error", full_error)
+            self.macro_running = False
+            self.stop_macro(f"Appraisal error: {e}")
+        dialogue_left, dialogue_top, _, _, dialogue_width, dialogue_height = self._get_areas("shake")
         hotbar_left, hotbar_top, hotbar_right, hotbar_bottom, _, _ = self._get_areas("fish")
-        tesseract_path = self.vars["tesseract_path"]
         mutation_enchant = self.vars["mutation_enchant"]
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
         appraisal_x_ratio = float(self.vars["appraisal_enchant_x"])
         appraisal_y_ratio = float(self.vars["appraisal_enchant_y"])
         appraisal_x = int(dialogue_width * appraisal_x_ratio) + dialogue_left
         appraisal_y = int(dialogue_height * appraisal_y_ratio) + dialogue_top
-        click_delay = int(self.vars["click_delay"])
+        click_delay = float(self.vars["click_delay"])
         # Check for utilities
         self._check_logging_trigger(-1)
         # Main loop
@@ -3716,7 +3745,7 @@ class Api:
             if mutation_enchant.lower() in text.lower():
                 self.stop_macro("Appraisal finished")
             if self.macro_running == False:
-                self.stop_macro("Macro Already Stopped")
+                self.stop_macro("")
     # Start main automation
     def start_fishing(self):
         self._stop_active_capture()
@@ -3737,64 +3766,71 @@ class Api:
         shake_mode = self.vars.get("shake_mode", "Navigation")
         automation_mode = self.vars["automation_mode"]
         fishing_profile = self.vars["fishing_profile"].lower()
-        if self.macro_running == True:
-            if auto_zoom == "on":
-                for _ in range(20):
-                    mouse_controller.scroll(0, 1)
-                    time.sleep(0.05)
-                mouse_controller.scroll(0, -1)
-                time.sleep(0.1)
-        else:
-            self.stop_macro("Macro Already Stopped")
-        while self.macro_running:
-            # Misc / Utilities
-            cycle = cycle + 1
-            # Select Rod
-            if auto_refresh == "on":
-                bag_delay = self._get_var_number("select_rod_duration", self._get_var_number("bag_delay", 0.36, float), float)
-                self.set_status("Selecting rod")
-                # Sequence
-                time.sleep(bag_delay * 1.5)
-                self._send_key(bag_slot)
-                time.sleep(bag_delay)
-                self._send_key(rod_slot)
-                time.sleep(0.2)
-            if self.macro_running == False:
-                self.stop_macro("Macro Already Stopped")
-            # Logging
-            self._check_logging_trigger(catch_rate_show)
-            # Totem
-            self._check_totem_trigger(shake_x, shake_y)
-            if self.vars["auto_reconnect"] == "on":
-                self._auto_reconnect(shake_x, shake_y)
-            if self.macro_running == False:
-                self.stop_macro("Macro Already Stopped")
-            # Cast
-            if casting_mode == "perfect" or casting_mode == "Perfect":
-                self._execute_cast_perfect()
+        try:
+            if self.macro_running == True:
+                if auto_zoom == "on":
+                    for _ in range(20):
+                        mouse_controller.scroll(0, 1)
+                        time.sleep(0.05)
+                    mouse_controller.scroll(0, -1)
+                    time.sleep(0.1)
             else:
-                self.execute_cast_normal()
-            if self.macro_running == False:
-                self.stop_macro("Macro Already Stopped")
-            # Shake
-            if shake_mode == "navigation" or shake_mode == "Navigation":
-                self._execute_shake_navigation()
-            else:
-                self._execute_shake_click(shake_mode)
-            if self.macro_running == False:
-                self.stop_macro("Macro Already Stopped")
-            # Minigame
-            if fishing_profile == "lanes":
-                self._enter_minigame_tranquility()
-            elif fishing_profile == "reverse":
-                self._enter_minigame_dreambreaker()
-            else:
-                catch_success = self._enter_minigame()
-            successful_catches = successful_catches + 1 if catch_success == True else successful_catches
-            catch_rate = (successful_catches / cycle)
-            catch_rate_show = round(catch_rate * 100)
-            if self.macro_running == False:
-                self.stop_macro("Macro Already Stopped")
+                self.stop_macro("")
+            while self.macro_running:
+                # Misc / Utilities
+                cycle = cycle + 1
+                # Select Rod
+                if auto_refresh == "on":
+                    bag_delay = self._get_var_number("select_rod_duration", self._get_var_number("bag_delay", 0.36, float), float)
+                    self.set_status("Selecting rod")
+                    # Sequence
+                    time.sleep(bag_delay * 1.5)
+                    self._send_key(bag_slot)
+                    time.sleep(bag_delay)
+                    self._send_key(rod_slot)
+                    time.sleep(0.2)
+                if self.macro_running == False:
+                    self.stop_macro("")
+                # Logging
+                self._check_logging_trigger(catch_rate_show)
+                # Totem
+                self._check_totem_trigger(shake_x, shake_y)
+                if self.vars["auto_reconnect"] == "on":
+                    self._auto_reconnect(shake_x, shake_y)
+                if self.macro_running == False:
+                    self.stop_macro("")
+                # Cast
+                if casting_mode == "perfect" or casting_mode == "Perfect":
+                    self._execute_cast_perfect()
+                else:
+                    self.execute_cast_normal()
+                if self.macro_running == False:
+                    self.stop_macro("")
+                # Shake
+                if shake_mode == "navigation" or shake_mode == "Navigation":
+                    self._execute_shake_navigation()
+                else:
+                    self._execute_shake_click(shake_mode)
+                if self.macro_running == False:
+                    self.stop_macro("")
+                # Minigame
+                if fishing_profile == "lanes":
+                    self._enter_minigame_tranquility()
+                elif fishing_profile == "reverse":
+                    self._enter_minigame_dreambreaker()
+                else:
+                    catch_success = self._enter_minigame()
+                successful_catches = successful_catches + 1 if catch_success == True else successful_catches
+                catch_rate = (successful_catches / cycle)
+                catch_rate_show = round(catch_rate * 100)
+                if self.macro_running == False:
+                    self.stop_macro("")
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            messagebox.showerror("Fishing error", full_error)
+            self.macro_running = False
+            self.stop_macro(f"Appraisal error: {e}")
     # Utilities
     def _check_logging_trigger(self, catch_rate=-1):
         """
@@ -5096,7 +5132,8 @@ class Api:
         self._fish_overlay_cast_bounds = None
         self._stop_active_capture(join_timeout=1.0)
         self._set_fish_overlay_mode("idle")
-        self.set_status(text)
+        if not text == "":
+            self.set_status(text)
         try:
             window.show()
         except Exception:

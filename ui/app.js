@@ -517,23 +517,6 @@ async function openLink(link) {
     }
 }
 
-function showErrorModal(traceback) {
-    document.getElementById("error-traceback").value = traceback;
-    document.getElementById("error-modal-overlay").style.display = "flex";
-}
-
-function closeErrorModal() {
-    document.getElementById("error-modal-overlay").style.display = "none";
-}
-
-function copyTraceback() {
-    const tb = document.getElementById("error-traceback");
-
-    tb.select();
-    tb.setSelectionRange(0, 999999);
-
-    navigator.clipboard.writeText(tb.value);
-}
 function openSupportTab() {
     document
         .getElementById(
