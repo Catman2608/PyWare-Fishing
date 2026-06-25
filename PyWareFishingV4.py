@@ -54,8 +54,8 @@ keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-APP_VERSION = "4.3"
-BETA_VERSION = 0
+APP_VERSION = "4.31"
+BETA_VERSION = 1
 def get_macos_menu_offset():
     if sys.platform != "darwin":
         return 0
@@ -647,6 +647,7 @@ class Eyedropper:
         self.parent = parent
         self._open = True
         self.last_picked_color = None
+        self._cancelled = False
         self._scale = self.parent._get_scale_factor()
         self._win_origin_x = SCREEN_LEFT
         self._win_origin_y = SCREEN_TOP
@@ -695,6 +696,10 @@ class Eyedropper:
         g = int(frame[y, x, 1])
         r = int(frame[y, x, 2])
         hex_color = f"#{r:02X}{g:02X}{b:02X}"
+        try:
+            self.parent.set_status(f"{hex_color} • Click to pick • Esc to cancel")
+        except Exception:
+            pass
         return hex_color
     def window_ready(self, win_x, win_y):
         if sys.platform == "darwin":
@@ -711,6 +716,7 @@ class Eyedropper:
         if not self._open:
             return
         self.last_picked_color = hex_color
+        self._cancelled = False
         self.parent.set_status(f"Picked color: {hex_color}")
         self._open = False
         try:
@@ -724,6 +730,7 @@ class Eyedropper:
         """
         if not self._open:
             return
+        self._cancelled = True
         self._open = False
         try:
             self.parent.set_status("Eyedropper cancelled")
@@ -741,10 +748,17 @@ class Eyedropper:
         """
         self._open = False
         try:
-            self.parent.set_status("Eyedropper closed")
+            if self.last_picked_color:
+                self.parent.set_status(f"Picked color: {self.last_picked_color}")
+            elif self._cancelled:
+                self.parent.set_status("Eyedropper cancelled")
+            else:
+                self.parent.set_status("Eyedropper closed")
         except Exception:
             pass
         # Any additional cleanup (e.g. releasing capture buffer) can go here
+    def is_open(self):
+        return self._open
     def close(self):
         """
         Force-close from Python during application shutdown.
@@ -1125,28 +1139,28 @@ class Api:
         self.last_fish_x = None
         self.last_bar_left = None
         self.last_bar_right = None
-        self.last_cached_box_length = None  # Cached Bar Size From Minigame For Arrow Estimation
+        self.last_bar_size = None  # Cached Bar Size From Minigame For Arrow Estimation
         self.last_input_time = 0.0
         self.cooldown_duration = 1.0  # 1 second cooldown
         # P/D State Variables
         self._pid_last_error = 0.0      # Previous Error Term
         self._pid_last_scan_time = None      # Timestamp Of Last Pd Sample
         self.last_bar_size = None
-        self._normal_prev_bar_center = None  # Last bar center for _normal_control D-term
+        self.last_bar_center = None  # Last bar center for _normal_control D-term
         # Arrow-Based Box Estimation Variables
         self.last_indicator_x = None
         self.last_holding_state = None
         self.pending_holding_state = None
         self.pending_indicator_x = None
-        self.estimated_box_length = None
-        self._last_bar_left_x = None
-        self._last_bar_right_x = None
+        self.last_bar_size = None
+        self.last_bar_left = None
+        self._last_bar_right = None
         self._last_bar_box_size = None
         self._last_bar_center = None
         self.last_arrow_delta = None
         # Estimation internal position state — initialised here so that
         # the first arrow_centroid_x=None call never raises AttributeError
-        self.last_known_box_center_x = None
+        self._last_bar_center = None
         self.last_left_x = None
         self.last_right_x = None
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
@@ -2523,8 +2537,8 @@ class Api:
         """
         # ── 0. Arrow absent ──────────────────────────────────────────────────
         if arrow_centroid_x is None:
-            if self.last_known_box_center_x is not None:
-                return self.last_known_box_center_x, self.last_left_x, self.last_right_x
+            if self._last_bar_center is not None:
+                return self._last_bar_center, self.last_left_x, self.last_right_x
             return None, None, None
         # ── 1. Box-size resolution ───────────────────────────────────────────
         # Prefer the directly-detected bar size (synced every frame direct
@@ -2536,8 +2550,8 @@ class Api:
         # ── 2. Geometry-first side detection ────────────────────────────────
         # Using the previous centre to decide which side the arrow is on avoids
         # the 1-frame is_holding lag that causes the spike in both older versions.
-        if self.last_known_box_center_x is not None:
-            arrow_on_left = (arrow_centroid_x < self.last_known_box_center_x)
+        if self._last_bar_center is not None:
+            arrow_on_left = (arrow_centroid_x < self._last_bar_center)
         else:
             # Cold-start: no position history — bootstrap from is_holding.
             arrow_on_left = not is_holding  # not holding → arrow is on LEFT edge
@@ -2561,11 +2575,11 @@ class Api:
         # frame, clamp the movement.  This is a hard backstop that catches any
         # residual artefact (e.g. a momentary wrong side-decision) without
         # suppressing real fast bar movement.
-        if self.last_known_box_center_x is not None:
+        if self._last_bar_center is not None:
             max_delta = box_size * 0.40
-            delta = new_center - self.last_known_box_center_x
+            delta = new_center - self._last_bar_center
             if abs(delta) > max_delta:
-                clamped = self.last_known_box_center_x + math.copysign(max_delta, delta)
+                clamped = self._last_bar_center + math.copysign(max_delta, delta)
                 half        = box_size / 2.0
                 new_left_x  = clamped - half
                 new_right_x = clamped + half
@@ -2573,7 +2587,7 @@ class Api:
         # ── 6. Commit ────────────────────────────────────────────────────────
         self.last_left_x             = new_left_x
         self.last_right_x            = new_right_x
-        self.last_known_box_center_x = new_center
+        self._last_bar_center = new_center
         self.last_indicator_x        = arrow_centroid_x
         self.last_holding_state      = is_holding
         return new_center, new_left_x, new_right_x
@@ -2591,7 +2605,7 @@ class Api:
             except ValueError:
                 return None
         return None
-    # Do Pixel/Image/Line Search
+    # Do Pixel/Image/line Search
     def _do_pixel_search(self, frame, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol):
         _, fish_pos_left, fish_pos_right = self._find_color_cluster(frame, fish_hex, fish_tol, 5)
         bar_pixels = []
@@ -2651,175 +2665,148 @@ class Api:
         # Initialization
         line_coordinates = self._detect_lines_in_frame(frame)
         current_time = time.time()
+        target_left_x = None
+        target_right_x = None
+        left_bar_x = None
+        right_bar_x = None
+        
+        # Initialize teleport tracking variables if they don't exist
+        if not hasattr(self, 'potential_teleport_target_left'):
+            self.potential_teleport_target_left = None
+            self.potential_teleport_target_right = None
+            self.potential_teleport_left_bar = None
+            self.potential_teleport_right_bar = None
+            self.teleport_first_detected_time = None
+        
         # Process lines - need at least 2 lines to continue tracking
         if len(line_coordinates) >= 2:
             # Reset fish lost timer
-            fish_lost_timer = 0.0
-            if is_initial_run or initial_target_gap is None:
+            self.fish_lost_timer = 0.0
+            
+            if self.is_initial_run or self.initial_target_gap is None:
                 # INITIAL RUN: Find 2 closest lines to center as target lines
                 distance_coords = sorted([(abs(coord - fish_area_center), coord) for coord in line_coordinates], key=lambda x: x[0])
                 target_pair = sorted([distance_coords[0][1], distance_coords[1][1]])
                 target_left_x = target_pair[0]
                 target_right_x = target_pair[1]
-                initial_target_gap = target_right_x - target_left_x
+                self.initial_target_gap = target_right_x - target_left_x
+                
                 # Find bars - closest to left of left target, closest to right of right target
                 left_candidates = [x for x in line_coordinates if x < target_left_x]
                 right_candidates = [x for x in line_coordinates if x > target_right_x]
                 left_bar_x = max(left_candidates) if left_candidates else target_left_x
                 right_bar_x = min(right_candidates) if right_candidates else target_right_x
+                
                 # Store for next run
                 self.last_target_left_x = target_left_x
                 self.last_target_right_x = target_right_x
                 self.last_left_x = left_bar_x
                 self.last_right_x = right_bar_x
-                print(f"📏 Initial: Target=({target_left_x}, {target_right_x}), Gap={initial_target_gap}, Bars=({left_bar_x}, {right_bar_x})")
-                is_initial_run = False
+                # print(f"📏 Initial: Target=({target_left_x}, {target_right_x}), Gap={self.initial_target_gap}, Bars=({left_bar_x}, {right_bar_x})")
+                self.is_initial_run = False
             else:
                 # SUBSEQUENT RUNS: Simple rules
-                # Rule 1: Find pair with gap matching initial_target_gap
+                # Rule 1: Find pair with gap matching self.initial_target_gap
                 best_gap_diff = float('inf')
-                target_left_x = self.last_target_left_x
-                target_right_x = self.last_target_right_x
+                best_pair = None
+                
                 for i in range(len(line_coordinates) - 1):
                     curr_left = line_coordinates[i]
                     curr_right = line_coordinates[i + 1]
                     curr_gap = curr_right - curr_left
-                    gap_diff = abs(curr_gap - initial_target_gap)
+                    gap_diff = abs(curr_gap - self.initial_target_gap)
                     if gap_diff < best_gap_diff:
                         best_gap_diff = gap_diff
-                        target_left_x = curr_left
-                        target_right_x = curr_right
-                # If best gap is more than 4x initial gap, keep old positions
+                        best_pair = (curr_left, curr_right)
+                
+                if best_pair:
+                    target_left_x, target_right_x = best_pair
+                
+                # If best gap is more than 3x initial gap, keep old positions (detection error)
                 actual_gap = target_right_x - target_left_x
-                if actual_gap > initial_target_gap * 4:
+                if actual_gap > self.initial_target_gap * 3:
                     target_left_x = self.last_target_left_x
                     target_right_x = self.last_target_right_x
-                # Rule 2: Bars = line closest to old bar position
-                # CRITICAL: Exclude target lines from bar candidates
-                other_lines = [x for x in line_coordinates if x != target_left_x and x != target_right_x]
-                if len(other_lines) >= 2:
-                    # We have at least 2 non-target lines - pick closest to last positions
-                    if self.last_left_x is not None:
-                        left_bar_x = min(other_lines, key=lambda x: abs(x - self.last_left_x))
-                    else:
-                        left_bar_x = other_lines[0]
-                    # Find closest to last right bar (excluding the one we picked for left)
-                    remaining_lines = [x for x in other_lines if x != left_bar_x]
-                    if remaining_lines and self.last_right_x is not None:
-                        right_bar_x = min(remaining_lines, key=lambda x: abs(x - self.last_right_x))
-                    elif remaining_lines:
-                        right_bar_x = remaining_lines[0]
-                    else:
-                        # Should not happen if len(other_lines) >= 2
-                        right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x
-                elif len(other_lines) == 1:
-                    # Only 3 total lines (2 target + 1 other)
-                    # Assign the single line to closest bar, use last position for the other
-                    single_line = other_lines[0]
-                    if self.last_left_x is not None and self.last_right_x is not None:
-                        # Determine which bar this line is closer to
-                        dist_to_left = abs(single_line - self.last_left_x)
-                        dist_to_right = abs(single_line - self.last_right_x)
-                        if dist_to_left < dist_to_right:
-                            left_bar_x = single_line
-                            right_bar_x = self.last_right_x  # Use last position
-                        else:
-                            right_bar_x = single_line
-                            left_bar_x = self.last_left_x  # Use last position
-                    else:
-                        # No previous positions - just assign to left bar
-                        left_bar_x = single_line
-                        right_bar_x = target_right_x  # Fallback
+                
+                # Rule 2: Find bars - exclude target lines
+                # Get all lines that are NOT the target lines
+                other_lines = [x for x in line_coordinates if x not in (target_left_x, target_right_x)]
+                
+                # Sort other lines by position relative to targets
+                left_candidates = [x for x in other_lines if x < target_left_x]
+                right_candidates = [x for x in other_lines if x > target_right_x]
+                
+                # Select best bars with preference for candidates on correct side
+                if left_candidates and right_candidates:
+                    # Perfect case: have bars on both sides
+                    left_bar_x = min(left_candidates, key=lambda x: abs(x - target_left_x))
+                    right_bar_x = min(right_candidates, key=lambda x: abs(x - target_right_x))
+                elif left_candidates and not right_candidates:
+                    # Only left side bars available - use last known right bar
+                    left_bar_x = min(left_candidates, key=lambda x: abs(x - target_left_x))
+                    right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x + self.initial_target_gap
+                elif right_candidates and not left_candidates:
+                    # Only right side bars available - use last known left bar
+                    right_bar_x = min(right_candidates, key=lambda x: abs(x - target_right_x))
+                    left_bar_x = self.last_left_x if self.last_left_x is not None else target_left_x - self.initial_target_gap
                 else:
-                    # No other lines besides targets (only 2 total lines)
-                    # Use last known bar positions ONLY - never use target lines as bars
-                    left_bar_x = self.last_left_x if self.last_left_x is not None else target_left_x
-                    right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x
-            # Percentage-based anti-teleport validation
-            # Check if lines jumped more than threshold (likely detection error or occlusion)
-            if self.last_target_left_x is not None and self.last_target_right_x is not None:
-                # Calculate actual jump distances
-                target_left_jump = abs(target_left_x - self.last_target_left_x)
-                target_right_jump = abs(target_right_x - self.last_target_right_x)
-                left_bar_jump = abs(left_bar_x - self.last_left_x) if self.last_left_x is not None else 0
-                right_bar_jump = abs(right_bar_x - self.last_right_x) if self.last_right_x is not None else 0
-                max_jump = max(target_left_jump, target_right_jump, left_bar_jump, right_bar_jump)
-                # Teleport detection variables - prevent sudden jumps unless consistent
-                # Use percentage-based threshold: if line moves > 50% of screen width, it's likely detection error
-                # At 1032px width, 50% = ~516px, which catches major detection errors while allowing natural movement
-                TELEPORT_THRESHOLD_PERCENT = 0.50  # 50% of fish area width
-                TELEPORT_THRESHOLD = int(fish_area_center * TELEPORT_THRESHOLD_PERCENT)  # Convert to pixels
-                TELEPORT_CONFIRM_TIME = 0.15  # Time in seconds to confirm a teleport (150ms)
-                # If movement exceeds threshold percentage of screen width, it might be a teleport
-                if max_jump > TELEPORT_THRESHOLD:
-                    # Potential teleport - check if it's consistent at this new position
-                    if (potential_teleport_target_left == target_left_x and
-                        potential_teleport_target_right == target_right_x and
-                        potential_teleport_left_bar == left_bar_x and
-                        potential_teleport_right_bar == right_bar_x):
-                        # Same position detected again - track time
-                        if teleport_first_detected_time is None:
-                            teleport_first_detected_time = current_time
-                        # Check if teleport has been consistent long enough
-                        time_since_first_detection = current_time - teleport_first_detected_time
-                        if time_since_first_detection >= TELEPORT_CONFIRM_TIME:
-                            # Teleport confirmed - accept new positions
-                            print(f"⚠️ TELEPORT CONFIRMED after {time_since_first_detection:.3f}s - Accepting new positions (jump: {max_jump:.0f}px > {TELEPORT_THRESHOLD}px threshold)")
-                            self.last_target_left_x = target_left_x
-                            self.last_target_right_x = target_right_x
-                            self.last_left_x = left_bar_x
-                            self.last_right_x = right_bar_x
-                            # Reset teleport tracking
-                            potential_teleport_target_left = None
-                            potential_teleport_target_right = None
-                            potential_teleport_left_bar = None
-                            potential_teleport_right_bar = None
-                            teleport_first_detected_time = None
-                        else:
-                            # Still confirming - use old positions for tracking
-                            print(f"⏳ Potential teleport (jump: {max_jump:.0f}px > {TELEPORT_THRESHOLD}px, confirming: {time_since_first_detection:.3f}s/{TELEPORT_CONFIRM_TIME}s) - Using last positions")
-                            target_left_x = self.last_target_left_x
-                            target_right_x = self.last_target_right_x
-                            left_bar_x = self.last_left_x
-                            right_bar_x = self.last_right_x
-                    else:
-                        # New potential teleport position - start tracking
-                        potential_teleport_target_left = target_left_x
-                        potential_teleport_target_right = target_right_x
-                        potential_teleport_left_bar = left_bar_x
-                        potential_teleport_right_bar = right_bar_x
-                        teleport_first_detected_time = current_time
-                        # Use old positions while confirming
-                        print(f"🔍 New teleport candidate detected (jump: {max_jump:.0f}px > {TELEPORT_THRESHOLD}px threshold) - Starting confirmation")
-                        target_left_x = self.last_target_left_x
-                        target_right_x = self.last_target_right_x
-                        left_bar_x = self.last_left_x
-                        right_bar_x = self.last_right_x
-                else:
-                    # Normal movement - accept immediately and reset teleport tracking
-                    self.last_target_left_x = target_left_x
-                    self.last_target_right_x = target_right_x
-                    self.last_left_x = left_bar_x
-                    self.last_right_x = right_bar_x
-                    potential_teleport_target_left = None
-                    potential_teleport_target_right = None
-                    potential_teleport_left_bar = None
-                    potential_teleport_right_bar = None
-                    teleport_first_detected_time = None
+                    # No bars on either side - use last known positions
+                    left_bar_x = self.last_left_x if self.last_left_x is not None else target_left_x - self.initial_target_gap
+                    right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x + self.initial_target_gap
+                
+                # Ensure bars are on correct sides of targets
+                if left_bar_x >= target_left_x:
+                    # Left bar is on or right of left target - find a suitable left bar
+                    left_candidates = [x for x in other_lines if x < target_left_x]
+                    left_bar_x = max(left_candidates) if left_candidates else target_left_x - self.initial_target_gap
+                    left_bar_x = max(left_bar_x, 0)  # Don't go negative
+                
+                if right_bar_x <= target_right_x:
+                    # Right bar is on or left of right target - find a suitable right bar
+                    right_candidates = [x for x in other_lines if x > target_right_x]
+                    right_bar_x = min(right_candidates) if right_candidates else target_right_x + self.initial_target_gap
+                    right_bar_x = min(right_bar_x, self.frame_width if hasattr(self, 'frame_width') else 1920)
+                
+        else:
+            # Less than 2 lines detected - use last known positions or estimate
+            self.fish_lost_timer += 0.033  # Approximate frame time (30 FPS)
+            
+            if hasattr(self, 'last_target_left_x') and self.last_target_left_x is not None:
+                # Use last known positions
+                target_left_x = self.last_target_left_x
+                target_right_x = self.last_target_right_x
+                left_bar_x = self.last_left_x
+                right_bar_x = self.last_right_x
+                
+                # If lost for more than 1 second, try to recover with wider search
+                if self.fish_lost_timer > 1.0:
+                    # print(f"⚠️ Lost targets for {self.fish_lost_timer:.1f}s - attempting recovery")
+                    # Use last positions as fallback
+                    pass
             else:
-                # First run - just accept positions
-                self.last_target_left_x = target_left_x
-                self.last_target_right_x = target_right_x
-                self.last_left_x = left_bar_x
-                self.last_right_x = right_bar_x
+                # No history - use center estimation
+                target_left_x = int(fish_area_center - 20)
+                target_right_x = int(fish_area_center + 20)
+                left_bar_x = target_left_x - 40
+                right_bar_x = target_right_x + 40
+                # print("⚠️ No lines detected and no history - using estimated positions")
+        
+        # Store current positions for next frame (always update with best available data)
+        if target_left_x is not None:
+            self.last_target_left_x = target_left_x
+            self.last_target_right_x = target_right_x
+            self.last_left_x = left_bar_x
+            self.last_right_x = right_bar_x
+        
         return target_left_x, target_right_x, left_bar_x, right_bar_x
+
     def _detect_lines_in_frame(self, frame, original_width=None):
         """
         Detect vertical lines in frame using Laplacian edge detection.
         Based on b.py line detection pipeline with brightness and density filtering.
         NLM denoising removed for 10x speedup (30 FPS -> 300 FPS).
         Frame is normalized to reference fish box dimensions (1035x43 at 2560x1440)
-        for consistent detection across all resolutions. Line coordinates are scaled
+        for consistent detection across all resolutions. line coordinates are scaled
         back to match the original frame dimensions.
         Returns list of x-coordinates of detected vertical lines.
         Args:
@@ -2828,36 +2815,43 @@ class Api:
         """
         try:
             # Get minimum line density from settings (configurable via GUI)
-            MIN_LINE_DENSITY = self._get_rod_specific_setting("fish_line_min_density", 0.8)
+            MIN_LINE_DENSITY = float(self.vars.get("fish_line_min_density", 0.1))
             BRIGHTNESS_THRESHOLD = 10  # Minimum brightness for edge pixels
+            
             # Reference fish box dimensions at 1280x720 (lower detail for better edge detection)
             # At 1280x720: fish box is 762*(1280/2560) to 1797*(1280/2560) = 381 to 898 (width=517)
             # Height: 1215*(720/1440) to 1258*(720/1440) = 607 to 629 (height=22)
             REFERENCE_FISH_WIDTH = 517   # Fish box width at 720p
             REFERENCE_FISH_HEIGHT = 22   # Fish box height at 720p
+            
             # Store original dimensions for coordinate scaling
             original_height, original_frame_width = frame.shape[:2]
             if original_width is None:
                 original_width = original_frame_width
+            
             # Normalize frame to reference dimensions for consistent detection
             if original_frame_width != REFERENCE_FISH_WIDTH or original_height != REFERENCE_FISH_HEIGHT:
                 frame = cv2.resize(frame, (REFERENCE_FISH_WIDTH, REFERENCE_FISH_HEIGHT), interpolation=cv2.INTER_LINEAR)
                 width_scale = original_width / REFERENCE_FISH_WIDTH
             else:
                 width_scale = 1.0
+            
             # Step 1: Convert to grayscale
             grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
             # Step 2: Laplacian edge detection (NLM removed for 10x speedup)
             laplacian = cv2.Laplacian(grayscale, cv2.CV_8U)
+            
             # Step 3: Filter vertical lines by brightness threshold and density
-            # Keep only columns where at least MIN_LINE_DENSITY of pixels are above BRIGHTNESS_THRESHOLD
             height, width = laplacian.shape
+            
             # Vectorized column density calculation (10x faster than Python loop)
             column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
             line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
+            
             # Merge adjacent lines (consecutive x-coordinates) into single lines
             # Takes the middle position of each group of adjacent pixels
-            # Lines must be within 2 pixels to be considered part of the same group
+            # lines must be within 2 pixels to be considered part of the same group
             if line_coordinates:
                 merged_lines = []
                 group_start = line_coordinates[0]
@@ -2877,67 +2871,66 @@ class Api:
                 middle = (group_start + group_end) // 2
                 merged_lines.append(middle)
                 line_coordinates = merged_lines
+            
             # Scale line coordinates back to original frame dimensions
             if width_scale != 1.0:
                 line_coordinates = [int(x * width_scale) for x in line_coordinates]
-            # REMOVED: Old limit of 5 lines - now handles any number of lines
-            # The fish stage will intelligently pick the best 4 lines from any number detected
+            
+            # Sort coordinates for consistent processing
+            line_coordinates.sort()
+            
             return line_coordinates
         except Exception as e:
-            print(f"    Error in line detection: {e}")
+            # print(f"    Error in line detection: {e}")
             return []
     # PID control
     def _reset_pid_state(self):
-        """Reset all PID controller state variables before a new minigame."""
-        self._pid_last_error = None
+        """Reset controller state before a new minigame."""
+
+        # PID
+        self._pid_last_error = 0.0
         self._pid_last_target_x = None
         self._pid_last_scan_time = None
+
+        # Detection state
         self.last_fish_x = None
-        self.last_bar_left = None
-        self.last_bar_right = None
-        self.last_cached_box_length = None  # Cached Bar Size From Minigame For Arrow Estimation
-        self.last_input_time = 0.0
-        self.cooldown_duration = 1.0  # 1 second cooldown
-        # P/D State Variables
-        self._pid_last_error = 0.0      # Previous Error Term
-        self._pid_last_scan_time = None      # Timestamp Of Last Pd Sample
-        self.last_bar_size = None
-        self._normal_prev_bar_center = None  # Last bar center for _normal_control D-term
-        # Arrow-Based Box Estimation Variables
-        self.last_indicator_x = None
-        self.last_holding_state = None
-        self.pending_holding_state = None
-        self.pending_indicator_x = None
-        self.estimated_box_length = None
+
+        # Bar tracking
         self._last_bar_left_x = None
         self._last_bar_right_x = None
         self._last_bar_box_size = None
         self._last_bar_center = None
+
+        # Input timing
+        self.last_input_time = 0.0
+        self.cooldown_duration = 1.0
+
+        # Arrow estimation
+        self.last_indicator_x = None
+        self.last_holding_state = None
+        self.pending_holding_state = None
+        self.pending_indicator_x = None
         self.last_arrow_delta = None
-        self._ema_arrow_x = None        # EMA-smoothed arrow x; reset per minigame
-        # Estimation internal position state
-        self.last_known_box_center_x = None
-        self.last_left_x = None
-        self.last_right_x = None
-        # Predictive Controller
+
+        # Prediction
         self._pred_prev_fish_x = None
         self._pred_prev_bar_x = None
         self._pred_prev_time = None
         self.color_check_target_velocity = 0.0
-        self.color_check_bar_velocity  = 0.0
+        self.color_check_bar_velocity = 0.0
         self._pred_last_click_time = 0.0
-        # Dual Fishing
-        self._pid_last_error2      = 0.0
-        self._pid_last_target_x2   = 0.0
-        self._pid_last_scan_time2  = 0.0
-        # Spammy Controller
-        self.current_frame = 0
-        self.state = "release"
-        self.current_frame2 = 0
-        self.state2 = "release"
-        # Line Detection
+
+        # Dual fishing
+        self._pid_last_error2 = 0.0
+        self._pid_last_target_x2 = 0.0
+        self._pid_last_scan_time2 = 0.0
+
+        # line detection
         self.last_target_left_x = None
         self.last_target_right_x = None
+        self.is_initial_run = True
+        self.initial_target_gap = None
+        self.fish_lost_timer = 0
     def _normal_control(self, error):
         """
         Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
@@ -2973,6 +2966,9 @@ class Api:
         kp       = self._get_var_number("kp", 0.6)
         kd       = self._get_var_number("kd", 0.5)
         pd_clamp = self._get_var_number("pid_clamp", 100.0)
+        _, _, _, _, fish_width, _ = self._get_areas("fish")
+        scale = get_scale_factor()
+        fish_width = int(fish_width / scale)
         # Reconstruct fish_x (target position) from error and bar_center
         bar_center_x   = bar_center
         target_line_last_x = bar_center_x + error  # fish_x = bar_center + error
@@ -2983,7 +2979,7 @@ class Api:
         d_term = 0.0
         if (
             self._pid_last_scan_time is not None
-            and self._pid_last_target_x is not None
+            and self.last_fish_x is not None
             and self._pid_last_error is not None
         ):
             time_delta = current_time - self._pid_last_scan_time
@@ -2991,8 +2987,9 @@ class Api:
             if time_delta <= 0:
                 return 0.0
             # Bar velocity: how fast the bar centre moved since last frame
-            last_bar_x   = self._pid_last_target_x - self._pid_last_error
+            last_bar_x   = self.last_fish_x - self._pid_last_error
             bar_velocity = (bar_center_x - last_bar_x) / time_delta
+            bar_velocity = min(fish_width, max(-fish_width, bar_velocity))
             error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
             bar_moving_toward_target = (
                 (bar_velocity > 0 and error > 0)
@@ -3011,7 +3008,7 @@ class Api:
             d_term = max(-d_term_clamp, min(d_term_clamp, d_term))
         # Update state for next frame
         self._pid_last_error      = error
-        self._pid_last_target_x   = target_line_last_x
+        self.last_fish_x   = target_line_last_x
         self._pid_last_scan_time  = current_time
         # Combined and clamped control signal
         control_signal = p_term + d_term
@@ -3042,13 +3039,13 @@ class Api:
         time_delta = 0
         if (
             self._pid_last_scan_time2 is not None
-            and self._pid_last_target_x2 is not None
+            and self.last_fish_x2 is not None
             and self._pid_last_error2 is not None
         ):
             time_delta = current_time - self._pid_last_scan_time2
             if time_delta > 0.001:
                 # Bar velocity: how fast the bar centre moved since last frame
-                last_bar_x   = self._pid_last_target_x2 - self._pid_last_error2
+                last_bar_x   = self.last_fish_x2 - self._pid_last_error2
                 bar_velocity = (bar_center - last_bar_x) / time_delta
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error2)
                 bar_moving_toward_target = (
@@ -3067,200 +3064,82 @@ class Api:
                 d_term = kd * (error - self._pid_last_error2) / time_delta
         # Update state for next frame
         self._pid_last_error2      = error
-        self._pid_last_target_x2   = target_line_last_x
+        self.last_fish_x2   = target_line_last_x
         self._pid_last_scan_time2  = current_time
         # Combined and clamped control signal
         control_signal = p_term + d_term
         control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
         return control_signal
-    def _spammy_control2(self, fish_x, bar_center, bar_size):
-        # Initialization
-        spam_ratio = self._get_var_number("spam_ratio", 0.8)
-        velocity_multiplier = self._get_var_number("velocity_multiplier", 3)
-        hold_frames = int(self.vars["hold_frames"])
-        release_frames = int(self.vars["release_frames"])
-        error = fish_x - bar_center
-        if hold_frames > release_frames:
-            larger_frame = hold_frames
-            smaller_frame = release_frames
-        else:
-            larger_frame = release_frames
-            smaller_frame = hold_frames
-        if error > 0:
-            hold_frames = larger_frame
-            release_frames = smaller_frame
-        elif error < 0:
-            hold_frames = smaller_frame
-            release_frames = larger_frame
-        if self.state2 == "hold":
-            self.current_frame2 += 1
-            if self.current_frame2 >= hold_frames:
-                self.state2 = "release"
-                self.current_frame2 = 0
-        elif self.state2 == "release":
-            self.current_frame2 += 1
-            if self.current_frame2 >= release_frames:
-                self.state2 = "hold"
-                self.current_frame2 = 0
-        # Calculations
-        spam_distance = int(bar_size * spam_ratio)
-        try:
-            raw_velocity = bar_center - self._pid_last_bar_x
-            if raw_velocity != 0:
-                self._last_velocity = raw_velocity
-        except AttributeError:
-            self._last_velocity = 0
-        velocity = getattr(self, "_last_velocity", 0)
-        spam_distance = spam_distance + (abs(velocity) * velocity_multiplier)
-        # Update cache
-        self._pid_last_error      = error
-        self._pid_last_bar_x = bar_center
-        # print(error, velocity, spam_distance)
-        if abs(error) < abs(spam_distance):
-            # print("Spam")
-            if self.state == "hold":
-                return True
-            else:
-                return False
-        elif error < 0:
-            # print("Release")
-            return False
-        else:
-            # print("Hold")
-            return True
-    def _spammy_control(self, fish_x, bar_center, bar_size):
-        # Initialization
-        spam_ratio = self._get_var_number("spam_ratio", 0.3)
-        velocity_multiplier = self._get_var_number("velocity_multiplier", 3)
-        hold_frames = int(self.vars["hold_frames"])
-        release_frames = int(self.vars["release_frames"])
-        error = fish_x - bar_center
-        if hold_frames > release_frames:
-            larger_frame = hold_frames
-            smaller_frame = release_frames
-        else:
-            larger_frame = release_frames
-            smaller_frame = hold_frames
-        if error > 0:
-            hold_frames = larger_frame
-            release_frames = smaller_frame
-        elif error < 0:
-            hold_frames = smaller_frame
-            release_frames = larger_frame
-        if self.state == "hold":
-            self.current_frame += 1
-            if self.current_frame >= hold_frames:
-                self.state = "release"
-                self.current_frame = 0
-        elif self.state == "release":
-            self.current_frame += 1
-            if self.current_frame >= release_frames:
-                self.state = "hold"
-                self.current_frame = 0
-        # Calculations
-        spam_distance = int(bar_size * spam_ratio)
-        try:
-            raw_velocity = bar_center - self._pid_last_bar_x
-            if raw_velocity != 0:
-                self._last_velocity = raw_velocity
-        except AttributeError:
-            self._last_velocity = 0
-        velocity = getattr(self, "_last_velocity", 0)
-        spam_distance = spam_distance + (abs(velocity) * velocity_multiplier)
-        # Update cache
-        self._pid_last_error      = error
-        self._pid_last_bar_x = bar_center
-        # print(error, velocity, spam_distance)
-        if abs(error) < abs(spam_distance):
-            # print("Spam")
-            if self.state == "hold":
-                return True
-            else:
-                return False
-        elif error < 0:
-            # print("Release")
-            return False
-        else:
-            # print("Hold")
-            return True
-    def _predictive_control(self, fish_x, bar_center, fish_left, fish_right, bar_left, bar_right):
+    def _predictive_control(self, middle_x, bar_middle):
         """
-        Predictive controller ported from IRUS idiotproof.
-        Uses linear stopping distance, on-bar counter-thrust, off-bar PD chase,
-        and edge-unreachability logic.
-        Check legacy/May 3rd.py for PD chase controller
+        Predictive controller.
+        Uses linear stopping distance and counter-thrust.
+
         Args:
         fish_x: Fish X
         bar_center: Bar Center
-        fish_left: Left of fish capture area
-        fish_right: Right of fish capture area
-        bar_left: Bar Left
-        bar_right: Bar Right
         """
+
         # Init Failsafe 
-        if not hasattr(self, "_pred_prev_fish_x"):
-            self._reset_control_state()
+        if self.last_bar_center is None:
+            self.last_bar_center = None
+
+        if self.last_fish_x is None:
+            self.last_fish_x = None
+
+        if self._pid_last_scan_time is None:
+            self._pid_last_scan_time = time.perf_counter()
+
+        if self.color_check_bar_velocity is None:
+            self.color_check_bar_velocity = 0.0
+
+        if self.color_check_target_velocity is None:
+            self.color_check_target_velocity = 0.0
+
         # Failsafe: Missing Data
-        if fish_x is None or bar_center is None or bar_left is None or bar_right is None:
+        if middle_x is None or bar_middle is None:
             should_hold = False
             return should_hold
-        # Read Settings
-        stopping_distance_multiplier = self._get_var_number("stopping_distance", 3)
+        
+        # Get variables
+        stopping_distance_multiplier = self._get_var_number("stopping_distance_multiplier", 3)
         velocity_smoothing = self._get_var_number("velocity_smoothing", 1)
-        MIN_DT = 1e-3
-        MAX_DT = 0.1
-        MAX_VEL = 3000.0
-        # Time 
-        now = time.perf_counter()
-        if self._pred_prev_time is None:
-            dt = 0.016
-        else:
-            dt = now - self._pred_prev_time
-            dt = max(min(dt, MAX_DT), MIN_DT)
-        self._pred_prev_time = now
-        # Velocities 
-        if self._pred_prev_fish_x is not None:
-            raw_fish_vel = (fish_x - self._pred_prev_fish_x) / dt
-        else:
-            raw_fish_vel = 0.0
-        if self._pred_prev_bar_x is not None:
-            raw_bar_vel = (bar_center - self._pred_prev_bar_x) / dt
-        else:
-            raw_bar_vel = 0.0
-        raw_fish_vel = max(min(raw_fish_vel, MAX_VEL), -MAX_VEL)
-        raw_bar_vel  = max(min(raw_bar_vel,  MAX_VEL), -MAX_VEL)
-        # Smooth Velocities Independently Then Compute Relative
-        self.color_check_target_velocity = (velocity_smoothing * raw_fish_vel +
-                                        (1 - velocity_smoothing) * self.color_check_target_velocity)
-        self.color_check_bar_velocity  = (velocity_smoothing * raw_bar_vel +
-                                        (1 - velocity_smoothing) * self.color_check_bar_velocity)
-        relative_velocity = self.color_check_bar_velocity - self.color_check_target_velocity  # Bar Relative To Fish (Matches Ref Macro Sign)
-        self._pred_prev_fish_x = fish_x
-        self._pred_prev_bar_x  = bar_center
-        # Nan Guard 
+        
+        # Calculate velocities
+        current_time = time.perf_counter()
+        if self.last_bar_center is not None and self.last_fish_x is not None:
+            delta_time = current_time - self._pid_last_scan_time
+            if delta_time > 0:
+                raw_bar_velocity = (bar_middle - self.last_bar_center) / delta_time
+                raw_target_velocity = (middle_x - self.last_fish_x) / delta_time
+                
+                self.color_check_bar_velocity = (velocity_smoothing * raw_bar_velocity + 
+                                            (1 - velocity_smoothing) * self.color_check_bar_velocity)
+                self.color_check_target_velocity = (velocity_smoothing * raw_target_velocity + 
+                                                (1 - velocity_smoothing) * self.color_check_target_velocity)
+        
+        # Update previous values
+        self.last_bar_center = bar_middle
+        self.last_fish_x = middle_x
+        self._pid_last_scan_time = current_time
+
+        # Calculate error and relative velocity FIRST
+        error = bar_middle - middle_x
+        try:
+            relative_velocity = float(self.color_check_bar_velocity - self.color_check_target_velocity)
+        except:
+            self.color_check_bar_velocity = 0
+            self.color_check_target_velocity = 0
+            return False
+        
+        # Nan Guard AFTER variables are defined
         if not np.isfinite(relative_velocity):
             should_hold = False
             return should_hold
-        # Reachability (Edge Logic) 
-        bar_width = bar_right - bar_left
-        min_reachable = fish_left  + bar_width // 2
-        max_reachable = fish_right - bar_width // 2
-        # print("min_reachable: ", min_reachable)
-        # print("max_reachable: ", max_reachable)
-        # print("fish_x: ", fish_x)
-        if fish_x < min_reachable:
-            # Target Too Far Left — Bar Can't Follow, Release
-            should_hold = False
-            return should_hold
-        elif fish_x > max_reachable:
-            # Target Too Far Right — Hold To Push Bar Right
-            should_hold = True
-            return should_hold
+        
         # Calculate stopping distance based on relative velocity
         stopping_distance = abs(relative_velocity) * stopping_distance_multiplier
-        # Error: Positive = Bar Is Right Of Fish (Same Sign Convention As Ref Macro)
-        error = bar_center - fish_x
-        # print("stopping_distance: ", stopping_distance)
+        
         # On-Bar: Use Stopping-Distance / Counter-Thrust Logic
         if error < -stopping_distance:
             # Bar Is Left Of Fish Beyond Stopping Distance → Hold To Move Right
@@ -3370,71 +3249,8 @@ class Api:
             self.set_status(f"Error writing debug log: {e}")
     def test_logging(self):
         self.send_logging("**Logging is working**", "TEST", show_status=True)
-    def _auto_bug_report(self, error_text, phase="Unknown"):
-        """Send a text-only crash report to the bug report webhook or save to file."""
-        # Safely get values and reset state
-        self._set_fish_overlay_mode("idle")
-        logging_mode = self.vars["logging_mode"]
-        if logging_mode == "Disabled":
-            return
-        platform_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        # Prepare the report text
-        report_text = (
-            "Auto Bug Report\n"
-            f"Version: {APP_VERSION}\n"
-            f"Platform: {platform_name}\n"
-            f"Phase: {phase}\n"
-            f"Time: {timestamp}\n\n"
-            f"{error_text}"
-        )
-        if logging_mode == "File":
-            try:
-                log_dir = BASE_PATH
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, f"debug_{time.strftime('%Y-%m-%d')}.txt")
-                log_entry = (
-                    "==========\n"
-                    "🐞 AUTO BUG REPORT\n"
-                    f"📂 Phase: {phase}\n"
-                    f"🕐 {timestamp}\n"
-                    "--------\n"
-                    f"{report_text}\n"
-                    "==========\n\n"
-                )
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(log_entry)
-                self.set_status(f"Bug report saved to file ({phase})")
-                return
-            except Exception as e:
-                self.set_status(f"Error saving bug report to file: {e}")
-                return
-        webhook_url = self.vars["logging_url"]
-        logging_name = self.vars["logging_name"]
-        crash_line = "Unknown"
-        for line in reversed(error_text.splitlines()):
-            if line.strip().startswith('File "') and ", line " in line:
-                crash_line = line.strip()
-                break
-        payload = {
-            "content": (
-                "**Auto Bug Report**\n"
-                f"Version: `{APP_VERSION}` | Platform: `{platform_name}` | Phase: `{phase}`\n"
-                f"Crash line: `{crash_line}`\n"
-                "Full traceback with line numbers is attached as text."
-            ),
-            "username": logging_name
-        }
-        try:
-            report_bytes = io.BytesIO(report_text.encode("utf-8"))
-            files = {"file": ("bug_report.txt", report_bytes, "text/plain")}
-            response = requests.post(webhook_url, data=payload, files=files, timeout=10)
-            if response.status_code not in (200, 204):
-                self.set_status(f"Error: Bug report failed: {response.status_code}")
-        except Exception as e:
-            self.set_status(f"Error sending bug report: {e}")
     def send_logging(self, text, loop_count, catch_rate=-1, show_status=True):
-        logging_mode = self.vars["logging_mode"]
+        logging_mode = self.vars["logging_mode"].lower()
         if logging_mode == "Disabled":
             self.set_status("⚠ Logging is disabled.")
             return
@@ -3446,13 +3262,13 @@ class Api:
                 return
         if show_status == True:
             self.set_status("Sending test webhook...")
-        if logging_mode == "Screenshot":
+        if logging_mode == "screenshot":
             thread = threading.Thread(
                 target=self._discord_screenshot_worker,
                 args=(webhook_url, f"{text}\n", loop_count, show_status, catch_rate),
                 daemon=True
             )
-        elif logging_mode == "File":
+        elif logging_mode == "file":
             thread = threading.Thread(
                 target=self._debug_log_worker,
                 args=(text, loop_count, show_status, catch_rate),
@@ -3552,8 +3368,8 @@ class Api:
         dialogue_left, dialogue_top, _, _, dialogue_width, dialogue_height = self._get_areas("shake")
         backpack_left, backpack_top, _, _, backpack_width, backpack_height = self._get_areas("fish")
         quest_left, quest_top, quest_right, quest_bottom, _, _ = self._get_areas("friend")
-        backpack_key = str(self.vars["backpack_key"])
-        angler_cd = int(self.vars["angler_cd"])
+        backpack_slot = str(self.vars["backpack_slot"])
+        utility_restart_delay = int(self.vars["utility_restart_delay"])
         # Angler Key
         angler_x_ratio = float(self.vars["angler_click_x"])
         angler_y_ratio = float(self.vars["angler_click_y"])
@@ -3591,10 +3407,10 @@ class Api:
             self.set_status(f"Quest fish: {required_fish}")
             if not required_fish:
                 self.set_status("Could not read fish name")
-                time.sleep(angler_cd)
+                time.sleep(utility_restart_delay)
                 continue
             # STEP 3: OPEN BACKPACK
-            self._send_key(backpack_key)
+            self._send_key(backpack_slot)
             time.sleep(0.5)
             # STEP 4: CLICK SEARCH BAR + TYPE FISH NAME
             self._click_at(backpack_x, backpack_y)
@@ -3644,7 +3460,7 @@ class Api:
                 )
             time.sleep(0.25)
             # STEP 6: CLOSE BACKPACK
-            self._send_key(backpack_key)
+            self._send_key(backpack_slot)
             time.sleep(0.5)
             # STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)
             self._send_key("e")
@@ -3652,7 +3468,7 @@ class Api:
             # Click at angler area
             self._click_at(angler_click_x, angler_click_y)
             # STEP 8: COOLDOWN
-            time.sleep(angler_cd)
+            time.sleep(utility_restart_delay)
     # Start enchanting
     def start_enchantment(self):
         self._stop_active_capture()
@@ -3764,7 +3580,6 @@ class Api:
         auto_refresh = self.vars.get("auto_refresh", "off")
         casting_mode = self.vars.get("casting_mode", "Normal")
         shake_mode = self.vars.get("shake_mode", "Navigation")
-        automation_mode = self.vars["automation_mode"]
         fishing_profile = self.vars["fishing_profile"].lower()
         try:
             if self.macro_running == True:
@@ -3828,9 +3643,32 @@ class Api:
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
-            messagebox.showerror("Fishing error", full_error)
+            
+            try:
+                # Clean the error string so it doesn't break JavaScript execution syntax
+                # We escape backslashes, single quotes, and newlines
+                escaped_error = full_error.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+                
+                # Construct the self-invoking JS code block
+                js_code = f"""
+                (function() {{
+                    let confirmed = confirm("A fishing error occurred. Please copy the error and report the bug:\\n{e}\\nWould you like to copy the full crash log to your clipboard?");
+                    if (confirmed) {{
+                        navigator.clipboard.writeText('{escaped_error}')
+                            .then(() => alert("Error log copied to clipboard!"))
+                            .catch(err => alert("Failed to copy error: " + err));
+                    }}
+                }})();
+                """
+                # Evaluate using the same 'window' reference your set_status uses
+                window.evaluate_js(js_code)
+            except Exception:
+                pass # Keep it safe just like set_status
+            if IS_COMPILED == False:
+                print(full_error)
+                
             self.macro_running = False
-            self.stop_macro(f"Appraisal error: {e}")
+            self.stop_macro(f"Fishing error: {e}")
     # Utilities
     def _check_logging_trigger(self, catch_rate=-1):
         """
@@ -3840,8 +3678,8 @@ class Api:
           Time    – fire every N seconds elapsed  (configurable via logging_time)
           Disabled – never fire
         """
-        cd_mode = self.vars["logging_trigger"]
-        if cd_mode == "Disabled":
+        cd_mode = self.vars["logging_trigger"].lower()
+        if cd_mode == "disabled":
             return  # webhook type is disabled; do nothing
         try:
             trigger_every = int(self.vars["logging_cycle"])
@@ -3851,12 +3689,12 @@ class Api:
             trigger_secs = float(self.vars["logging_time"])
         except (ValueError, KeyError):
             trigger_secs = 60.0  # safe fallback
-        if cd_mode == "Cycles":
+        if cd_mode == "cycles":
             self.webhook_cycle_counter += 1
             if trigger_every > 0 and self.webhook_cycle_counter % trigger_every == 0:
                 label = f"Cycle #{self.webhook_cycle_counter}"
                 self.send_logging("**Cycle Checkpoint**", label, catch_rate, show_status=False)
-        elif cd_mode == "Time":
+        elif cd_mode == "time":
             self.webhook_cycle_counter += 1  # still count cycles for the message label
             elapsed = time.time() - self.webhook_start_time
             if trigger_secs > 0 and elapsed >= trigger_secs:
@@ -4488,6 +4326,7 @@ class Api:
         # Areas
         fish_left, fish_top, fish_right, fish_bottom, fish_width, _ = self._get_areas("fish")
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
+        fish_area_center = int((fish_right - fish_left) / 2) + fish_left
         # Colors
         fish_hex = self.vars["fish_color"]
         left_bar_hex = self.vars["left_color"]
@@ -4497,9 +4336,11 @@ class Api:
         # Misc Settings
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
         lock_cursor = self.vars["lock_cursor"]
+        fishing_mode = self.vars["fishing_mode"].lower()
         restart_delay = float(self.vars["restart_delay"])
         # Misc Initialization
         mouse_down = False
+        last_detection_source = 0
         # Tolerance
         try: # Handle Nonetype and int properly
             left_tol = int(self.vars["left_tolerance"])
@@ -4545,11 +4386,16 @@ class Api:
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
             fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
             # Step 3: Pixel Search
-            fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
+            if fishing_mode == "line":
+                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_area_center)
+            else:
+                fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
             try:
                 fish_x = int((fish_pos_left + fish_pos_right) / 2)
+                fish_pos_size = int(fish_pos_right - fish_pos_left)
             except:
                 fish_x = None
+                fish_pos_size = 0
             detection_source = 0
             arrow_indicator_x, _, _ = self._find_color_cluster(fish_img, arrow_hex, arrow_tol)
             try:
@@ -4559,10 +4405,11 @@ class Api:
             if left_x == None or right_x == None:
                 bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, mouse_down, fish_width)
                 detection_source = 1
-            bar_size = right_x - left_x
             try:
+                bar_size = right_x - left_x
                 bar_center = left_x + int(bar_size / 2)
             except:
+                bar_size = None
                 bar_center = None
             canvas_offset = 0
             # Step 4: Restart (friend area)
@@ -4580,7 +4427,7 @@ class Api:
             )
             if fish_x is not None:
                 self.fish_overlay.draw(
-                    bar_center=fish_x, box_size=10,
+                    bar_center=fish_x, box_size=fish_pos_size,
                     color="red", canvas_offset=canvas_offset
                 )
             # Step 6: Hold/Release Logic
@@ -4591,6 +4438,7 @@ class Api:
                     release_mouse()
             # Step 7: Cleanup
             last_detection_source = detection_source
+            self.is_initial_run = False
             time.sleep(scan_delay)
     def _enter_minigame(self):
         # Areas
@@ -4625,7 +4473,7 @@ class Api:
         fishing_profile = self.vars["fishing_profile"].lower()
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
         lock_cursor = (self.vars["lock_cursor"])
-        fishing_mode = (self.vars["fishing_mode"])
+        fishing_mode = self.vars["fishing_mode"].lower()
         minigame_controller_mode = self.vars["controller_mode"].lower()
         lullaby_metronome_ratio = float(self.vars["lullaby_metronome_ratio"])
         lullaby_fishing_ratio = float(self.vars["lullaby_fishing_ratio"])
@@ -4704,7 +4552,7 @@ class Api:
             # Step 3: Detection with caching
             self.fish_overlay.clear()
             # Left Side / Main Image
-            if fishing_mode == "Line":
+            if fishing_mode == "line":
                 fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_area_center)
             else:
                 fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
@@ -4728,10 +4576,10 @@ class Api:
             # Right Side (Only Triggers If fishing_profile Is dual)
             # Dual Fishing: LEFT (primary) is strong, RIGHT (secondary) is basic controls (no overlay)
             if fishing_profile == "dual":
-                if fishing_mode == "Line":
+                if fishing_mode == "line":
                     fish_pos_left2, fish_pos_right2, left_x2, right_x2 = self._do_line_search(fish_img2, fish_area_center)
                 else:
-                    fish_pos_left2, fish_pos_right2, left_x2, right_x2 = self._do_pixel_search(fish_img2)
+                    fish_pos_left2, fish_pos_right2, left_x2, right_x2 = self._do_pixel_search(fish_img2, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
                 try:
                     fish_x2 = int((fish_pos_left2[0] + fish_pos_right2[0]) / 2)
                 except:
@@ -4786,7 +4634,7 @@ class Api:
                 detection_source = 0
                 # Arrow estimation (Warm state)
                 self._last_bar_box_size      = bar_size
-                self.last_known_box_center_x = bar_center
+                self._last_bar_center = bar_center
                 self.last_left_x             = left_x
                 self.last_right_x            = right_x
             else:
@@ -4887,7 +4735,6 @@ class Api:
                     max_right = fish_right
             # Step 6: Update deadzone action counter
             deadzone_action = (deadzone_action + 1) % 4
-            tracking_threshold = (round(((bar_size / fish_width)), 2) - 0.5) * 100
             # Step 7: Calculate threshold
             thresh = 0
             thresh2 = 0
@@ -4970,18 +4817,12 @@ class Api:
                 else:
                     if minigame_controller_mode == "steady":
                         controller_mode = 0
-                    if minigame_controller_mode == "spammy":
-                        controller_mode = 6
                     elif minigame_controller_mode == "normal":
                         controller_mode = 1
                     elif minigame_controller_mode == "predictive":
                         controller_mode = 5
-                    if (fishing_profile == "notes" or minigame_controller_mode == "predictive" or minigame_controller_mode == "steady") and left_x is not None:
-                        left_x_threshold = left_x - tracking_threshold
-                        right_x_threshold = right_x + tracking_threshold
-                        # print("LEFT Before: ", left_x, " After: ", left_x_threshold)
-                        # print("RIGHT Before: ", right_x, " After: ", right_x_threshold)
-                        if not (left_x_threshold <= fish_x <= right_x_threshold):
+                    if fishing_profile == "notes" and fish_x is not None:
+                        if not (left_x <= fish_x <= right_x):
                             controller_mode = 2
             controller_mode2 = 0
             try:
@@ -4994,8 +4835,6 @@ class Api:
                             controller_mode2 = 4
                         elif max_right2 is not None and fish_x2 >= max_right2:
                             controller_mode2 = 3
-                        elif minigame_controller_mode == "spammy":
-                            controller_mode2 = 6
                         else:
                             controller_mode2 = 0
             except:
@@ -5062,12 +4901,6 @@ class Api:
                 if controller_mode2 == 0 or controller_mode2 == 1 or controller_mode2 == 5:
                     control2 = self._steady_control2(error2, bar_center2)
                     controller_found2 = 0
-                elif controller_mode2 == 6:
-                    should_hold = self._spammy_control2(fish_x2, bar_center2, bar_size2)
-                    if should_hold:
-                        hold_mouse(True)
-                    else:
-                        release_mouse(True)
                     controller_found2 = 1
                 elif controller_mode2 == 2:
                     control2 = error2
@@ -5083,6 +4916,7 @@ class Api:
                 # Execute controller action
                 if controller_mode == 0:  # PID (Steady)
                     control = self._steady_control(error, bar_center)
+                    # print("error: ", int(error), "control: ", int(control), "mouse_down: ", mouse_down)
                     controller_found = 0
                 elif controller_mode == 1:  # PID (Normal)
                     control = self._normal_control(error)
@@ -5097,21 +4931,12 @@ class Api:
                     release_mouse()
                     controller_found = 1
                 elif controller_mode == 5:  # Predictive control
-                    should_hold = self._predictive_control(
-                        fish_x, bar_center, 0, (fish_right - fish_left), left_x, right_x
-                    )
+                    should_hold = self._predictive_control(fish_x, bar_center)
                     if should_hold:
                         hold_mouse()
                     else:
                         release_mouse()
                     controller_found = 1
-                elif controller_mode == 6:  # Spammy
-                    should_hold = self._spammy_control(fish_x, bar_center, bar_size)
-                    controller_found = 1
-                    if should_hold:
-                        hold_mouse()
-                    else:
-                        release_mouse()
             if controller_found == 0:
                 if -thresh <= control <= thresh:
                     release_mouse() if deadzone_action == 0 else hold_mouse()
@@ -5126,6 +4951,7 @@ class Api:
                     hold_mouse(True)
                 elif control2 < -thresh2:
                     release_mouse(True)
+            self.is_initial_run = False
             time.sleep(scan_delay)
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False

@@ -2409,8 +2409,8 @@ class Api:
         tesseract_path = self.vars["tesseract_path"]
         tolerance = int(self.vars["shake_tolerance"])
         shake_pixel = self.vars["shake_color"]
-        backpack_key = str(self.vars["backpack_key"])
-        angler_cd = int(self.vars["angler_cd"])
+        backpack_slot = str(self.vars["backpack_slot"])
+        utility_restart_delay = int(self.vars["utility_restart_delay"])
         angler_click_mode = self.vars["angler_click_mode"].capitalize()
                 #Angler Key        angler_x_ratio = self.vars["angler_click_x"]
         angler_y_ratio = self.vars["angler_click_y"]
@@ -2458,11 +2458,11 @@ class Api:
             self.set_status(f"Quest fish: {required_fish}")
             if not required_fish:
                 print("Could not read fish name")
-                time.sleep(angler_cd)
+                time.sleep(utility_restart_delay)
                 continue
-                        #STEP 3: OPEN BACKPACK            keyboard_controller.press(backpack_key)
+                        #STEP 3: OPEN BACKPACK            keyboard_controller.press(backpack_slot)
             time.sleep(0.05)
-            keyboard_controller.release(backpack_key)
+            keyboard_controller.release(backpack_slot)
             time.sleep(0.5)
                         #STEP 4: CLICK SEARCH BAR + TYPE FISH NAME            self._click_at(backpack_x, backpack_y)
             time.sleep(0.25)
@@ -2517,9 +2517,9 @@ class Api:
                     f"Quest text '{required_fish}' not found via OCR, skipping click"
                 )
             time.sleep(0.25)
-                        #STEP 6: CLOSE BACKPACK            keyboard_controller.press(backpack_key)
+                        #STEP 6: CLOSE BACKPACK            keyboard_controller.press(backpack_slot)
             time.sleep(0.05)
-            keyboard_controller.release(backpack_key)
+            keyboard_controller.release(backpack_slot)
             time.sleep(0.5)
                         #STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)            keyboard_controller.press("e")
             time.sleep(0.05)
@@ -2535,7 +2535,7 @@ class Api:
                 time.sleep(1.2)
             else:
                 self._click_at(angler_click_x, angler_click_y)
-                        #STEP 8: COOLDOWN            time.sleep(angler_cd)
+                        #STEP 8: COOLDOWN            time.sleep(utility_restart_delay)
         #Start Enchanting    def start_enchantment(self):
         self.macro_running = True
         tesseract_path = self.vars["tesseract_path"]

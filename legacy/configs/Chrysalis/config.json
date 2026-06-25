@@ -84,7 +84,7 @@
     "mutation_enchant": "Steady",
     "appraisal_enchant_x": "0.5",
     "appraisal_enchant_y": "0.5",
-    "backpack_key": "G",
+    "backpack_slot": "G",
     "backpack_x": "0.5",
     "backpack_y": "0.5"
 }

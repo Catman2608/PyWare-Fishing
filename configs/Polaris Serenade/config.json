@@ -98,8 +98,8 @@
     "angler_click_mode": "search",
     "angler_click_x": "0.5",
     "angler_click_y": "0.5",
-    "backpack_key": "G",
+    "backpack_slot": "G",
     "backpack_x": "0.5",
     "backpack_y": "0.5",
-    "angler_cd": "0.5"
+    "utility_restart_delay": "0.5"
 }

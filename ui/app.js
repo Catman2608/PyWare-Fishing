@@ -1,5 +1,5 @@
-const APP_VERSION = "4.3";
-const BETA_VERSION = "0";
+const APP_VERSION = "4.31";
+const BETA_VERSION = "1";
 
 let currentConfig = null;
 window.setStatus = (message) => {
@@ -25,29 +25,12 @@ window.setStatus = (message) => {
             }
         }
     }
-
-    // Update Topbar Start/Stop Button
-    const topbarBtn = document.getElementById("topbar-start-btn");
-    if (topbarBtn) {
-        const lowerMsg = message.toLowerCase();
-        const isRunning = (lowerMsg.includes("scan") || lowerMsg.includes("active") || lowerMsg.includes("running") || lowerMsg.includes("fishing") || lowerMsg.includes("appraisal") || lowerMsg.includes("enchant") || lowerMsg.includes("angler")) && 
-                          !lowerMsg.includes("stop") && !lowerMsg.includes("closed") && !lowerMsg.includes("ready");
-                          
-        if (isRunning) {
-            topbarBtn.className = "topbar-btn stop";
-            topbarBtn.innerHTML = `<span class="btn-icon">■</span> Stop Macro`;
-        } else {
-            topbarBtn.className = "topbar-btn start";
-            topbarBtn.innerHTML = `<span class="btn-icon">▶</span> Start Macro`;
-        }
-    }
 };
 window.addEventListener("pywebviewready", async () => {
     await refreshConfigs();
     await loadStartupConfig();
     bindSettingsSync();
     updateCastingMode();
-    updateControllerMode();
     updateAccentColor();
     bindColorPreviewInputs();
     updateColorPreviews();
@@ -106,30 +89,7 @@ function updateCastingMode() {
         perfectCard.style.display = "none";
     }
 }
-function updateControllerMode() {
-    const mode = document.getElementById("controller_mode").value;
 
-    const normalCard = document.getElementById("controller-normal-card");
-    const steadyCard = document.getElementById("controller-steady-card");
-    const spammyCard = document.getElementById("controller-spammy-card");
-    const predictiveCard = document.getElementById("controller-predictive-card");
-
-    // Hide all
-    normalCard.style.display = "none";
-    steadyCard.style.display = "none";
-    predictiveCard.style.display = "none";
-
-    // Show selected
-    if (mode === "normal") {
-        normalCard.style.display = "block";
-    } else if (mode === "steady") {
-        steadyCard.style.display = "block";
-    } else if (mode === "spammy") {
-        spammyCard.style.display = "block";
-    } else if (mode === "predictive") {
-        predictiveCard.style.display = "block";
-    }
-}
 // Save settings
 function getSettings() {
     const settings = {};
@@ -159,7 +119,6 @@ function applySettings(settings) {
         }
     });
     updateCastingMode();
-    updateControllerMode();
     updateAccentColor();
     updateColorPreviews();
 }

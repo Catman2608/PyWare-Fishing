@@ -1,5 +1,4 @@
 {
-    "config-select": "Onirifalx",
     "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -9,7 +8,7 @@
     "sundial_slot": "6",
     "target_slot": "7",
     "mirror_slot": "8",
-    "backpack_slot": "2",
+    "backpack_slot": "G",
     "tranquility_key_1": "D",
     "tranquility_key_2": "F",
     "tranquility_key_3": "J",
@@ -66,10 +65,6 @@
     "controller_mode": "steady",
     "kp": "0.6",
     "kd": "0.6",
-    "spam_ratio": "0.3",
-    "velocity_multiplier": "3",
-    "hold_frames": "5",
-    "release_frames": "4",
     "stopping_distance": "1.4",
     "velocity_smoothing": "0.07",
     "pinion_note_ratio": "0.3",
@@ -82,6 +77,7 @@
     "e_delay": "0",
     "click_delay": "1.5",
     "click_delay2": "0",
+    "utility_restart_delay": "0.5",
     "logging_mode": "Screenshot",
     "logging_trigger": "Cycles",
     "logging_url": "disabled",
@@ -101,11 +97,8 @@
     "mutation_enchant": "Steady",
     "appraisal_enchant_x": "0.5",
     "appraisal_enchant_y": "0.5",
-    "angler_click_mode": "search",
     "angler_click_x": "0.5",
     "angler_click_y": "0.5",
-    "backpack_key": "G",
     "backpack_x": "0.5",
-    "backpack_y": "0.5",
-    "angler_cd": "0.5"
+    "backpack_y": "0.5"
 }

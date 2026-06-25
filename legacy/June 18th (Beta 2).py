@@ -3380,8 +3380,8 @@ class Api:
         tesseract_path = self.vars["tesseract_path"]
         tolerance = int(self.vars["shake_tolerance"])
         shake_pixel = self.vars["shake_color"]
-        backpack_key = str(self.vars["backpack_key"])
-        angler_cd = int(self.vars["angler_cd"])
+        backpack_slot = str(self.vars["backpack_slot"])
+        utility_restart_delay = int(self.vars["utility_restart_delay"])
         angler_click_mode = self.vars["angler_click_mode"].capitalize()
         # Angler Key
         angler_x_ratio = float(self.vars["angler_click_x"])
@@ -3434,10 +3434,10 @@ class Api:
             self.set_status(f"Quest fish: {required_fish}")
             if not required_fish:
                 self.set_status("Could not read fish name")
-                time.sleep(angler_cd)
+                time.sleep(utility_restart_delay)
                 continue
             # STEP 3: OPEN BACKPACK
-            self._send_key(backpack_key)
+            self._send_key(backpack_slot)
             time.sleep(0.5)
             # STEP 4: CLICK SEARCH BAR + TYPE FISH NAME
             self._click_at(backpack_x, backpack_y)
@@ -3496,7 +3496,7 @@ class Api:
                 )
             time.sleep(0.25)
             # STEP 6: CLOSE BACKPACK
-            self._send_key(backpack_key)
+            self._send_key(backpack_slot)
             time.sleep(0.5)
             # STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)
             self._send_key("e")
@@ -3512,7 +3512,7 @@ class Api:
             else:
                 self._click_at(angler_click_x, angler_click_y)
             # STEP 8: COOLDOWN
-            time.sleep(angler_cd)
+            time.sleep(utility_restart_delay)
     # Start enchanting
     def start_enchantment(self):
         self._stop_active_capture()

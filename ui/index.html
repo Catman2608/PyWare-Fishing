@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PyWare Fishing V4.3</title>
+    <title>PyWare Fishing V4.31</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -10,7 +10,7 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
-                PyWare Fishing V4.3
+                PyWare Fishing V4.31
             </div>
             <button class="tab-button active" onclick="switchTab('basic')">
                 Basic
@@ -343,21 +343,22 @@
                         <input id=restart_delay type="text" placeholder="2.5">
                     </div>
                     <div class="text">
+                        <label>Minimum Line Density</label>
+                        <input id=fish_line_min_density type="text" placeholder="0.8">
+                    </div>
+                    <div class="text">
                         <label>Bar Ratio From Side</label>
                         <input id=bar_ratio_from_side type="text" placeholder="0.5">
                     </div>
+                    <hr>
                     <div class="dropdown">
                         <label for="controller_mode">Controller Mode:</label>
-                        <select name="controller_mode" id="controller_mode" onchange="updateControllerMode()">
+                        <select name="controller_mode" id="controller_mode">
                         <option value="normal">Normal</option>
                         <option value="steady">Steady</option>
-                        <option value="spammy">Spammy</option>
                         <option value="predictive">Predictive</option>
                         </select>
                     </div>
-                </div>
-                <div class="card" id="controller-normal-card">
-                    <h3>Controller (Normal)</h3>
                     <div class="text">
                         <label>KP (Proportional)</label>
                         <input id=kp type="text" placeholder="0.4">
@@ -366,39 +367,6 @@
                         <label>KD (Derivative)</label>
                         <input id=kd type="text" placeholder="0.5">
                     </div>
-                </div>
-                <div class="card" id="controller-steady-card" style="display:none;">
-                    <h3>Controller (Steady)</h3>
-                    <div class="text">
-                        <label>KP (Proportional)</label>
-                        <input id=kp type="text" placeholder="0.4">
-                    </div>
-                    <div class="text">
-                        <label>KD (Derivative)</label>
-                        <input id=kd type="text" placeholder="0.5">
-                    </div>
-                </div>
-                <div class="card" id="controller-spammy-card" style="display:none;">
-                    <h3>Controller (Steady)</h3>
-                    <div class="text">
-                        <label>Spam Ratio (Relative to Bar)</label>
-                        <input id=spam_ratio type="text" placeholder="0.3">
-                    </div>
-                    <div class="text">
-                        <label>Velocity Multiplier (Relative to FPS)</label>
-                        <input id=velocity_multiplier type="text" placeholder="3">
-                    </div>
-                    <div class="text">
-                        <label>Hold Frames</label>
-                        <input id=hold_frames type="text" placeholder="2">
-                    </div>
-                    <div class="text">
-                        <label>Release Frames</label>
-                        <input id=release_frames type="text" placeholder="2">
-                    </div>
-                </div>
-                <div class="card" id="controller-predictive-card" style="display:none;">
-                    <h3>Controller (Predictive)</h3>
                     <div class="text">
                         <label>Stopping Distance</label>
                         <input id=stopping_distance type="text" placeholder="1.4">
@@ -458,6 +426,10 @@
                     <div class="text">
                         <label>Delay After Click 2 (Enchant, Angler)</label>
                         <input id=click_delay2 type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Restart Delay (Angler)</label>
+                        <input id=utility_restart_delay type="text" placeholder="0.5">
                     </div>
                 </div>
                 <div class="card">
@@ -580,20 +552,12 @@
                         <input id=angler_click_y type="text" placeholder="0.5">
                     </div>
                     <div class="text">
-                        <label>Backpack Key</label>
-                        <input id=backpack_key type="text" placeholder="G">
-                    </div>
-                    <div class="text">
                         <label>Backpack X (Ratio)</label>
                         <input id=backpack_x type="text" placeholder="0.5">
                     </div>
                     <div class="text">
                         <label>Backpack Y (Ratio)</label>
                         <input id=backpack_y type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Cooldown (seconds)</label>
-                        <input id=angler_cd type="text" placeholder="0.5">
                     </div>
                 </div>
             </div>
