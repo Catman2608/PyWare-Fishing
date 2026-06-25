@@ -1,5 +1,5 @@
 const APP_VERSION = "4.31";
-const BETA_VERSION = "1";
+const BETA_VERSION = "0";
 
 let currentConfig = null;
 window.setStatus = (message) => {

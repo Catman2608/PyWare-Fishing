@@ -55,7 +55,7 @@ mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
 APP_VERSION = "4.31"
-BETA_VERSION = 1
+BETA_VERSION = 0
 def get_macos_menu_offset():
     if sys.platform != "darwin":
         return 0
