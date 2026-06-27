@@ -52,7 +52,7 @@ async function startMacro() {
     // Save current UI settings first
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
 
     const settings = getSettings();
@@ -155,18 +155,18 @@ async function syncSettings() {
 }
 function bindSettingsSync() {
     document.querySelectorAll("input, select").forEach(element => {
-        if (element.id && element.id !== "config-select") {
+        if (element.id && element.id !== "disabled") {
             element.addEventListener("change", syncSettings);
             element.addEventListener("input", syncSettings);
         }
     });
-    document.getElementById("config-select")
+    document.getElementById("disabled")
         .addEventListener("change", loadConfig);
 }
 async function saveConfig() {
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
     const settings = getSettings();
     const result =
@@ -183,7 +183,7 @@ async function saveConfig() {
 async function loadConfig() {
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
     const result =
         await pywebview.api.load_config(
@@ -204,7 +204,7 @@ async function loadStartupConfig() {
     if (result.success) {
         const select =
             document.getElementById(
-                "config-select"
+                "disabled"
             );
         select.value = result.config_name;
         applySettings(
@@ -220,7 +220,7 @@ async function refreshConfigs() {
         await pywebview.api.list_configs();
     const select =
         document.getElementById(
-            "config-select"
+            "disabled"
         );
     select.innerHTML = "";
     configs.forEach(config => {
@@ -241,13 +241,13 @@ async function newConfig() {
     );
     refreshConfigs();
     document.getElementById(
-        "config-select"
+        "disabled"
     ).value = name;
 }
 async function deleteConfig() {
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
     if (!configName) return;
     await pywebview.api.delete_config(

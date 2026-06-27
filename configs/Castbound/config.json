@@ -8,7 +8,7 @@
     "sundial_slot": "6",
     "target_slot": "7",
     "mirror_slot": "8",
-    
+    "backpack_slot": "G",
     "tranquility_key_1": "D",
     "tranquility_key_2": "F",
     "tranquility_key_3": "J",
@@ -17,8 +17,8 @@
     "left_tolerance": "12",
     "right_color": "#e642e7",
     "right_tolerance": "12",
-    "arrow_color": "#71f3bb",
-    "arrow_tolerance": "12",
+    "arrow_color": "#6df4be",
+    "arrow_tolerance": "25",
     "fish_color": "#5522a3",
     "fish_tolerance": "12",
     "shake_color": "#FFFFFF",
@@ -30,10 +30,10 @@
     "tracking_color": "#5B4B43",
     "tracking_tolerance": "5",
     "friends_color": "#9BFF9B",
-    "friends_tolerance": "2",
+    "friends_tolerance": "4",
     "auto_zoom": "off",
     "auto_refresh": "on",
-    "fish_overlay": "off",
+    "fish_overlay": "on",
     "status_overlay": "off",
     "lock_cursor": "off",
     "select_rod_duration": "0.35",
@@ -61,12 +61,13 @@
     "shake_failsafe": "80",
     "minigame_scan_delay": "0.01",
     "restart_delay": "2.5",
+    "fish_line_min_density": "0.8",
     "bar_ratio_from_side": "0.5",
     "controller_mode": "predictive",
-    "kp": "0.6",
-    "kd": "0.6",
-    "stopping_distance": "3",
-    "velocity_smoothing": "1",
+    "kp": "0.93",
+    "kd": "0.07",
+    "stopping_distance": "2",
+    "velocity_smoothing": "0.5",
     "pinion_note_ratio": "0.3",
     "tranquility_mode": "rapid",
     "tranquility_note_ratio": "0.8",
@@ -77,6 +78,7 @@
     "e_delay": "0",
     "click_delay": "1.5",
     "click_delay2": "0",
+    "utility_restart_delay": "0.5",
     "logging_mode": "Disabled",
     "logging_trigger": "Cycles",
     "logging_url": "[___]",
@@ -98,8 +100,32 @@
     "appraisal_enchant_y": "0.5",
     "angler_click_x": "0.5",
     "angler_click_y": "0.5",
-    "backpack_slot": "G",
     "backpack_x": "0.5",
     "backpack_y": "0.5",
-    "utility_restart_delay": "0.5"
+    "bar_areas": {
+        "shake": {
+            "x": 0.1041,
+            "y": 0.0925,
+            "width": 0.7917,
+            "height": 0.6963
+        },
+        "fish": {
+            "x": 0.2844,
+            "y": 0.7981,
+            "width": 0.4297,
+            "height": 0.0389
+        },
+        "friend": {
+            "x": 0.0046,
+            "y": 0.8583,
+            "width": 0.0355,
+            "height": 0.0817
+        },
+        "totem": {
+            "x": 0.9531,
+            "y": 0.8333,
+            "width": 0.0208,
+            "height": 0.0463
+        }
+    }
 }

@@ -41,7 +41,7 @@ body {
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.08);
     color: white;
-    padding: 10px 14px;
+    padding: 8px 14px;
     border-radius: 12px;
     outline: none;
     font-size: 14px;
@@ -52,7 +52,7 @@ body {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: white;
-    padding: 10px 14px;
+    padding: 8px 14px;
     border-radius: 12px;
     cursor: pointer;
     font-size: 14px;
@@ -197,7 +197,7 @@ button {
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.08);
     color: white;
-    padding: 10px 14px;
+    padding: 8px 14px;
     border-radius: 12px;
     outline: none;
     width: 160px;
@@ -228,7 +228,7 @@ button {
     border: 1px solid rgba(255,255,255,0.06);
     color: rgba(255,255,255,0.9);
 
-    padding: 10px 38px 10px 14px;
+    padding: 8px 38px 10px 14px;
     border-radius: 10px;
 
     outline: none;
@@ -365,7 +365,7 @@ button {
 
 .color-box input {
     width: 100%;
-    padding: 10px;
+    padding: 8px;
     border-radius: 8px;
     border: 1px solid #333;
     background: #121212;

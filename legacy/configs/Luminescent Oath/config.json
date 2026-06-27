@@ -1,6 +1,6 @@
 {
-    "config-select": "Sword Of Darkness",
-    "automation_mode": "enchant",
+    "disabled": "Sword Of Darkness",
+    "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
     "force_stop": "F7",

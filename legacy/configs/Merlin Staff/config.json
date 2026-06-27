@@ -1,5 +1,5 @@
 {
-    "config-select": "Castbound",
+    "disabled": "Castbound",
     "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -65,8 +65,8 @@
     "control_alpha": "0.07",
     "kp": "0.93",
     "kd": "0.07",
-    "stopping_distance": "1.4",
-    "velocity_smoothing": "0.07",
+    "stopping_distance": "3",
+    "velocity_smoothing": "1.2",
     "pinion_note_ratio": "0.3",
     "tranquility_mode": "steady",
     "tranquility_note_ratio": "0.6",

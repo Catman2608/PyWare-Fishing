@@ -1,5 +1,5 @@
 {
-    "config-select": "Luminescent Oath",
+    "disabled": "Luminescent Oath",
     "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -60,7 +60,7 @@
     "restart_delay": "2.5",
     "bar_ratio_from_side": "0.5",
     "controller_mode": "predictive",
-    "kp": "0.6",
+    "kp": "0.93",
     "kd": "0.3",
     "spam_ratio": "1",
     "velocity_multiplier": "3",

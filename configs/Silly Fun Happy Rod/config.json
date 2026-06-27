@@ -1,5 +1,5 @@
 {
-    "config-select": "Noiseform",
+    "disabled": "Noiseform",
     "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",
@@ -70,8 +70,8 @@
     "velocity_multiplier": "0",
     "hold_frames": "3",
     "release_frames": "2",
-    "stopping_distance": "1.4",
-    "velocity_smoothing": "0.07",
+    "stopping_distance": "3",
+    "velocity_smoothing": "1.2",
     "pinion_note_ratio": "0.3",
     "tranquility_mode": "steady",
     "tranquility_note_ratio": "0.6",

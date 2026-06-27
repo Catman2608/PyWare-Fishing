@@ -1,6 +1,6 @@
 {
-    "config-select": "Default",
-    "automation_mode": "enchant",
+    "disabled": "Default",
+    "automation_mode": "fishing",
     "start_stop": "",
     "change_areas": "",
     "force_stop": "",

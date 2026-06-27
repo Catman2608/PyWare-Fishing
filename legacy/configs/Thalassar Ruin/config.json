@@ -1,5 +1,5 @@
 {
-    "config-select": "Tranquility Rod",
+    "disabled": "Tranquility Rod",
     "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",

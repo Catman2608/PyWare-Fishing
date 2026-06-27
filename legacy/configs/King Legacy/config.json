@@ -1,5 +1,5 @@
 {
-    "config-select": "Sword Of Darkness",
+    "disabled": "Sword Of Darkness",
     "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",

@@ -1806,7 +1806,7 @@ class App(CTk):
     def load_settings(self, name="default"):
         """Load settings from a JSON config file."""
         path = os.path.join(CONFIG_DIR, name, "config.json")
-        rod_folder = os.path.join(CONFIG_DIR, name.replace([".json"]))
+        rod_folder = os.path.join(CONFIG_DIR, name.replace(".json", ""))
         # Always load misc settings (bar_areas, hotkeys) from last_config.json
         # regardless of whether the named profile exists.
         self.load_misc_settings()

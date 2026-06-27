@@ -1,5 +1,5 @@
 {
-    "config-select": "Masterline Rod",
+    "disabled": "Masterline Rod",
     "automation_mode": "fishing",
     "start_stop": "F5",
     "change_areas": "F6",

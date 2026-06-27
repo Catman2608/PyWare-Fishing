@@ -54,7 +54,7 @@ keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-APP_VERSION = "4.31"
+APP_VERSION = "4.32"
 BETA_VERSION = 0
 def get_macos_menu_offset():
     if sys.platform != "darwin":
@@ -144,8 +144,26 @@ if sys.platform == "win32":
         except Exception:
             pass
     # Windows API related functions
+    _scale_cache = None
+
     def get_scale_factor():
-        return 1
+        global _scale_cache
+
+        if _scale_cache is not None:
+            return _scale_cache
+
+        try:
+            _scale_cache = windll.shcore.GetScaleFactorForDevice(0) / 100
+        except Exception:
+            try:
+                hdc = windll.user32.GetDC(0)
+                dpi = windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
+                windll.user32.ReleaseDC(0, hdc)
+                _scale_cache = dpi / 96
+            except Exception:
+                _scale_cache = 1.0
+
+        return _scale_cache
     def _get_hwnd(window):
         """Return a Windows HWND int from a pywebview window/native object."""
         native = getattr(window, "native", window)
@@ -442,17 +460,19 @@ class AreaSelector:
         # primary display isn't the leftmost one, SCREEN_LEFT/TOP will be non-zero and the
         # window must be placed there to sit over the correct screen.
         if sys.platform == "win32":
-            self._win = webview.create_window( "Area Selector", self.HTML_FILE, js_api=self, 
-                                            # Window Style 
-                                            transparent=False, frameless=True, easy_drag=False, 
-                                            # Keep Above Everything 
-                                            on_top=True, 
-                                            # Prevent Resizing / Moving 
-                                            resizable=False, 
-                                            # Fullscreen Size — matches the primary monitor exactly 
-                                            width=SCREEN_WIDTH, height=SCREEN_HEIGHT, 
-                                            # Position at the primary monitor's actual origin (handles non-zero offsets) 
-                                            x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000")
+            self._win = webview.create_window("Area Selector", self.HTML_FILE, js_api=self, 
+                                              transparent=False, frameless=True, easy_drag=False, 
+                                              on_top=True, resizable=False, background_color="#000000")
+
+            # Maximize on Windows after the window is created
+            def maximize_area_selector():
+                try:
+                    hwnd = self._win.native.Handle
+                    win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
+                except Exception as e:
+                    print("Failed to maximize area selector:", e)
+
+            self._win.events.shown += maximize_area_selector
         else:
             self._win = webview.create_window( "Area Selector", self.HTML_FILE, js_api=self, 
                                             # Window Style 
@@ -579,7 +599,6 @@ class AreaSelector:
                 yr = round((abs_y - by) / bh, 2)
                 self.parent.set_status(f"Coords: {xr}, {yr}")
                 return
-        self.parent.set_status("Area selector opened (press key again to close)")
     def save_areas(self, areas):
         """
         Called by JS when the user presses Escape/F6 to confirm and close.
@@ -1385,7 +1404,7 @@ class Api:
             with open(LAST_CONFIG_FILE, "w") as f:
                 json.dump(data, f, indent=4)
         except Exception as e:
-            self.set_status("Error saving last config:", e)
+            self.set_status(f"Error saving last config: {e}")
     def resolve_config_name(self, config_name):
         configs = self.list_configs()
         if config_name in configs:
@@ -1410,7 +1429,7 @@ class Api:
             self.current_config = config_name
             self.save_last_config(config_name)
         except Exception as e:
-            self.set_status("Error loading config:", e)
+            self.set_status(f"Error loading config: {e}")
     def get_startup_config(self):
         config_name = self.resolve_config_name(self.current_config)
         if not config_name:
@@ -1629,60 +1648,30 @@ class Api:
                 "success": False,
                 "error": str(e)
             }
-    def reset_areas(self, config_name):
+    def reset_areas(self):
+        """Reset areas to default"""
         try:
-            config_folder = os.path.join(
-                CONFIG_DIR,
-                config_name
-            )
             config_path = os.path.join(
-                config_folder,
-                "config.json"
+                BASE_PATH,
+                "last_config.json"
             )
-            os.makedirs(
-                config_folder,
-                exist_ok=True
-            )
-            if os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    config_data = json.load(f)
-            else:
-                config_data = {}
-            config_data["bar_areas"] = {
-                "shake": {
-                    "x": 0.1041,
-                    "y": 0.0925,
-                    "width": 0.7917,
-                    "height": 0.6963
-                },
-                "fish": {
-                    "x": 0.2844,
-                    "y": 0.7981,
-                    "width": 0.4297,
-                    "height": 0.0389
-                },
-                "friend": {
-                    "x": 0.0046,
-                    "y": 0.8583,
-                    "width": 0.0355,
-                    "height": 0.0817
-                },
-                "totem": {
-                    "x": 0.9531,
-                    "y": 0.8333,
-                    "width": 0.0208,
-                    "height": 0.0463
+
+            if not os.path.exists(config_path):
+                return {
+                    "success": True
                 }
-            }
+
+            with open(config_path, "r") as f:
+                config_data = json.load(f)
+
+            # Remove saved custom areas
+            config_data.pop("bar_areas", None)
+
             with open(config_path, "w") as f:
-                json.dump(
-                    config_data,
-                    f,
-                    indent=4
-                )
-            return {
-                "success": True
-            }
+                json.dump(config_data,f,indent=4)
+
+            return {"success": True}
+
         except Exception as e:
             return {
                 "success": False,
@@ -1722,6 +1711,7 @@ class Api:
         try:
             safe = message.replace("\\", "\\\\").replace("`", "\\`").replace("'", "\\'")
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
+            # print(message)
         except Exception:
             pass
     # Area Selector
@@ -1806,6 +1796,7 @@ class Api:
         automation_mode = self.vars["automation_mode"]
         if not automation_mode == "disabled":
             if key == start_key:
+                window.hide()
                 if self.macro_running == True:
                     return
                 else:
@@ -1822,6 +1813,7 @@ class Api:
             elif key == bar_areas_key:
                 self.open_area_selector()
             elif key == stop_key:
+                window.show()
                 self.stop_macro()
         else:
             self.save_config(self.current_config, self.vars, f"Pressed: {key}")
@@ -1835,6 +1827,7 @@ class Api:
     # Keyboard/Mouse Functions (Platform-specific)
     # Hold Mouse
     def hold_mouse(self, mouse=False):
+        "Hold mouse. True for right click, False for left click."
         if sys.platform == "win32":
             if mouse:
                 windll.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
@@ -1847,6 +1840,7 @@ class Api:
             _mouse_event(button="right" if mouse else "left", press=True)
     # Release Mouse
     def release_mouse(self, mouse=False):
+        "Release mouse. True for right click, False for left click."
         if sys.platform == "win32":
             if mouse:
                 windll.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
@@ -2172,7 +2166,7 @@ class Api:
         # Apply Scale Factor
         scale = self._get_scale_factor()
         area_data = self.bar_areas.get(area_key)
-        if isinstance(area_data, dict):
+        if (isinstance(area_data, dict) and area_data.get("width", 0) > 0 and area_data.get("height", 0) > 0):
             left   = area_data["x"]
             top    = area_data["y"]
             right  = area_data["x"] + area_data["width"]
@@ -2243,14 +2237,7 @@ class Api:
             x = shake_right if cast_center_x <= shake_center_x else shake_left - overlay_width
             return x, y, overlay_width, overlay_height
         elif mode == "fishing":
-            if fishing_profile == "normal":
-                x, y, overlay_width, overlay_height = self._build_horizontal_overlay_layout(
-                    self._get_overlay_anchor_area("fish")
-                )
-                half_height = int(self.SCREEN_HEIGHT / 2)
-                y = y - 80 if y > half_height else y + 80
-                return x, y, overlay_width, overlay_height
-            else:
+            if fishing_profile == "lanes":
                 shake_left, shake_top, shake_right, shake_bottom = self._get_overlay_anchor_area("shake")
                 fish_left, fish_top, fish_right, fish_bottom = self._get_overlay_anchor_area("fish")
                 shake_height = shake_bottom - shake_top
@@ -2259,6 +2246,13 @@ class Api:
                 overlay_height = shake_height
                 x = int(shake_left - 20 - (fish_left / 2))
                 y = shake_top
+                return x, y, overlay_width, overlay_height
+            else:
+                x, y, overlay_width, overlay_height = self._build_horizontal_overlay_layout(
+                    self._get_overlay_anchor_area("fish")
+                )
+                half_height = int(self.SCREEN_HEIGHT / 2)
+                y = y - 80 if y > half_height else y + 80
                 return x, y, overlay_width, overlay_height
         return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("friend"))
     def _is_fish_overlay_enabled(self):
@@ -2323,22 +2317,6 @@ class Api:
             y, x = coords[-1]  # Changed from [0] to [-1]
             return int(x), int(y)
         return None
-    def _find_color_bounds(self, frame, hex_color, tolerance=8):
-        """
-        Returns (left_x, right_x) for all matching pixels.
-        """
-        if frame is None or frame.size == 0:
-            return None
-        tolerance = int(np.clip(tolerance, 0, 255))
-        b, g, r = self._hex_to_bgr(hex_color)
-        target = np.array([b, g, r], dtype=np.int32)
-        frame_i = frame.astype(np.int32)
-        diff = frame_i - target
-        mask = np.sqrt(np.sum(diff ** 2, axis=-1)) <= tolerance
-        y_coords, x_coords = np.where(mask)
-        if len(x_coords) == 0:
-            return None
-        return int(np.min(x_coords)), int(np.max(x_coords))
     def _find_circles(self, frame):
         """
         Detect circles in frame using strict Hough Circle Transform for perfect circles only.
@@ -2512,85 +2490,113 @@ class Api:
         right_idx = np.argmax(xs)
         right = (int(xs[right_idx]), int(ys[right_idx]))
         return center, left, right
-    def _update_arrow_box_estimation(self, arrow_centroid_x, is_holding, capture_width):
+    def _update_arrow_box_estimation(self, arrow_center_x, any_bar_detected_this_frame, width):
         """
-        Estimate bar position from the arrow indicator (geometry-first, spike-guarded).
-        Strategy
-        --------
-        Side detection (geometry-first):
-          • If a prior centre exists: arrow < centre → LEFT edge, else RIGHT edge.
-          • Cold-start only (no history): fall back to is_holding semantics.
-            – Not holding → arrow on LEFT;  Holding → arrow on RIGHT.
-        Box size (priority order):
-          1. self._last_bar_box_size — live-synced from direct pixel detection.
-          2. capture_width * 0.30    — last-resort default.
-        Spike guard:
-          Per-frame centre movement is clamped to box_size * 0.40.
-          This suppresses is_holding-lag spikes and stale-cache artefacts without
-          introducing visible lag for legitimate bar movement.
-        Args:
-            arrow_centroid_x : X pixel of the arrow centroid (capture-region coords).
-            is_holding       : True if the mouse button is currently held.
-            capture_width    : Width of the capture region in pixels.
-        Returns:
-            (bar_center, left_x, right_x) — all None on cold-start failure.
+        Arrow fallback logic: ONLY triggers if NO bar colors were detected in this frame
+        If arrow is found, it updates ONE side (whichever is closer), OTHER side uses old position
         """
-        # ── 0. Arrow absent ──────────────────────────────────────────────────
-        if arrow_centroid_x is None:
-            if self._last_bar_center is not None:
-                return self._last_bar_center, self.last_left_x, self.last_right_x
-            return None, None, None
-        # ── 1. Box-size resolution ───────────────────────────────────────────
-        # Prefer the directly-detected bar size (synced every frame direct
-        # detection succeeds, see the warm-start sync block in _enter_minigame).
-        if self._last_bar_box_size is not None and self._last_bar_box_size > 0:
-            box_size = float(self._last_bar_box_size)
-        else:
-            box_size = capture_width * 0.30  # last-resort default
-        # ── 2. Geometry-first side detection ────────────────────────────────
-        # Using the previous centre to decide which side the arrow is on avoids
-        # the 1-frame is_holding lag that causes the spike in both older versions.
-        if self._last_bar_center is not None:
-            arrow_on_left = (arrow_centroid_x < self._last_bar_center)
-        else:
-            # Cold-start: no position history — bootstrap from is_holding.
-            arrow_on_left = not is_holding  # not holding → arrow is on LEFT edge
-        # ── 3. Candidate edges ───────────────────────────────────────────────
-        if arrow_on_left:
-            new_left_x  = float(arrow_centroid_x)
-            new_right_x = new_left_x + box_size
-        else:
-            new_right_x = float(arrow_centroid_x)
-            new_left_x  = new_right_x - box_size
-        # ── 4. Clamp to capture bounds ───────────────────────────────────────
-        if new_left_x < 0:
-            new_left_x  = 0.0
-            new_right_x = box_size
-        elif new_right_x > capture_width:
-            new_right_x = float(capture_width)
-            new_left_x  = new_right_x - box_size
-        new_center = (new_left_x + new_right_x) / 2.0
-        # ── 5. Per-frame velocity cap (spike guard) ──────────────────────────
-        # If the centre would jump more than 40 % of the box width in a single
-        # frame, clamp the movement.  This is a hard backstop that catches any
-        # residual artefact (e.g. a momentary wrong side-decision) without
-        # suppressing real fast bar movement.
-        if self._last_bar_center is not None:
-            max_delta = box_size * 0.40
-            delta = new_center - self._last_bar_center
-            if abs(delta) > max_delta:
-                clamped = self._last_bar_center + math.copysign(max_delta, delta)
-                half        = box_size / 2.0
-                new_left_x  = clamped - half
-                new_right_x = clamped + half
-                new_center  = clamped
-        # ── 6. Commit ────────────────────────────────────────────────────────
-        self.last_left_x             = new_left_x
-        self.last_right_x            = new_right_x
-        self._last_bar_center = new_center
-        self.last_indicator_x        = arrow_centroid_x
-        self.last_holding_state      = is_holding
-        return new_center, new_left_x, new_right_x
+        bar_center = None
+        bar_left_x = None
+        bar_right_x = None
+        # Arrow estimation logic
+        if not any_bar_detected_this_frame and arrow_center_x is not None:
+            last_center = self._last_bar_center
+            box_size = self._last_bar_box_size
+            # If we have previous bar data, determine which side the arrow is on
+            if last_center is not None and box_size is not None and box_size > 0:
+                # Get last known bar positions for validation
+                last_left = self._last_bar_left_x
+                last_right = self._last_bar_right_x
+                # Determine which side based on center comparison
+                arrow_on_left_side = arrow_center_x < last_center
+                # SMART VALIDATION: Check if arrow is actually near the bar we think it is
+                # Calculate distances to both last known bars
+                dist_to_left = abs(arrow_center_x - last_left) if last_left is not None else float('inf')
+                dist_to_right = abs(arrow_center_x - last_right) if last_right is not None else float('inf')
+                # Self-correction: If arrow is much closer to the opposite bar, we detected wrong side!
+                # Threshold: arrow should be within reasonable distance (box_size / 4) of expected bar
+                proximity_threshold = box_size / 4
+                if arrow_on_left_side:
+                    # We think arrow is on LEFT, but verify it's actually near left bar
+                    if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
+                        # Arrow is actually closer to RIGHT bar - we were wrong!
+                        # print(f"🐟 Arrow mode: SELF-CORRECTION - Arrow at {arrow_center_x:.0f} closer to RIGHT bar ({dist_to_right:.0f}px) than LEFT ({dist_to_left:.0f}px)")
+                        arrow_on_left_side = False  # Flip the decision
+                else:
+                    # We think arrow is on RIGHT, but verify it's actually near right bar
+                    if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
+                        # Arrow is actually closer to LEFT bar - we were wrong!
+                        # print(f"🐟 Arrow mode: SELF-CORRECTION - Arrow at {arrow_center_x:.0f} closer to LEFT bar ({dist_to_left:.0f}px) than RIGHT ({dist_to_right:.0f}px)")
+                        arrow_on_left_side = True  # Flip the decision
+                # Now apply the corrected decision
+                if arrow_on_left_side:
+                    # Arrow is on the LEFT side - update left bar, keep right bar from memory
+                    bar_left_x = arrow_center_x
+                    bar_right_x = self._last_bar_right_x
+                    if bar_right_x is None:
+                        # If no right bar in memory, calculate from box size
+                        bar_right_x = bar_left_x + box_size
+                    # Validate: ensure left < right
+                    if bar_left_x < bar_right_x:
+                        self._last_bar_left_x = bar_left_x
+                        self._last_bar_right_x = bar_right_x
+                        bar_center = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center = bar_center
+                        bar_center_found = True
+                        # print(f"🐟 Arrow mode: Arrow LEFT of center - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (kept)")
+                    else:
+                        pass # print(f"🐟 Arrow mode: Invalid - arrow left {bar_left_x:.0f} >= right {bar_right_x:.0f}")
+                else:
+                    # Arrow is on the RIGHT side - update right bar, keep left bar from memory
+                    bar_right_x = arrow_center_x
+                    bar_left_x = self._last_bar_left_x
+                    if bar_left_x is None:
+                        # If no left bar in memory, calculate from box size
+                        bar_left_x = bar_right_x - box_size
+                    # Validate: ensure left < right
+                    if bar_left_x < bar_right_x:
+                        self._last_bar_left_x = bar_left_x
+                        self._last_bar_right_x = bar_right_x
+                        bar_center = (bar_left_x + bar_right_x) / 2.0
+                        self._last_bar_center = bar_center
+                        bar_center_found = True
+                        # print(f"🐟 Arrow mode: Arrow RIGHT of center - L={bar_left_x:.0f} (kept), R={bar_right_x:.0f} (arrow)")
+                    else:
+                        pass # print(f"🐟 Arrow mode: Invalid - left {bar_left_x:.0f} >= arrow right {bar_right_x:.0f}")
+            # Fallback: Try to establish initial box size from previous positions
+            elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
+                box_size = self._last_bar_right_x - self._last_bar_left_x
+                last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
+                if box_size > 0:
+                    self._last_bar_box_size = box_size
+                    self._last_bar_center = last_center
+                    # Determine side based on arrow position relative to last center
+                    if arrow_center_x < last_center:
+                        bar_left_x = arrow_center_x
+                        bar_right_x = bar_left_x + box_size
+                        # print(f"🐟 Arrow mode: Initial LEFT - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (size={box_size:.0f})")
+                    else:
+                        bar_right_x = arrow_center_x
+                        bar_left_x = bar_right_x - box_size
+                        # print(f"🐟 Arrow mode: Initial RIGHT - L={bar_left_x:.0f} (size={box_size:.0f}), R={bar_right_x:.0f} (arrow)")
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    bar_center = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center = bar_center
+                    bar_center_found = True
+                else:
+                    # Invalid box size (<=0) - use default based on fish area width
+                    default_box_size = width // 2
+                    bar_left_x = arrow_center_x
+                    bar_right_x = bar_left_x + default_box_size
+                    self._last_bar_left_x = bar_left_x
+                    self._last_bar_right_x = bar_right_x
+                    self._last_bar_box_size = default_box_size
+                    bar_center = (bar_left_x + bar_right_x) / 2.0
+                    self._last_bar_center = bar_center
+                    bar_center_found = True
+                    # print(f"🐟 Arrow mode: Invalid box size (<=0), using fish area width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")
+        return bar_center, bar_left_x, bar_right_x
     def _hex_to_bgr(self, hex_color):
         "Convert hex color to BGR tuple for OpenCV."
         if hex_color is None or hex_color.lower() in ["none", "# None", ""]:
@@ -2608,20 +2614,22 @@ class Api:
     # Do Pixel/Image/line Search
     def _do_pixel_search(self, frame, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol):
         _, fish_pos_left, fish_pos_right = self._find_color_cluster(frame, fish_hex, fish_tol, 5)
-        bar_pixels = []
-        bounds = self._find_color_bounds(frame, left_bar_hex, left_tol)
-        if bounds:
-            bar_pixels.extend(bounds)
-        bounds = self._find_color_bounds(frame, right_bar_hex, right_tol)
-        if bounds:
-            bar_pixels.extend(bounds)
-        if bar_pixels:
-            left_bar_center = min(bar_pixels)
-            right_bar_center = max(bar_pixels)
-        else:
-            left_bar_center = None
-            right_bar_center = None
-        return fish_pos_left, fish_pos_right, left_bar_center, right_bar_center
+
+        left = self._find_first_pixel(frame, left_bar_hex, left_tol)
+        if left == None:
+            left = self._find_first_pixel(frame, right_bar_hex, right_tol)
+        right = self._find_last_pixel(frame, right_bar_hex, right_tol)
+        if right == None:
+            right = self._find_last_pixel(frame, left_bar_hex, left_tol)
+
+        try:
+            left_bar = left[0]
+            right_bar = right[0]
+        except:
+            left_bar = None
+            right_bar = None
+
+        return fish_pos_left, fish_pos_right, left_bar, right_bar
     def do_circle_search(self, detection_img):
         circles = self._find_all_circles(detection_img)
         if not circles:
@@ -2933,29 +2941,47 @@ class Api:
         self.fish_lost_timer = 0
     def _normal_control(self, error):
         """
-        Replaced FischGPT controller with early V2.0 controller to resolve DMCA takedown
+        Traditional PD controller with clamps based on user areas.
+
+        Args:
+            error:      fish_x - bar_center  (positive = target is right of bar)
+        Returns:
+            Clamped control signal (float).  Positive → hold, negative → release.
         """
         # Initialization
-        now = time.perf_counter()
+        current_time = time.perf_counter()
+        _, _, _, _, fish_width, _ = self._get_areas("fish")
         if self._pid_last_scan_time is None:
-            self._pid_last_scan_time = now
+            self._pid_last_scan_time = current_time
             self._pid_last_error = error
             return 0.0
-        time_delta = now - self._pid_last_scan_time
+        
+        time_delta = current_time - self._pid_last_scan_time
         time_delta = min(0.15, time_delta)
         if time_delta <= 0:
             return 0.0
         kp       = self._get_var_number("kp", 0.6)
         kd       = self._get_var_number("kd", 0.5)
+
         # Derivative
         bar_velocity = (error - self._pid_last_error) / time_delta
-        output = (kp * error + kd * bar_velocity)
+        bar_velocity = min(fish_width, max(-fish_width, bar_velocity))
+
+        # Final calculations
+        p_term = kp * error
+        d_term = kd * bar_velocity
+
+        d_term_clamp = 80.0 # Leave some headroom for the p_term within your 100.0 pd_clamp
+        d_term = max(-d_term_clamp, min(d_term_clamp, d_term))
+
+        output = (p_term + d_term)
         self._pid_last_error = error
-        self._pid_last_scan_time = now
+        self._pid_last_scan_time = current_time
         return output
     def _steady_control(self, error, bar_center):
         """
         Asymmetric PD controller.
+
         Args:
             error:      fish_x - bar_center  (positive = target is right of bar)
             bar_center: current bar centre in screen coordinates
@@ -2965,7 +2991,6 @@ class Api:
         # Gains and clamp from GUI settings
         kp       = self._get_var_number("kp", 0.6)
         kd       = self._get_var_number("kd", 0.5)
-        pd_clamp = self._get_var_number("pid_clamp", 100.0)
         _, _, _, _, fish_width, _ = self._get_areas("fish")
         scale = get_scale_factor()
         fish_width = int(fish_width / scale)
@@ -3012,7 +3037,6 @@ class Api:
         self._pid_last_scan_time  = current_time
         # Combined and clamped control signal
         control_signal = p_term + d_term
-        control_signal = max(-pd_clamp, min(pd_clamp, control_signal))
         return control_signal
     def _steady_control2(self, error, bar_center):
         """
@@ -3157,6 +3181,22 @@ class Api:
                 should_hold = True
         return should_hold
     # Utility Functions
+    def _format_elapsed_time(self, seconds):
+        seconds = int(seconds)
+
+        days = seconds // 86400
+        hours = (seconds % 86400) // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+
+        if days > 0:
+            return f"{days}d {hours:02d}h {minutes:02d}m {secs:02d}s"
+        elif hours > 0:
+            return f"{hours}h {minutes:02d}m {secs:02d}s"
+        elif minutes > 0:
+            return f"{minutes}m {secs:02d}s"
+        else:
+            return f"{secs}s"
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status, catch_rate):
         """Worker function to send text webhook."""
         logging_name = self.vars["logging_name"]
@@ -3594,6 +3634,7 @@ class Api:
             while self.macro_running:
                 # Misc / Utilities
                 cycle = cycle + 1
+                self.set_status(f"Starting - Cycle {cycle}, Macro Running: {self.macro_running}")
                 # Select Rod
                 if auto_refresh == "on":
                     bag_delay = self._get_var_number("select_rod_duration", self._get_var_number("bag_delay", 0.36, float), float)
@@ -3604,31 +3645,26 @@ class Api:
                     time.sleep(bag_delay)
                     self._send_key(rod_slot)
                     time.sleep(0.2)
-                if self.macro_running == False:
-                    self.stop_macro("")
                 # Logging
                 self._check_logging_trigger(catch_rate_show)
                 # Totem
                 self._check_totem_trigger(shake_x, shake_y)
                 if self.vars["auto_reconnect"] == "on":
                     self._auto_reconnect(shake_x, shake_y)
-                if self.macro_running == False:
-                    self.stop_macro("")
                 # Cast
+                self.set_status(f"Casting ({casting_mode})")
                 if casting_mode == "perfect" or casting_mode == "Perfect":
                     self._execute_cast_perfect()
                 else:
                     self.execute_cast_normal()
-                if self.macro_running == False:
-                    self.stop_macro("")
                 # Shake
+                self.set_status(f"Shaking ({shake_mode})")
                 if shake_mode == "navigation" or shake_mode == "Navigation":
                     self._execute_shake_navigation()
                 else:
                     self._execute_shake_click(shake_mode)
-                if self.macro_running == False:
-                    self.stop_macro("")
                 # Minigame
+                self.set_status(f"Playing Bar Minigame {fishing_profile}")
                 if fishing_profile == "lanes":
                     self._enter_minigame_tranquility()
                 elif fishing_profile == "reverse":
@@ -3638,8 +3674,6 @@ class Api:
                 successful_catches = successful_catches + 1 if catch_success == True else successful_catches
                 catch_rate = (successful_catches / cycle)
                 catch_rate_show = round(catch_rate * 100)
-                if self.macro_running == False:
-                    self.stop_macro("")
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
@@ -3698,7 +3732,7 @@ class Api:
             self.webhook_cycle_counter += 1  # still count cycles for the message label
             elapsed = time.time() - self.webhook_start_time
             if trigger_secs > 0 and elapsed >= trigger_secs:
-                label = f"Cycle #{self.webhook_cycle_counter} | {int(elapsed)}s elapsed"
+                label = f"Cycle #{self.webhook_cycle_counter} | {self._format_elapsed_time(elapsed)} elapsed"
                 self.send_logging("**Time Checkpoint**", label, catch_rate, show_status=False)
                 # Reset the timer so it fires again after another trigger_secs seconds
                 self.webhook_start_time = time.time()
@@ -3821,7 +3855,7 @@ class Api:
         the top white Y reaches 95% of the area from green Y to bottom white Y.
         """
         # Hold Mouse
-        mouse_controller.press(Button.left)
+        self.hold_mouse(False)
         # Get Areas (Scale Factor Applied Inside _Get_Areas)
         shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, shake_height = self._get_areas("shake")
         self._fish_overlay_cast_bounds = None
@@ -4049,7 +4083,7 @@ class Api:
                 break
         # Cleanup
         stop_event.set()
-        mouse_controller.release(Button.left)
+        self.release_mouse(False)
         time.sleep(cast_delay)
         self._fish_overlay_cast_bounds = None
         self._set_fish_overlay_mode("idle")
@@ -4059,9 +4093,9 @@ class Api:
         cast_duration = float(self._get_var_number("cast_duration", 0.5, float))
         delay_after_casting = float(self._get_var_number("delay_after_casting", 1, float))
         time.sleep(delay_before_casting)
-        mouse_controller.press(Button.left)
+        self.hold_mouse(False)
         time.sleep(cast_duration)
-        mouse_controller.release(Button.left)
+        self.release_mouse(False)
         time.sleep(delay_after_casting)
         return
     def _execute_shake_click(self, shake_mode):
@@ -4551,6 +4585,8 @@ class Api:
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
             # Step 3: Detection with caching
             self.fish_overlay.clear()
+            if lock_cursor == "on":
+                mouse_controller.position = (shake_x, shake_y)
             # Left Side / Main Image
             if fishing_mode == "line":
                 fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_area_center)
@@ -4584,8 +4620,8 @@ class Api:
                     fish_x2 = int((fish_pos_left2[0] + fish_pos_right2[0]) / 2)
                 except:
                     fish_x2 = None
-                arrow_indicator_x2 = self._find_first_pixel(fish_img2, arrow_hex, arrow_tol)
-            arrow_indicator_x = self._find_first_pixel(fish_img, arrow_hex, arrow_tol)
+                arrow_indicator_x2 = self._find_color_center(fish_img2, arrow_hex, arrow_tol)
+            arrow_indicator_x = self._find_color_center(fish_img, arrow_hex, arrow_tol)
             if fishing_profile == "notes":
                 note_coords = self._find_color_center(note_img, note_box_hex, note_box_tol)
             else:

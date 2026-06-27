@@ -1156,7 +1156,7 @@ class Api:
             re.IGNORECASE,
         )
         for field_id, body in select_pattern.findall(html):
-            if field_id == "config-select":
+            if field_id == "disabled":
                 continue
             match = option_pattern.search(body)
             if match:

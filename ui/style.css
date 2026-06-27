@@ -187,7 +187,7 @@ hr {
 }
 .config-section {
     margin-top: auto;
-    padding: 10px 0 0 0;
+    padding: 8px 0 0 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -196,7 +196,7 @@ hr {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: white;
-    padding: 10px 14px;
+    padding: 8px 14px;
     border-radius: 12px;
     cursor: pointer;
     font-size: 14px;
@@ -258,7 +258,7 @@ hr {
     background: transparent;
     border: none;
     color: rgba(255, 255, 255, 0.78);
-    padding: 10px 14px 10px 14px;
+    padding: 8px 14px 10px 14px;
     border-radius: 8px;
     text-align: left;
     font-size: 14px;
@@ -339,7 +339,7 @@ button {
     background: linear-gradient(to right, var(--left-gradient), var(--right-gradient));
     border: none;
     color: var(--button-text);
-    padding: 10px 15px;
+    padding: 8px 15px;
     border-radius: 10px;
     cursor: pointer;
     margin-top: 16px;
@@ -416,13 +416,13 @@ button {
 
 /* Dropdown select - less padding (smaller) */
 .dropdown select {
-    padding: 10px 38px 10px 14px; /* FIXED: reduced padding for dropdowns */
+    padding: 8px 38px 10px 14px; /* FIXED: reduced padding for dropdowns */
     width: 180px;
 }
 
 /* Config section select - more padding (larger) */
 .config-section select {
-    padding: 10px 38px 10px 14px; /* FIXED: increased padding for config selection */
+    padding: 8px 38px 10px 14px; /* FIXED: increased padding for config selection */
     width: 100%;
     font-size: 14px; /* Slightly larger for config section */
 }
@@ -537,7 +537,7 @@ button {
 }
 .simple-box input {
     width: 100%;
-    padding: 10px;
+    padding: 8px;
     border-radius: 6px;
     border: 2px solid rgba(255, 255, 255, 0.08);
     background: #121212;
@@ -634,7 +634,7 @@ button {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: white;
-    padding: 10px;
+    padding: 8px;
     border-radius: 8px;
     font-size: 15px;
     cursor: pointer;

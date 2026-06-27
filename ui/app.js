@@ -1,4 +1,4 @@
-const APP_VERSION = "4.31";
+const APP_VERSION = "4.32";
 const BETA_VERSION = "0";
 
 let currentConfig = null;
@@ -39,7 +39,7 @@ async function startMacro() {
     // Save current UI settings first
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
     const settings = getSettings();
     await pywebview.api.save_config(
@@ -95,7 +95,7 @@ function getSettings() {
     const settings = {};
     // Get all input elements
     document.querySelectorAll("input, select").forEach(element => {
-        if (!element.id || element.id === "config-select") return;
+        if (!element.id || element.id === "disabled") return;
         if (element.type === "checkbox") {
             settings[element.id] = element.checked ? "on" : "off";
         } else {
@@ -107,7 +107,7 @@ function getSettings() {
 function applySettings(settings) {
     // Apply all settings to form elements
     document.querySelectorAll("input, select").forEach(element => {
-        if (!element.id || element.id === "config-select") return;
+        if (!element.id || element.id === "disabled") return;
         if (settings.hasOwnProperty(element.id)) {
             if (element.type === "checkbox") {
                 element.checked =
@@ -143,7 +143,7 @@ function bindSettingsSync() {
     document.querySelectorAll("input, select").forEach(element => {
         if (!element.id) return;
         // Skip config dropdown
-        if (element.id === "config-select") return;
+        if (element.id === "disabled") return;
         element.addEventListener("change", syncSettings);
         element.addEventListener("input", syncSettings);
         // Add theme update listeners for color inputs
@@ -176,7 +176,7 @@ async function saveConfig(configName = null) {
     if (!configName) {
         configName =
             document.getElementById(
-                "config-select"
+                "disabled"
             ).value;
     }
     if (!configName) {
@@ -199,7 +199,7 @@ async function loadConfig(configName = null) {
     if (!configName) {
         configName =
             document.getElementById(
-                "config-select"
+                "disabled"
             ).value;
     }
     if (!configName) {
@@ -218,7 +218,7 @@ async function loadConfig(configName = null) {
         currentConfig = configName;
         // Sync dropdown UI
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value = configName;
         setStatus(`Loaded: ${configName}`);
     } else {
@@ -233,7 +233,7 @@ async function loadStartupConfig() {
     if (result.success) {
         const select =
             document.getElementById(
-                "config-select"
+                "disabled"
             );
         currentConfig = result.config_name;
         applySettings(
@@ -253,7 +253,7 @@ async function refreshConfigs() {
         await pywebview.api.list_configs();
     const select =
         document.getElementById(
-            "config-select"
+            "disabled"
         );
     select.innerHTML = "";
     configs.forEach(config => {
@@ -274,7 +274,7 @@ async function newConfig() {
     );
     await refreshConfigs();
     document.getElementById(
-        "config-select"
+        "disabled"
     ).value = name;
     currentConfig = name;
     setStatus(`Created: ${name}`);
@@ -282,7 +282,7 @@ async function newConfig() {
 async function deleteConfig() {
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
     if (!configName) return;
     const confirmed =
@@ -298,7 +298,7 @@ async function deleteConfig() {
         await refreshConfigs();
         const select =
             document.getElementById(
-                "config-select"
+                "disabled"
             );
         if (select.options.length > 0) {
             select.selectedIndex = 0;
@@ -318,7 +318,7 @@ async function deleteConfig() {
 async function resetSettings() {
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
     if (!configName) return;
     const confirmed =
@@ -344,7 +344,7 @@ async function resetSettings() {
 async function resetColors() {
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
     if (!configName) return;
     const confirmed =
@@ -370,7 +370,7 @@ async function resetColors() {
 async function resetAreas() {
     const configName =
         document.getElementById(
-            "config-select"
+            "disabled"
         ).value;
 
     if (!configName) return;
@@ -383,15 +383,13 @@ async function resetAreas() {
     if (!confirmed) return;
 
     const result =
-        await pywebview.api.reset_areas(
-            configName
-        );
+        await pywebview.api.reset_areas();
 
     if (result.success) {
         await loadConfig(configName);
-        setStatus("Areas reset");
+        setStatus("Bar areas reset to default");
     } else {
-        setStatus("Reset failed");
+        setStatus("Bar areas failed to reset; delete last_config.json.");
     }
 }
 async function exportConfig() {
@@ -693,7 +691,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // TOP BAR HELPERS
 // =========================
 function updateTopbarInfo() {
-    const configSelect = document.getElementById("config-select");
+    const configSelect = document.getElementById("disabled");
     const macroModeSelect = document.getElementById("automation_mode");
     
     const configNameEl = document.getElementById("topbar-config-name");
