@@ -24,7 +24,7 @@
             <div class="config-section">
                 <p>Active Configuration</p>
                 <select id="disabled" onchange="switchConfig(this.value)"></select>
-                <p>Automation Mode</p>
+                <p>Utility Selection</p>
                 <div class="dropdown">
                     <select name="automation_mode" id="automation_mode">
                     <option value="fishing">Fishing</option>
@@ -32,6 +32,17 @@
                     <option value="enchant">Enchant</option>
                     <option value="angler">Angler</option>
                     <option value="disabled">Disabled</option>
+                    </select>
+                </div>
+                <p>Rod Ability</p>
+                <div class="dropdown">
+                    <select name="fishing_profile" id="fishing_profile">
+                    <option value="normal">Normal</option>
+                    <option value="notes">Notes (Pinion)</option>
+                    <option value="reverse">Reverse (Dreambreaker)</option>
+                    <option value="dual">Dual (Bellona)</option>
+                    <option value="lanes">4 Lanes (Tranquility)</option>
+                    <option value="metronome">Metronome (Lullaby)</option>
                     </select>
                 </div>
                 <button onclick="openConfigManager()"> Manage </button>
@@ -219,17 +230,6 @@
                         <option value="pixel">Pixel</option>
                         <option value="circle">Circle</option>
                         <option value="navigation">Navigation</option>
-                        </select>
-                    </div>
-                    <div class="dropdown">
-                        <label for="fishing_profile">Fishing Profile:</label>
-                        <select name="fishing_profile" id="fishing_profile">
-                        <option value="normal">Normal</option>
-                        <option value="notes">Notes (Pinion)</option>
-                        <option value="reverse">Reverse (Dreambreaker)</option>
-                        <option value="dual">Dual (Bellona)</option>
-                        <option value="lanes">4 Lanes (Tranquility)</option>
-                        <option value="metronome">Metronome (Lullaby)</option>
                         </select>
                     </div>
                     <div class="dropdown">

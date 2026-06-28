@@ -81,7 +81,7 @@
     "utility_restart_delay": "0.5",
     "logging_mode": "Screenshot",
     "logging_trigger": "Cycles",
-    "logging_url": "[disabled/]",
+    "logging_url": "[___]",
     "logging_name": "PyWare Fishing",
     "logging_cycle": "3",
     "logging_time": "60",

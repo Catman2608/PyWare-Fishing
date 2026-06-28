@@ -3072,13 +3072,13 @@ class Api:
         time_delta = 0
         if (
             self._pid_last_scan_time2 is not None
-            and self.last_fish_x2 is not None
+            and self._pid_last_target_x2 is not None
             and self._pid_last_error2 is not None
         ):
             time_delta = current_time - self._pid_last_scan_time2
             if time_delta > 0.001:
                 # Bar velocity: how fast the bar centre moved since last frame
-                last_bar_x   = self.last_fish_x2 - self._pid_last_error2
+                last_bar_x   = self._pid_last_target_x2 - self._pid_last_error2
                 bar_velocity = (bar_center - last_bar_x) / time_delta
                 error_magnitude_decreasing = abs(error) < abs(self._pid_last_error2)
                 bar_moving_toward_target = (
@@ -3097,7 +3097,7 @@ class Api:
                 d_term = kd * (error - self._pid_last_error2) / time_delta
         # Update state for next frame
         self._pid_last_error2      = error
-        self.last_fish_x2   = target_line_last_x
+        self._pid_last_target_x2   = target_line_last_x
         self._pid_last_scan_time2  = current_time
         # Combined and clamped control signal
         control_signal = p_term + d_term

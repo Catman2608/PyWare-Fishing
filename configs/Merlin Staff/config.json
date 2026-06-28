@@ -81,7 +81,6 @@
     "utility_restart_delay": "0.5",
     "logging_mode": "Screenshot",
     "logging_trigger": "Cycles",
-    "logging_url": "https://discord.com/api/webhooks/1516344408394694847/lr7xD2iYRURwcr5zNtpYVPsLrh-tPuwk4ZYaeACijnZaR7APxWaUeAqMP4q6bTMwbSMI",
     "logging_name": "PyWare Fishing V4",
     "logging_cycle": "10",
     "logging_time": "150",
