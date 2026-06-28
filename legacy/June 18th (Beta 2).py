@@ -4497,14 +4497,14 @@ class Api:
             detection_source = 2
             if bar_detected:
                 # Valid detection - update cache
-                detection_cache['last_valid_bar_left'] = left_x
-                detection_cache['last_valid_bar_right'] = right_x
-                detection_cache['last_valid_bar_center'] = (left_x + right_x) / 2.0
-                detection_cache['last_valid_bar_size'] = abs(right_x - left_x)
+                self._last_bar_left_x = left_x
+                self._last_bar_right_x = right_x
+                self._last_bar_center = (left_x + right_x) / 2.0
+                self._last_bar_box_size = abs(right_x - left_x)
                 detection_cache['consecutive_failures'] = 0
                 detection_cache['estimation_mode'] = False
-                bar_center = detection_cache['last_valid_bar_center']
-                bar_size = detection_cache['last_valid_bar_size']
+                bar_center = self._last_bar_center
+                bar_size = self._last_bar_box_size
                 detection_source = 0
                 # Arrow estimation (Warm state)
                 self._last_bar_box_size      = bar_size
@@ -4514,11 +4514,11 @@ class Api:
             else:
                 # Use cache
                 detection_cache['consecutive_failures'] += 1
-                if detection_cache['last_valid_bar_left'] is not None:
+                if self._last_bar_left_x is not None:
                     # Use cached values if available
-                    left_x = detection_cache['last_valid_bar_left']
-                    right_x = detection_cache['last_valid_bar_right']
-                    bar_size = detection_cache['last_valid_bar_size']
+                    left_x = self._last_bar_left_x
+                    right_x = self._last_bar_right_x
+                    bar_size = self._last_bar_box_size
                     # Only estimate if arrow indicator exists and cache is stale
                     if arrow_indicator_x is not None and detection_cache['consecutive_failures'] > 3:
                         estimated_center, left_x, right_x = self._update_arrow_box_estimation(
@@ -4539,9 +4539,9 @@ class Api:
                                 self._pid_last_scan_time = None
                             detection_cache['estimation_mode'] = True
                         else:
-                            bar_center = detection_cache['last_valid_bar_center']
+                            bar_center = self._last_bar_center
                     else:
-                        bar_center = detection_cache['last_valid_bar_center']
+                        bar_center = self._last_bar_center
                     detection_source = 1
                 else:
                     # No cache available, try estimation
@@ -4635,12 +4635,12 @@ class Api:
                 note_screen_y_ratio = note_coords[1] / (fish_bottom - fish_top)
                 if note_screen_y_ratio >= note_track_ratio:
                     fish_x = note_coords[0]
-                    detection_cache['last_valid_fish_x'] = fish_x
+                    self._pid_last_target_x = fish_x
             # Update fish_x cache
             if fish_x is not None:
-                detection_cache['last_valid_fish_x'] = fish_x
-            elif detection_cache['last_valid_fish_x'] is not None:
-                fish_x = detection_cache['last_valid_fish_x']
+                self._pid_last_target_x = fish_x
+            elif self._pid_last_target_x is not None:
+                fish_x = self._pid_last_target_x
             # Step 10: Check if fish is within bounds
             if bar_center is not None and fish_x is not None and left_x is not None and right_x is not None:
                 try:

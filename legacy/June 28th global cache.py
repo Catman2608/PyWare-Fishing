@@ -1,3 +1,5 @@
+# DO NOT RUN THIS BUILD. LINE 4522 IS A TEMPORARY FIX FOR THE BAR AREAS.
+
 # Imports
 # GUI (Primary and fallback)
 import webview
@@ -2940,16 +2942,12 @@ class Api:
         self._pid_last_target_x2 = 0.0
         self._pid_last_scan_time2 = 0.0
 
-        # Line detection
+        # line detection
         self.last_target_left_x = None
         self.last_target_right_x = None
         self.is_initial_run = True
         self.initial_target_gap = None
         self.fish_lost_timer = 0
-
-        # Color Detection
-        self.estimation_mode = False
-        self.consecutive_failures = 0
     def _normal_control(self, error):
         """
         Traditional PD controller with clamps based on user areas.
@@ -4522,6 +4520,7 @@ class Api:
         minigame_controller_mode = self.vars["controller_mode"].lower()
         lullaby_metronome_ratio = float(self.vars["lullaby_metronome_ratio"])
         lullaby_fishing_ratio = float(self.vars["lullaby_fishing_ratio"])
+        detection_cache = {} # this will break
         # Utility Settings
         catch_success = True
         shake_x = int((shake_left + shake_right) / 2)
@@ -4658,55 +4657,68 @@ class Api:
             bar_detected = (left_x is not None and right_x is not None)
             detection_source = 2
             if bar_detected:
-                # Valid detection - update cache with actual bar measurements
+                # Valid detection - update cache
                 self._last_bar_left_x = left_x
                 self._last_bar_right_x = right_x
                 self._last_bar_center = (left_x + right_x) / 2.0
                 self._last_bar_box_size = abs(right_x - left_x)
-                self.consecutive_failures = 0
-                self.estimation_mode = False
-                
+                detection_cache['consecutive_failures'] = 0
+                detection_cache['estimation_mode'] = False
                 bar_center = self._last_bar_center
                 bar_size = self._last_bar_box_size
                 detection_source = 0
-                
+                # Arrow estimation (Warm state)
+                self._last_bar_box_size      = bar_size
+                self._last_bar_center = bar_center
+                self.last_left_x             = left_x
+                self.last_right_x            = right_x
             else:
-                # Bar not detected - try to estimate from arrow indicator
-                self.consecutive_failures += 1
-                
-                if self._last_bar_left_x is not None and arrow_indicator_x is not None:
-                    # Only estimate if we have both cached bar data and an arrow indicator
-                    if self.consecutive_failures > 3:
-                        # Estimate bar position from arrow indicator
+                # Use cache
+                detection_cache['consecutive_failures'] += 1
+                if self._last_bar_left_x is not None:
+                    # Use cached values if available
+                    left_x = self._last_bar_left_x
+                    right_x = self._last_bar_right_x
+                    bar_size = self._last_bar_box_size
+                    # Only estimate if arrow indicator exists and cache is stale
+                    if arrow_indicator_x is not None and detection_cache['consecutive_failures'] > 3:
                         estimated_center, left_x, right_x = self._update_arrow_box_estimation(
                             arrow_indicator_x, mouse_down, fish_width
                         )
-                        
                         if estimated_center is not None:
                             bar_center = estimated_center
+                            # Recalculate bar_size from the estimated edges so that
+                            # thresh/deadzone are based on the actual span, not the
+                            # stale last_valid_bar_size (which caused Size=231 while
+                            # Right-Left=413 in the logs).
                             bar_size = abs(right_x - left_x)
-                            
-                            # Clear PID state on first estimation frame
-                            if not self.estimation_mode:
+                            # On the first frame entering estimation mode, the error
+                            # derivative is meaningless: error was frozen for N stale
+                            # frames then jumped when estimation fired.  Clear the
+                            # D-term state for this one transition frame only.
+                            if not detection_cache['estimation_mode']:
                                 self._pid_last_scan_time = None
-                            
-                            self.estimation_mode = True
-                            detection_source = 1
+                            detection_cache['estimation_mode'] = True
                         else:
-                            # Estimation failed - fall back to cached values
                             bar_center = self._last_bar_center
-                            bar_size = self._last_bar_box_size
-                            detection_source = 2
                     else:
-                        # Not enough consecutive failures yet - use cached values
                         bar_center = self._last_bar_center
-                        bar_size = self._last_bar_box_size
-                        detection_source = 3
+                    detection_source = 1
                 else:
-                    # No cache or no arrow indicator - can't estimate
-                    bar_center = None
-                    bar_size = 0
-                    detection_source = 4
+                    # No cache available, try estimation
+                    if arrow_indicator_x is not None:
+                        bar_center, left_x, right_x = self._update_arrow_box_estimation(
+                            arrow_indicator_x, mouse_down, fish_width
+                        )
+                        if bar_center is not None:
+                            bar_size = abs(right_x - left_x) if right_x and left_x else 100
+                            detection_source = 2
+                        else:
+                            bar_center = None
+                            bar_size = 0
+                    else:
+                        bar_center = None
+                        bar_size = 0
             # Step 5: Validate and sanitize detection results
             if fishing_profile == "dual":
                 if bar_center is not None and left_x is not None and right_x is not None:
