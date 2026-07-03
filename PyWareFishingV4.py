@@ -141,35 +141,19 @@ if sys.platform == "win32":
         wintypes.HWND,
         ctypes.c_int
     ]
-    # Set DPI scaling
+    # Set DPI awareness early to ensure consistent coordinate handling
     try:
-        windll.shcore.SetProcessDpiAwareness(2)
-    except Exception:
+        windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_PER_MONITOR_DPI_AWARE
+        # DPI awareness successfully set
+    except:
         try:
-            windll.user32.SetProcessDPIAware()
-        except Exception:
-            pass
+            windll.user32.SetProcessDPIAware()  # Fallback for older Windows
+            # DPI awareness set (fallback method)
+        except:
+            pass  # DPI awareness could not be set - coordinates may be inconsistent
     # Windows API related functions
-    _scale_cache = None
-
     def get_scale_factor():
-        global _scale_cache
-
-        if _scale_cache is not None:
-            return _scale_cache
-
-        try:
-            _scale_cache = windll.shcore.GetScaleFactorForDevice(0) / 100
-        except Exception:
-            try:
-                hdc = windll.user32.GetDC(0)
-                dpi = windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
-                windll.user32.ReleaseDC(0, hdc)
-                _scale_cache = dpi / 96
-            except Exception:
-                _scale_cache = 1.0
-
-        return _scale_cache
+        return 1
     def _get_hwnd(window):
         """Return a Windows HWND int from a pywebview window/native object."""
         native = getattr(window, "native", window)
@@ -592,6 +576,9 @@ class AreaSelector:
         # Convert mouse canvas-relative to screen-absolute for hit testing
         abs_x = mouse_x + self._win_origin_x
         abs_y = mouse_y + self._win_origin_y
+        # Define last_xr and last_yr
+        last_xr = 0
+        last_yr = 0
         for name in ("shake", "fish", "friend", "totem"):
             ratios = self._areas.get(name, {})
             if not ratios:
@@ -604,7 +591,10 @@ class AreaSelector:
             if bx <= abs_x <= bx + bw and by <= abs_y <= by + bh:
                 xr = round((abs_x - bx) / bw, 2)
                 yr = round((abs_y - by) / bh, 2)
-                self.parent.set_status(f"Coords: {xr}, {yr}")
+                if not last_xr == xr or last_yr == yr:
+                    self.parent.set_status(f"Coords: {xr}, {yr}")
+                last_xr = xr
+                last_yr = yr
                 return
     def save_areas(self, areas):
         """
@@ -1162,15 +1152,15 @@ class Api:
         self.macro_running = False
         self.macro_thread = None
         # Detection Variables
-        self._pid_last_target_x = None
+        self.last_fish_x = None
         self.last_bar_left = None
         self.last_bar_right = None
         self.last_bar_size = None  # Cached Bar Size From Minigame For Arrow Estimation
         self.last_input_time = 0.0
         self.cooldown_duration = 1.0  # 1 second cooldown
         # P/D State Variables
-        self._pid_last_error = 0.0      # Previous Error Term
-        self._pid_last_scan_time = None      # Timestamp Of Last Pd Sample
+        self.last_error = 0.0      # Previous Error Term
+        self.last_scan_time = None      # Timestamp Of Last Pd Sample
         self.last_bar_size = None
         self.last_bar_center = None  # Last bar center for _normal_control D-term
         # Arrow-Based Box Estimation Variables
@@ -1181,12 +1171,12 @@ class Api:
         self.last_bar_size = None
         self.last_bar_left = None
         self._last_bar_right = None
-        self._last_bar_box_size = None
-        self._last_bar_center = None
+        self.last_bar_size = None
+        self.last_bar_center = None
         self.last_arrow_delta = None
         # Estimation internal position state — initialised here so that
         # the first arrow_centroid_x=None call never raises AttributeError
-        self._last_bar_center = None
+        self.last_bar_center = None
         self.last_left_x = None
         self.last_right_x = None
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
@@ -1718,7 +1708,8 @@ class Api:
         try:
             safe = message.replace("\\", "\\\\").replace("`", "\\`").replace("'", "\\'")
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
-            # print(message)
+            if IS_COMPILED == False:
+                print(message)
         except Exception:
             pass
     # Area Selector
@@ -2507,13 +2498,13 @@ class Api:
         bar_right_x = None
         # Arrow estimation logic
         if not any_bar_detected_this_frame and arrow_center_x is not None:
-            last_center = self._last_bar_center
-            box_size = self._last_bar_box_size
+            last_center = self.last_bar_center
+            box_size = self.last_bar_size
             # If we have previous bar data, determine which side the arrow is on
             if last_center is not None and box_size is not None and box_size > 0:
                 # Get last known bar positions for validation
-                last_left = self._last_bar_left_x
-                last_right = self._last_bar_right_x
+                last_left = self.last_left_x
+                last_right = self.last_right_x
                 # Determine which side based on center comparison
                 arrow_on_left_side = arrow_center_x < last_center
                 # SMART VALIDATION: Check if arrow is actually near the bar we think it is
@@ -2539,16 +2530,16 @@ class Api:
                 if arrow_on_left_side:
                     # Arrow is on the LEFT side - update left bar, keep right bar from memory
                     bar_left_x = arrow_center_x
-                    bar_right_x = self._last_bar_right_x
+                    bar_right_x = self.last_right_x
                     if bar_right_x is None:
                         # If no right bar in memory, calculate from box size
                         bar_right_x = bar_left_x + box_size
                     # Validate: ensure left < right
                     if bar_left_x < bar_right_x:
-                        self._last_bar_left_x = bar_left_x
-                        self._last_bar_right_x = bar_right_x
+                        self.last_left_x = bar_left_x
+                        self.last_right_x = bar_right_x
                         bar_center = (bar_left_x + bar_right_x) / 2.0
-                        self._last_bar_center = bar_center
+                        self.last_bar_center = bar_center
                         bar_center_found = True
                         # print(f"🐟 Arrow mode: Arrow LEFT of center - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (kept)")
                     else:
@@ -2556,27 +2547,27 @@ class Api:
                 else:
                     # Arrow is on the RIGHT side - update right bar, keep left bar from memory
                     bar_right_x = arrow_center_x
-                    bar_left_x = self._last_bar_left_x
+                    bar_left_x = self.last_left_x
                     if bar_left_x is None:
                         # If no left bar in memory, calculate from box size
                         bar_left_x = bar_right_x - box_size
                     # Validate: ensure left < right
                     if bar_left_x < bar_right_x:
-                        self._last_bar_left_x = bar_left_x
-                        self._last_bar_right_x = bar_right_x
+                        self.last_left_x = bar_left_x
+                        self.last_right_x = bar_right_x
                         bar_center = (bar_left_x + bar_right_x) / 2.0
-                        self._last_bar_center = bar_center
+                        self.last_bar_center = bar_center
                         bar_center_found = True
                         # print(f"🐟 Arrow mode: Arrow RIGHT of center - L={bar_left_x:.0f} (kept), R={bar_right_x:.0f} (arrow)")
                     else:
                         pass # print(f"🐟 Arrow mode: Invalid - left {bar_left_x:.0f} >= arrow right {bar_right_x:.0f}")
             # Fallback: Try to establish initial box size from previous positions
-            elif self._last_bar_left_x is not None and self._last_bar_right_x is not None:
-                box_size = self._last_bar_right_x - self._last_bar_left_x
-                last_center = (self._last_bar_left_x + self._last_bar_right_x) / 2.0
+            elif self.last_left_x is not None and self.last_right_x is not None:
+                box_size = self.last_right_x - self.last_left_x
+                last_center = (self.last_left_x + self.last_right_x) / 2.0
                 if box_size > 0:
-                    self._last_bar_box_size = box_size
-                    self._last_bar_center = last_center
+                    self.last_bar_size = box_size
+                    self.last_bar_center = last_center
                     # Determine side based on arrow position relative to last center
                     if arrow_center_x < last_center:
                         bar_left_x = arrow_center_x
@@ -2586,21 +2577,21 @@ class Api:
                         bar_right_x = arrow_center_x
                         bar_left_x = bar_right_x - box_size
                         # print(f"🐟 Arrow mode: Initial RIGHT - L={bar_left_x:.0f} (size={box_size:.0f}), R={bar_right_x:.0f} (arrow)")
-                    self._last_bar_left_x = bar_left_x
-                    self._last_bar_right_x = bar_right_x
+                    self.last_left_x = bar_left_x
+                    self.last_right_x = bar_right_x
                     bar_center = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center = bar_center
+                    self.last_bar_center = bar_center
                     bar_center_found = True
                 else:
                     # Invalid box size (<=0) - use default based on fish area width
                     default_box_size = width // 2
                     bar_left_x = arrow_center_x
                     bar_right_x = bar_left_x + default_box_size
-                    self._last_bar_left_x = bar_left_x
-                    self._last_bar_right_x = bar_right_x
-                    self._last_bar_box_size = default_box_size
+                    self.last_left_x = bar_left_x
+                    self.last_right_x = bar_right_x
+                    self.last_bar_size = default_box_size
                     bar_center = (bar_left_x + bar_right_x) / 2.0
-                    self._last_bar_center = bar_center
+                    self.last_bar_center = bar_center
                     bar_center_found = True
                     # print(f"🐟 Arrow mode: Invalid box size (<=0), using fish area width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")
         return bar_center, bar_left_x, bar_right_x
@@ -2713,8 +2704,8 @@ class Api:
                 right_bar_x = min(right_candidates) if right_candidates else target_right_x
                 
                 # Store for next run
-                self.last_target_left_x = target_left_x
-                self.last_target_right_x = target_right_x
+                self.last_fish_left = target_left_x
+                self.last_fish_right = target_right_x
                 self.last_left_x = left_bar_x
                 self.last_right_x = right_bar_x
                 # print(f"📏 Initial: Target=({target_left_x}, {target_right_x}), Gap={self.initial_target_gap}, Bars=({left_bar_x}, {right_bar_x})")
@@ -2740,8 +2731,8 @@ class Api:
                 # If best gap is more than 3x initial gap, keep old positions (detection error)
                 actual_gap = target_right_x - target_left_x
                 if actual_gap > self.initial_target_gap * 3:
-                    target_left_x = self.last_target_left_x
-                    target_right_x = self.last_target_right_x
+                    target_left_x = self.last_fish_left
+                    target_right_x = self.last_fish_right
                 
                 # Rule 2: Find bars - exclude target lines
                 # Get all lines that are NOT the target lines
@@ -2786,10 +2777,10 @@ class Api:
             # Less than 2 lines detected - use last known positions or estimate
             self.fish_lost_timer += 0.033  # Approximate frame time (30 FPS)
             
-            if hasattr(self, 'last_target_left_x') and self.last_target_left_x is not None:
+            if hasattr(self, 'last_fish_left') and self.last_fish_left is not None:
                 # Use last known positions
-                target_left_x = self.last_target_left_x
-                target_right_x = self.last_target_right_x
+                target_left_x = self.last_fish_left
+                target_right_x = self.last_fish_right
                 left_bar_x = self.last_left_x
                 right_bar_x = self.last_right_x
                 
@@ -2808,8 +2799,8 @@ class Api:
         
         # Store current positions for next frame (always update with best available data)
         if target_left_x is not None:
-            self.last_target_left_x = target_left_x
-            self.last_target_right_x = target_right_x
+            self.last_fish_left = target_left_x
+            self.last_fish_right = target_right_x
             self.last_left_x = left_bar_x
             self.last_right_x = right_bar_x
         
@@ -2903,47 +2894,32 @@ class Api:
         """Reset controller state before a new minigame."""
 
         # PID
-        self._pid_last_error = 0.0
-        self._pid_last_target_x = None
-        self._pid_last_scan_time = None
-
-        # Detection state
-        self._pid_last_target_x = None
+        self.last_error = 0.0
+        self.last_fish_x = None
+        self.last_scan_time = None
 
         # Bar tracking
-        self._last_bar_left_x = None
-        self._last_bar_right_x = None
-        self._last_bar_box_size = None
-        self._last_bar_center = None
-
-        # Input timing
-        self.last_input_time = 0.0
-        self.cooldown_duration = 1.0
+        self.last_left_x = None
+        self.last_right_x = None
+        self.last_bar_size = None
+        self.last_bar_center = None
 
         # Arrow estimation
         self.last_indicator_x = None
-        self.last_holding_state = None
-        self.pending_holding_state = None
-        self.pending_indicator_x = None
-        self.last_arrow_delta = None
 
         # Prediction
-        self._pred_prev_fish_x = None
-        self._pred_prev_bar_x = None
-        self._pred_prev_time = None
         self.color_check_target_velocity = 0.0
         self.color_check_bar_velocity = 0.0
-        self._pred_last_click_time = 0.0
 
         # Dual fishing
-        self._pid_last_error2 = 0.0
-        self._pid_last_target_x2 = 0.0
-        self._pid_last_scan_time2 = 0.0
+        self.last_error2 = 0.0
+        self.last_fish_x2 = 0.0
+        self.last_scan_time2 = 0.0
         self.last_bar_center2 = 0.0
 
         # Line detection
-        self.last_target_left_x = None
-        self.last_target_right_x = None
+        self.last_fish_left = None
+        self.last_fish_right = None
         self.is_initial_run = True
         self.initial_target_gap = None
         self.fish_lost_timer = 0
@@ -2963,12 +2939,12 @@ class Api:
         # Initialization
         current_time = time.perf_counter()
         _, _, _, _, fish_width, _ = self._get_areas("fish")
-        if self._pid_last_scan_time is None:
-            self._pid_last_scan_time = current_time
-            self._pid_last_error = error
+        if self.last_scan_time is None:
+            self.last_scan_time = current_time
+            self.last_error = error
             return 0.0
         
-        time_delta = current_time - self._pid_last_scan_time
+        time_delta = current_time - self.last_scan_time
         time_delta = min(0.15, time_delta)
         if time_delta <= 0:
             return 0.0
@@ -2976,7 +2952,7 @@ class Api:
         kd       = self._get_var_number("kd", 0.5)
 
         # Derivative
-        bar_velocity = (error - self._pid_last_error) / time_delta
+        bar_velocity = (error - self.last_error) / time_delta
         bar_velocity = min(fish_width, max(-fish_width, bar_velocity))
 
         # Final calculations
@@ -2989,11 +2965,11 @@ class Api:
         output = (p_term + d_term)
 
         if dual_fishing == True:
-            self._pid_last_error2      = error
-            self._pid_last_scan_time2  = current_time
+            self.last_error2      = error
+            self.last_scan_time2  = current_time
         else:
-            self._pid_last_error      = error
-            self._pid_last_scan_time  = current_time
+            self.last_error      = error
+            self.last_scan_time  = current_time
 
         return output
     def _steady_control(self, error, bar_center, dual_fishing=False):
@@ -3021,24 +2997,24 @@ class Api:
         # D term – asymmetric damping
         d_term = 0.0
         if (
-            self._pid_last_scan_time is not None
-            and self._pid_last_target_x is not None
-            and self._pid_last_error is not None
+            self.last_scan_time is not None
+            and self.last_fish_x is not None
+            and self.last_error is not None
         ):
-            time_delta = current_time - self._pid_last_scan_time
+            time_delta = current_time - self.last_scan_time
             time_delta = min(0.15, time_delta)
             if time_delta <= 0:
                 return 0.0
             # Bar velocity: how fast the bar centre moved since last frame
-            last_bar_x   = self._pid_last_target_x - self._pid_last_error
+            last_bar_x   = self.last_fish_x - self.last_error
             bar_velocity = (bar_center_x - last_bar_x) / time_delta
             bar_velocity = min(fish_width, max(-fish_width, bar_velocity))
-            error_magnitude_decreasing = abs(error) < abs(self._pid_last_error)
+            error_magnitude_decreasing = abs(error) < abs(self.last_error)
             bar_moving_toward_target = (
                 (bar_velocity > 0 and error > 0)
                 or (bar_velocity < 0 and error < 0)
             )
-            # print("error_magnitude_decreasing: ", abs(error), abs(self._pid_last_error), error_magnitude_decreasing)
+            # print("error_magnitude_decreasing: ", abs(error), abs(self.last_error), error_magnitude_decreasing)
             # print("bar_moving_toward_target: ", bar_velocity, error, bar_moving_toward_target)
             if error_magnitude_decreasing and bar_moving_toward_target:
                 # APPROACHING – strong damping to prevent overshoot
@@ -3051,13 +3027,13 @@ class Api:
             d_term = max(-d_term_clamp, min(d_term_clamp, d_term))
         # Update state for next frame
         if dual_fishing == True:
-            self._pid_last_error2      = error
-            self._pid_last_target_x2   = target_line_last_x
-            self._pid_last_scan_time2  = current_time
+            self.last_error2      = error
+            self.last_fish_x2   = target_line_last_x
+            self.last_scan_time2  = current_time
         else:
-            self._pid_last_error      = error
-            self._pid_last_target_x   = target_line_last_x
-            self._pid_last_scan_time  = current_time
+            self.last_error      = error
+            self.last_fish_x   = target_line_last_x
+            self.last_scan_time  = current_time
         # Combined and clamped control signal
         control_signal = p_term + d_term
         return control_signal
@@ -3075,11 +3051,11 @@ class Api:
         if self.last_bar_center is None:
             self.last_bar_center = None
 
-        if self._pid_last_target_x is None:
-            self._pid_last_target_x = None
+        if self.last_fish_x is None:
+            self.last_fish_x = None
 
-        if self._pid_last_scan_time is None:
-            self._pid_last_scan_time = time.perf_counter()
+        if self.last_scan_time is None:
+            self.last_scan_time = time.perf_counter()
 
         if self.color_check_bar_velocity is None:
             self.color_check_bar_velocity = 0.0
@@ -3098,11 +3074,11 @@ class Api:
         
         # Calculate velocities
         current_time = time.perf_counter()
-        if self.last_bar_center is not None and self._pid_last_target_x is not None:
-            delta_time = current_time - self._pid_last_scan_time
+        if self.last_bar_center is not None and self.last_fish_x is not None:
+            delta_time = current_time - self.last_scan_time
             if delta_time > 0:
                 raw_bar_velocity = (bar_center - self.last_bar_center) / delta_time
-                raw_target_velocity = (fish_x - self._pid_last_target_x) / delta_time
+                raw_target_velocity = (fish_x - self.last_fish_x) / delta_time
                 
                 self.color_check_bar_velocity = (velocity_smoothing * raw_bar_velocity + 
                                             (1 - velocity_smoothing) * self.color_check_bar_velocity)
@@ -3112,12 +3088,12 @@ class Api:
         # Update previous values
         if dual_fishing == True:
             self.last_bar_center2 = bar_center
-            self._pid_last_target_x2 = fish_x
-            self._pid_last_scan_time2 = current_time
+            self.last_fish_x2 = fish_x
+            self.last_scan_time2 = current_time
         else:
             self.last_bar_center = bar_center
-            self._pid_last_target_x = fish_x
-            self._pid_last_scan_time = current_time
+            self.last_fish_x = fish_x
+            self.last_scan_time = current_time
 
         # Calculate error and relative velocity FIRST
         error = bar_center - fish_x
@@ -3583,6 +3559,8 @@ class Api:
         catch_rate = 1
         catch_rate_show = 100
         successful_catches = 0
+        self.webhook_start_time = time.time()
+
         rod_slot = str(self.vars["rod_slot"])
         bag_slot = str(self.vars["bag_slot"])
         shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self._get_areas("shake")
@@ -3606,7 +3584,10 @@ class Api:
             while self.macro_running:
                 # Misc / Utilities
                 cycle = cycle + 1
-                self.set_status(f"Starting - Cycle {cycle}, Macro Running: {self.macro_running}")
+                if self.macro_running == True:
+                    self.set_status(f"Starting - Cycle {cycle}, Macro Running: {self.macro_running}")
+                else:
+                    self.stop_macro("")
                 # Select Rod
                 if auto_refresh == "on":
                     bag_delay = self._get_var_number("select_rod_duration", self._get_var_number("bag_delay", 0.36, float), float)
@@ -3624,19 +3605,19 @@ class Api:
                 if self.vars["auto_reconnect"] == "on":
                     self._auto_reconnect(shake_x, shake_y)
                 # Cast
-                self.set_status(f"Casting ({casting_mode})")
+                self.set_status(f"Casting ({casting_mode}), Macro Running: {self.macro_running}")
                 if casting_mode == "perfect" or casting_mode == "Perfect":
                     self._execute_cast_perfect()
                 else:
                     self.execute_cast_normal()
                 # Shake
-                self.set_status(f"Shaking ({shake_mode})")
+                self.set_status(f"Shaking ({shake_mode}), Macro Running: {self.macro_running}")
                 if shake_mode == "navigation" or shake_mode == "Navigation":
                     self._execute_shake_navigation()
                 else:
                     self._execute_shake_click(shake_mode)
                 # Minigame
-                self.set_status(f"Playing Bar Minigame {fishing_profile}")
+                self.set_status(f"Playing Bar Minigame ({fishing_profile}), Macro Running: {self.macro_running}")
                 if fishing_profile == "lanes":
                     self._enter_minigame_tranquility()
                 elif fishing_profile == "reverse":
@@ -3649,7 +3630,10 @@ class Api:
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
-            
+            error_lines = full_error.splitlines()
+            error_line = error_lines[1].split("line ")
+            error_line = error_line[1].split(",")
+            error_line = error_line[0]
             try:
                 # Clean the error string so it doesn't break JavaScript execution syntax
                 # We escape backslashes, single quotes, and newlines
@@ -3658,7 +3642,7 @@ class Api:
                 # Construct the self-invoking JS code block
                 js_code = f"""
                 (function() {{
-                    let confirmed = confirm("A fishing error occurred. Please copy the error and report the bug:\\n{e}\\nWould you like to copy the full crash log to your clipboard?");
+                    let confirmed = confirm("An error at line {error_line} occured. Please copy the error and report the bug:\\n{e}\\nWould you like to copy the full crash log to your clipboard?");
                     if (confirmed) {{
                         navigator.clipboard.writeText('{escaped_error}')
                             .then(() => alert("Error log copied to clipboard!"))
@@ -3674,7 +3658,7 @@ class Api:
                 print(full_error)
                 
             self.macro_running = False
-            self.stop_macro(f"Fishing error: {e}")
+            self.stop_macro(f"Error at line {error_line}: {e}")
     # Utilities
     def _check_logging_trigger(self, catch_rate=-1):
         """
@@ -4137,7 +4121,7 @@ class Api:
                     break
             # 3. Fish detected → enter minigame
             if detected == True:
-                self.set_status("Entering Minigame")
+                self.set_status("Finished Shaking - entering minigame")
                 mouse_controller.press(Button.left)
                 time.sleep(0.003)
                 mouse_controller.release(Button.left)
@@ -4195,11 +4179,10 @@ class Api:
                     break
             # 3. Fish detected → enter minigame
             if detected == True:
-                self.set_status("Entering Minigame")
+                self.set_status("Finished Shaking - entering minigame")
                 mouse_controller.press(Button.left)
                 time.sleep(0.003)
                 mouse_controller.release(Button.left)
-                # print("Finished (fish detected)")
                 return  # exit shake cleanly
             attempts += 1
             time.sleep(scan_delay)
@@ -4393,7 +4376,7 @@ class Api:
             fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
             # Step 3: Pixel Search
             if fishing_mode == "line":
-                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_area_center)
+                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_left, fish_right)
             else:
                 fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
             try:
@@ -4444,7 +4427,6 @@ class Api:
                     release_mouse()
             # Step 7: Cleanup
             last_detection_source = detection_source
-            self.is_initial_run = False
             time.sleep(scan_delay)
     def _enter_minigame(self):
         # Areas
@@ -4551,7 +4533,7 @@ class Api:
             # Step 2. Do pixel search
             # Left Side / Main Image
             if fishing_mode == "line":
-                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_area_center)
+                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_left, fish_right)
             else:
                 fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
             try:
@@ -4657,16 +4639,23 @@ class Api:
             elif right_x <= left_x:
                 bar_valid = False
             if bar_valid == False:
-                left_x = self._last_bar_left_x if self._last_bar_left_x is not None else 0
-                right_x = self._last_bar_right_x if self._last_bar_right_x is not None else 0
+                left_x = self.last_left_x if self.last_left_x is not None else 0
+                right_x = self.last_right_x if self.last_right_x is not None else 0
                 bar_center = (left_x + right_x) / 2.0
             if bar_valid == True:
                 self.last_cached_box_length = bar_size
                 self.estimated_box_length = bar_size
-                self._last_bar_left_x = left_x
-                self._last_bar_right_x = right_x
-                self._last_bar_box_size = bar_size
-                self._last_bar_center_x = (left_x + right_x) / 2.0 if left_x is not None and right_x is not None else 0
+                self.last_left_x = left_x
+                self.last_right_x = right_x
+                self.last_bar_size = bar_size
+                self.last_bar_center_x = (left_x + right_x) / 2.0 if left_x is not None and right_x is not None else 0
+            fish_valid = True
+            if fish_x is None:
+                fish_valid = False
+            if fish_valid == False:
+                fish_x = self.last_fish_x if self.last_fish_x is not None else 0
+            if fish_valid == True:
+                self.last_fish_x = fish_x if fish_x is not None else 0
             # Step 5: Lullaby-style minigame
             # METRONOME RHYTHM MODE (Lullaby-style minigame)
             # The metronome_img (upper slice of the fish area) contains:
@@ -4869,7 +4858,6 @@ class Api:
                     hold_mouse(True)
                 elif control2 < -thresh:
                     release_mouse(True)
-            self.is_initial_run = False
             time.sleep(scan_delay)
     # Stop macro
     def stop_macro(self, text="Macro Stopped"):

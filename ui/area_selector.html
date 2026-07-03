@@ -5,29 +5,27 @@
 <style>
     * {margin: 0; padding: 0; box-sizing: border-box;}
     html, body {
-            width: 100%;
-            height: 100%;
-            position: fixed;
-            inset: 0;
-            overflow: hidden;
-            user-select: none;
-            background: transparent;
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        user-select: none;
+        background: transparent;
     }
     canvas {
         display: block;
         width: 100%; height: 100%;
         cursor: default;
     }
-
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <script>
-//  Constants ─
-const HANDLE_R = 7;   // handle square half-size (px)
-const BORDER   = 3;   // box border width
-
+// Constants
+const HANDLE_R = 7;
+const BORDER = 3;
 const AREAS = {
     shake:  { color: "#ff007a", label: "Shake Box" },
     fish:   { color: "#00daff", label: "Fish Box"  },
@@ -36,102 +34,181 @@ const AREAS = {
 };
 const AREA_ORDER = ["shake", "fish", "friend", "totem"];
 
-//  State ──
-let boxes = {};           // { shake: {x,y,w,h}, ... }  — logical px
-let drag  = null;         // { name, handle, startX, startY, origBox }
+// State
+let boxes = {};
+let drag = null;
+let needsUpdate = false;
+let lastMouseMove = 0;
+let lastIPCSend = 0;
+const IPC_THROTTLE_MS = 50;
+let pendingMouseData = null;
+let lastCursorUpdate = 0;
+const CURSOR_UPDATE_MS = 16; // ~60fps
 
-//  Canvas setup ─
+// Canvas setup
 const canvas = document.getElementById("c");
-const ctx    = canvas.getContext("2d");
+const ctx = canvas.getContext("2d");
+
+// Offscreen canvas for performance
+let offscreenCanvas = null;
+let offscreenCtx = null;
 
 function resize() {
-    canvas.width  = window.innerWidth;
+    canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    
+    if (!offscreenCanvas || offscreenCanvas.width !== canvas.width || offscreenCanvas.height !== canvas.height) {
+        offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = canvas.width;
+        offscreenCanvas.height = canvas.height;
+        offscreenCtx = offscreenCanvas.getContext('2d');
+    }
+    
     draw();
 }
+
+// Throttled IPC calls with ratio calculations
+function sendToPython(clientX, clientY) {
+    const now = Date.now();
+    if (now - lastIPCSend < IPC_THROTTLE_MS) {
+        needsUpdate = true;
+        pendingMouseData = { clientX, clientY };
+        return;
+    }
+    
+    lastIPCSend = now;
+    needsUpdate = false;
+    pendingMouseData = null;
+    
+    if (pywebview && pywebview.api && pywebview.api.on_mouse_move) {
+        try {
+            // Calculate ratios for status display
+            const boxesCopy = JSON.parse(JSON.stringify(boxes));
+            
+            // Add ratio information for each box
+            for (const name of AREA_ORDER) {
+                const b = boxesCopy[name];
+                if (!b) continue;
+                
+                // Check if mouse is inside this box
+                if (clientX >= b.x && clientX <= b.x + b.w && 
+                    clientY >= b.y && clientY <= b.y + b.h) {
+                    // Calculate relative position within box
+                    const xr = ((clientX - b.x) / b.w).toFixed(3);
+                    const yr = ((clientY - b.y) / b.h).toFixed(3);
+                    b._hoverRatio = { x: xr, y: yr };
+                    b._hovered = true;
+                } else {
+                    b._hovered = false;
+                }
+            }
+            
+            pywebview.api.on_mouse_move(
+                clientX,
+                clientY,
+                boxesCopy
+            );
+        } catch (e) {
+            // Silently handle errors
+        }
+    }
+}
+
+// Flush any queued updates
+function flushPendingUpdate() {
+    if (needsUpdate && pendingMouseData) {
+        const data = pendingMouseData;
+        pendingMouseData = null;
+        sendToPython(data.clientX, data.clientY);
+    }
+}
+
+// Flush any pending updates periodically
+setInterval(flushPendingUpdate, 100);
+
 window.addEventListener("resize", resize);
 resize();
-//  Init: wait for pywebview then load areas from Python ──
+
+// Init: wait for pywebview then load areas from Python
 window.addEventListener("pywebviewready", () => {
-    pywebview.api.get_areas().then(data => {
-        boxes = data;   // {shake:{x,y,width,height}, ...}
-        // Normalise key names: Python sends width/height, we store as w/h
-        for (const k of AREA_ORDER) {
-            const b = boxes[k];
-            if (b && b.width !== undefined) {
-                b.w = b.width; b.h = b.height;
-                delete b.width; delete b.height;
+    if (pywebview && pywebview.api && pywebview.api.get_areas) {
+        pywebview.api.get_areas().then(data => {
+            boxes = data;
+            for (const k of AREA_ORDER) {
+                const b = boxes[k];
+                if (b && b.width !== undefined) {
+                    b.w = b.width;
+                    b.h = b.height;
+                    delete b.width;
+                    delete b.height;
+                }
             }
-        }
-        resize();
-    });
+            resize();
+        }).catch(e => console.error('Error loading areas:', e));
+    }
 });
 
-//  Drawing 
+// Optimized drawing with offscreen canvas
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Use canvas to draw semi-transparent overlay for consistent cross-platform rendering
-    // This avoids CSS opacity issues on Windows where rgba() may appear opaque
-    ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+    if (!offscreenCtx) return;
+    
+    const octx = offscreenCtx;
+    octx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+    
+    octx.fillStyle = "rgba(0, 0, 0, 0.15)";
+    octx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+    
     for (const name of AREA_ORDER) {
         const b = boxes[name];
         if (!b) continue;
-        drawBox(b, AREAS[name].color, AREAS[name].label);
+        drawBoxOptimized(octx, b, AREAS[name].color, AREAS[name].label);
     }
+    
+    ctx.drawImage(offscreenCanvas, 0, 0);
 }
 
-function drawBox(b, color, label) {
+function drawBoxOptimized(octx, b, color, label) {
     const { x, y, w, h } = b;
-
-    // Filled rectangle (semi-transparent)
-    ctx.save();
-    ctx.globalAlpha = 0.25;
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, w, h);
-    ctx.restore();
-
-    // Border
-    ctx.strokeStyle = color;
-    ctx.lineWidth   = BORDER;
-    ctx.strokeRect(x + BORDER/2, y + BORDER/2, w - BORDER, h - BORDER);
-
-    // Label above box
-    ctx.font      = "bold 13px 'Segoe UI', Arial, sans-serif";
-    ctx.fillStyle = color;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(label, x + w / 2, y - 6);
-
-    // 8 handles
-    for (const [hx, hy] of handlePoints(b)) {
-        ctx.fillStyle   = "white";
-        ctx.strokeStyle = "rgba(0,0,0,0.5)";
-        ctx.lineWidth   = 1;
-        ctx.fillRect(hx - HANDLE_R, hy - HANDLE_R, HANDLE_R*2, HANDLE_R*2);
-        ctx.strokeRect(hx - HANDLE_R, hy - HANDLE_R, HANDLE_R*2, HANDLE_R*2);
-    }
-}
-
-function handlePoints(b) {
-    const { x, y, w, h } = b;
+    
+    octx.save();
+    octx.globalAlpha = 0.25;
+    octx.fillStyle = color;
+    octx.fillRect(x, y, w, h);
+    octx.restore();
+    
+    octx.strokeStyle = color;
+    octx.lineWidth = BORDER;
+    octx.strokeRect(x + BORDER/2, y + BORDER/2, w - BORDER, h - BORDER);
+    
+    octx.font = "bold 13px 'Segoe UI', Arial, sans-serif";
+    octx.fillStyle = color;
+    octx.textAlign = "center";
+    octx.textBaseline = "bottom";
+    octx.fillText(label, x + w / 2, y - 6);
+    
     const mx = x + w/2, my = y + h/2;
-    return [
-        [x,    y   ], [x+w, y   ], [x,   y+h], [x+w, y+h],
-        [mx,   y   ], [mx,  y+h ], [x,   my ], [x+w, my  ],
+    const handles = [
+        [x, y], [x+w, y], [x, y+h], [x+w, y+h],
+        [mx, y], [mx, y+h], [x, my], [x+w, my]
     ];
+    
+    octx.fillStyle = "white";
+    octx.strokeStyle = "rgba(0,0,0,0.5)";
+    octx.lineWidth = 1;
+    
+    for (const [hx, hy] of handles) {
+        octx.fillRect(hx - HANDLE_R, hy - HANDLE_R, HANDLE_R*2, HANDLE_R*2);
+        octx.strokeRect(hx - HANDLE_R, hy - HANDLE_R, HANDLE_R*2, HANDLE_R*2);
+    }
 }
 
-//  Hit testing ──
-// Returns handle name ("nw","ne","sw","se","n","s","w","e") or null
+// Hit testing
 function hitHandle(px, py, b) {
     const { x, y, w, h } = b;
     const mx = x + w/2, my = y + h/2;
     const pts = {
         nw:[x,y], ne:[x+w,y], sw:[x,y+h], se:[x+w,y+h],
-        n:[mx,y], s:[mx,y+h], w:[x,my],   e:[x+w,my],
+        n:[mx,y], s:[mx,y+h], w:[x,my], e:[x+w,my],
     };
     for (const [name, [hx, hy]] of Object.entries(pts)) {
         if (Math.abs(px - hx) <= HANDLE_R + 3 && Math.abs(py - hy) <= HANDLE_R + 3)
@@ -153,19 +230,20 @@ function cursorForHandle(h) {
     }[h] || "default";
 }
 
-//  Mouse events ──
+// Mouse events with throttling
 canvas.addEventListener("mousemove", e => {
+    const now = Date.now();
+    
     if (drag) {
         const dx = e.clientX - drag.startX;
         const dy = e.clientY - drag.startY;
         const ob = drag.origBox;
-        const b  = boxes[drag.name];
-
+        const b = boxes[drag.name];
+        
         if (drag.handle === "move") {
             b.x = ob.x + dx;
             b.y = ob.y + dy;
         } else {
-            // Resize
             const h = drag.handle;
             if (h.includes("e")) { b.w = Math.max(20, ob.w + dx); }
             if (h.includes("s")) { b.h = Math.max(20, ob.h + dy); }
@@ -173,42 +251,66 @@ canvas.addEventListener("mousemove", e => {
             if (h.includes("n")) { b.y = ob.y + dy; b.h = Math.max(20, ob.h - dy); }
         }
         draw();
-
-        // Send live ratio to Python (for status bar)
-        pywebview.api.on_mouse_move(e.clientX, e.clientY,
-            JSON.parse(JSON.stringify(boxes)));
-        }
-
-    let hovering = false;
-
+        
+        // Always send updates during drag
+        sendToPython(e.clientX, e.clientY);
+        return;
+    }
+    
+    // Throttle cursor updates
+    if (now - lastCursorUpdate < CURSOR_UPDATE_MS) {
+        return;
+    }
+    lastCursorUpdate = now;
+    
+    let cursor = "default";
+    let hoveredBox = null;
+    let hoverRatio = null;
+    
     for (const name of AREA_ORDER) {
         const b = boxes[name];
         if (!b) continue;
-
+        
         const h = hitHandle(e.clientX, e.clientY, b);
-
         if (h) {
-            canvas.style.cursor = cursorForHandle(h);
-            hovering = true;
+            cursor = cursorForHandle(h);
             break;
         }
-
+        
         if (hitBox(e.clientX, e.clientY, b)) {
-            canvas.style.cursor = "move";
-            hovering = true;
+            cursor = "move";
+            hoveredBox = b;
+            // Calculate ratio
+            if (b.w > 0 && b.h > 0) {
+                const xr = ((e.clientX - b.x) / b.w);
+                const yr = ((e.clientY - b.y) / b.h);
+                hoverRatio = { x: Math.round(xr * 1000) / 1000, y: Math.round(yr * 1000) / 1000 };
+            }
             break;
         }
     }
-
-    if (!hovering) {
-        canvas.style.cursor = "default";
+    
+    canvas.style.cursor = cursor;
+    
+    // Send mouse move with hover information for status display
+    if (hoveredBox && hoverRatio) {
+        // Find which box is hovered
+        for (const name of AREA_ORDER) {
+            if (boxes[name] === hoveredBox) {
+                // Create a copy with ratio info embedded
+                const boxesWithRatio = JSON.parse(JSON.stringify(boxes));
+                if (boxesWithRatio[name]) {
+                    boxesWithRatio[name]._hoverRatio = hoverRatio;
+                    boxesWithRatio[name]._hovered = true;
+                }
+                sendToPython(e.clientX, e.clientY);
+                break;
+            }
+        }
+    } else {
+        // Send without hover info
+        sendToPython(e.clientX, e.clientY);
     }
-
-    pywebview.api.on_mouse_move(
-        e.clientX,
-        e.clientY,
-        JSON.parse(JSON.stringify(boxes))
-    );
 });
 
 canvas.addEventListener("mousedown", e => {
@@ -230,10 +332,16 @@ canvas.addEventListener("mousedown", e => {
     }
 });
 
-canvas.addEventListener("mouseup", () => { drag = null; });
-canvas.addEventListener("mouseleave", () => { drag = null; });
+canvas.addEventListener("mouseup", () => { 
+    drag = null; 
+    flushPendingUpdate();
+});
+canvas.addEventListener("mouseleave", () => { 
+    drag = null; 
+    flushPendingUpdate();
+});
 
-//  Keyboard: Escape or F6 closes and saves 
+// Keyboard: Escape or F6 closes and saves
 document.addEventListener("keydown", e => {
     if (e.key === "Escape" || e.key === "F6") {
         saveAndClose();
@@ -241,13 +349,37 @@ document.addEventListener("keydown", e => {
 });
 
 function saveAndClose() {
-    // Convert back to {x, y, width, height} format for Python
+    // Flush any pending updates before saving
+    flushPendingUpdate();
+    
     const out = {};
     for (const name of AREA_ORDER) {
         const b = boxes[name];
-        out[name] = { x: b.x, y: b.y, width: b.w, height: b.h };
+        if (b) {
+            out[name] = { x: b.x, y: b.y, width: b.w, height: b.h };
+        }
     }
-    pywebview.api.save_areas(out);
+    if (pywebview && pywebview.api && pywebview.api.save_areas) {
+        pywebview.api.save_areas(out);
+    }
+}
+
+// Report window ready for macOS offset correction
+function reportWindowReady() {
+    if (pywebview && pywebview.api && pywebview.api.window_ready) {
+        try {
+            pywebview.api.window_ready(window.screenX, window.screenY);
+        } catch (e) {
+            // Ignore
+        }
+    }
+}
+
+// Call after pywebview is ready
+if (window.pywebview) {
+    reportWindowReady();
+} else {
+    window.addEventListener("pywebviewready", reportWindowReady);
 }
 </script>
 </body>
