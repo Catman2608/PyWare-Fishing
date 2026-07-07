@@ -54,7 +54,7 @@ keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-APP_VERSION = "4.32"
+APP_VERSION = "4.4"
 BETA_VERSION = 0
 def get_macos_menu_offset():
     if sys.platform != "darwin":
@@ -1263,6 +1263,7 @@ class Api:
         self._thread_local = threading.local()
         self._monitor = {}      # pre-allocated monitor dict, reused every grab
         self._scale_cache = None  # cached DPI scale factor
+        self.stop_event = threading.Event()
         # Buffer for capture/logic thread decoupling (used in start_macro())
         self._cap_lock = threading.Lock()
         self._cap_frame = None    # latest full screen frame
@@ -1921,16 +1922,18 @@ class Api:
                     return
 
                 else:
+                    self.stop_event.clear()
                     # Save current settings to config before starting
                     self.save_config(self.current_config, self.vars)
                     if automation_mode == "fishing":
-                        threading.Thread(target=self.start_fishing, daemon=True).start()
+                        self.macro_thread = threading.Thread(target=self.start_fishing, daemon=True)
                     elif automation_mode == "appraisal":
-                        threading.Thread(target=self.start_appraisal, daemon=True).start()
+                        self.macro_thread = threading.Thread(target=self.start_appraisal, daemon=True)
                     elif automation_mode == "enchant":
-                        threading.Thread(target=self.start_enchantment, daemon=True).start()
+                        self.macro_thread = threading.Thread(target=self.start_enchantment, daemon=True)
                     elif automation_mode == "angler":
-                        threading.Thread(target=self.start_angler, daemon=True).start()
+                        self.macro_thread = threading.Thread(target=self.start_angler, daemon=True)
+                    self.macro_thread.start()
             elif key == bar_areas_key:
                 self.open_area_selector()
             elif key == stop_key:
@@ -3608,6 +3611,7 @@ class Api:
             self._click_at(angler_click_x, angler_click_y)
             # STEP 8: COOLDOWN
             time.sleep(utility_restart_delay)
+        self.set_status("Macro Stopped")
     # Start enchanting
     def start_enchantment(self):
         self._stop_active_capture()
@@ -3658,6 +3662,7 @@ class Api:
             if self.macro_running == False:
                 self.stop_macro("")
             time.sleep(click_delay2)
+        self.set_status("Macro Stopped")
     # Start appraisal
     def start_appraisal(self):
         self._stop_active_capture()
@@ -3701,6 +3706,7 @@ class Api:
                 self.stop_macro("Appraisal finished")
             if self.macro_running == False:
                 self.stop_macro("")
+        self.set_status("Macro Stopped")
     # Start main automation
     def start_fishing(self):
         self._stop_active_capture()
@@ -3755,19 +3761,28 @@ class Api:
                 if self.vars["auto_reconnect"] == "on":
                     self._auto_reconnect(shake_x, shake_y)
                 # Cast
-                self.set_status(f"Casting ({casting_mode}), Macro Running: {self.macro_running}")
+                if self.macro_running == True:
+                    self.set_status(f"Casting ({casting_mode}), Macro Running: {self.macro_running}")
+                else:
+                    break
                 if casting_mode == "perfect" or casting_mode == "Perfect":
                     self._execute_cast_perfect()
                 else:
                     self.execute_cast_normal()
                 # Shake
-                self.set_status(f"Shaking ({shake_mode}), Macro Running: {self.macro_running}")
+                if self.macro_running == True:
+                    self.set_status(f"Shaking ({shake_mode}), Macro Running: {self.macro_running}")
+                else:
+                    break
                 if shake_mode == "navigation" or shake_mode == "Navigation":
                     self._execute_shake_navigation()
                 else:
                     self._execute_shake_click(shake_mode)
                 # Minigame
-                self.set_status(f"Playing Bar Minigame ({fishing_profile}), Macro Running: {self.macro_running}")
+                if self.macro_running == True:
+                    self.set_status(f"Playing Bar Minigame ({fishing_profile}), Macro Running: {self.macro_running}")
+                else:
+                    break
                 if fishing_profile == "lanes":
                     self._enter_minigame_tranquility()
                 elif fishing_profile == "reverse":
@@ -3777,6 +3792,8 @@ class Api:
                 successful_catches = successful_catches + 1 if catch_success == True else successful_catches
                 catch_rate = (successful_catches / cycle)
                 catch_rate_show = round(catch_rate * 100)
+                self.set_status(f"Catch rate: {catch_rate_show}, Macro Running: {self.macro_running}")
+            self.set_status("Macro Stopped")
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
@@ -4314,12 +4331,10 @@ class Api:
             attempts += 1
             time.sleep(scan_delay)
         # If macro is not running, stop here
-        time.sleep(2)
         self._set_fish_overlay_mode("idle")
         return True
     def _execute_shake_navigation(self):
         """Spams the enter key until fish detection is found"""
-        self.set_status("Shake Mode: Navigation")
         # Get areas (scale factor applied inside _get_areas)
         fish_left_s, fish_top_s, fish_right_s, fish_bottom_s, _, _         = self._get_areas("fish")
         friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self._get_areas("friend")
@@ -4381,7 +4396,6 @@ class Api:
             attempts += 1
             time.sleep(scan_delay)
         # If macro is not running, stop here
-        time.sleep(2)
         self._set_fish_overlay_mode("idle")
         return True
     def _enter_minigame_tranquility(self):
@@ -5092,7 +5106,9 @@ class Api:
         self._set_fish_overlay_mode("idle")
         return True
     # Stop macro
-    def stop_macro(self, text="Macro Stopped"):
+    def stop_macro(self, text="Stopping Macro"):
+        if self.macro_running == False:
+            return
         self.macro_running = False
         self._fish_overlay_cast_bounds = None
         self._stop_active_capture(join_timeout=1.0)

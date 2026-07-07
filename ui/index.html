@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PyWare Fishing V4.32</title>
+    <title>PyWare Fishing V4.4</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -10,7 +10,7 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
-                PyWare Fishing V4.32
+                PyWare Fishing V4.4
             </div>
             <button class="tab-button active" onclick="switchTab('basic')">
                 Basic
@@ -47,6 +47,7 @@
                 </div>
                 <button onclick="openConfigManager()"> Manage </button>
                 <button onclick="openSupportTab()"> Support </button>
+                <button onclick="openAboutTab()"> About </button>
             </div>
         </div>
         <div class="main-area">
@@ -56,7 +57,7 @@
                     <span class="breadcrumb-current" id="active-tab-title">Basic</span>
                     <div class="status-container">
                         <span class="status-dot"></span>
-                        <span id="status-label" class="status-text">Ready</span>
+                        <span id="status-label" class="status-text">Error: Status Label can't load properly</span>
                     </div>
                 </div>
             </div>
@@ -639,6 +640,26 @@
                     Settings Guide
                 </button>
             </div>
+        </div>
+    </div>
+    <!-- About Modal -->
+    <div id="about-modal-overlay" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h2>About PyWare Fishing</h2>
+                <button
+                    class="modal-close"
+                    onclick="closeAboutTab()">
+                    ×
+                </button>
+            </div>
+            <p>
+                PyWare Fishing is developed and maintained by Catman2608.
+            </p>
+            <p>
+                Any person claiming to be part of this project or its development, other than Catman2608
+                is most likely lying. Be cautious of fake contributors or impersonators.
+            </p>
         </div>
     </div>
 </body>

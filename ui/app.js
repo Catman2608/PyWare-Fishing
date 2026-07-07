@@ -1,4 +1,4 @@
-const APP_VERSION = "4.32";
+const APP_VERSION = "4.4";
 const BETA_VERSION = "0";
 let currentConfig = null;
 const validHexColor = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
@@ -38,6 +38,39 @@ window.addEventListener("pywebviewready", async () => {
     updateColorPreviews();
 });
 
+// Top Bar
+function updateTopbarInfo() {
+    const configSelect = document.getElementById("disabled");
+    const macroModeSelect = document.getElementById("automation_mode");
+    
+    const configNameEl = document.getElementById("topbar-config-name");
+    const macroModeEl = document.getElementById("topbar-macro-mode");
+    
+    if (configNameEl && configSelect) {
+        configNameEl.textContent = configSelect.value || "Default";
+    }
+    if (macroModeEl && macroModeSelect) {
+        const val = macroModeSelect.value;
+        macroModeEl.textContent = val ? val.charAt(0).toUpperCase() + val.slice(1) : "None";
+    }
+}
+
+async function toggleMacroFromTopbar() {
+    const btn = document.getElementById("topbar-start-btn");
+    if (btn) {
+        if (btn.classList.contains("start")) {
+            btn.className = "topbar-btn stop";
+            btn.innerHTML = `<span class="btn-icon">■</span> Stop Macro`;
+            await startMacro();
+        } else {
+            btn.className = "topbar-btn start";
+            btn.innerHTML = `<span class="btn-icon">▶</span> Start Macro`;
+            await pywebview.api.stop_macro();
+        }
+    }
+}
+
+// Tab Switcher
 function switchTab(tabId) {
     document.querySelectorAll(".tab-content").forEach(tab => {
         tab.classList.remove("active");
@@ -453,7 +486,20 @@ async function openLink(link) {
         );
     }
 }
-
+function openAboutTab() {
+    document
+        .getElementById(
+            "about-modal-overlay"
+        )
+        .classList.add("active");
+}
+function closeAboutTab() {
+    document
+        .getElementById(
+            "about-modal-overlay"
+        )
+        .classList.remove("active");
+}
 function openSupportTab() {
     document
         .getElementById(
@@ -567,7 +613,7 @@ function updateAccentColor() {
     const rightElement = document.getElementById("right_color");
     const fishElement = document.getElementById("fish_color");
     
-    // Safely get values, default to empty string if element doesn't exist
+    // Safely get values
     const left = leftElement ? leftElement.value.trim() : "";
     const right = rightElement ? rightElement.value.trim() : "";
     const fish = fishElement ? fishElement.value.trim() : "";
@@ -575,12 +621,9 @@ function updateAccentColor() {
     // Normalize colors
     const normalizedLeft = normalizeHexColor(left);
     const normalizedRight = normalizeHexColor(right);
-    const normalizedfish = normalizeHexColor(fish);
+    const normalizedFish = normalizeHexColor(fish);
     
-    // Debug logging
-    console.log("Normalized colors:", {normalizedLeft, normalizedRight, normalizedfish});
-    
-    // Check if a color is too close to white, gray, or black
+    // Helper: is a color too neutral (white/gray/black)?
     function isTooNeutral(hex) {
         if (!hex) return true;
         const brightness = hexBrightness(hex);
@@ -588,91 +631,64 @@ function updateAccentColor() {
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const isGray = (max - min) < 30;
-        const isWhite = brightness > 235; // Lowered threshold to catch #F1F1F1
+        const isWhite = brightness > 235;
         const isBlack = brightness < 15;
-        
-        console.log(`Color ${hex}: brightness=${brightness}, isWhite=${isWhite}, isGray=${isGray}, isBlack=${isBlack}`);
-        
         return isWhite || isBlack || isGray;
     }
     
-    const leftDiscarded = isTooNeutral(normalizedLeft);
-    const rightDiscarded = isTooNeutral(normalizedRight);
-    const fishDiscarded = isTooNeutral(normalizedfish);
+    const leftValid = !isTooNeutral(normalizedLeft);
+    const rightValid = !isTooNeutral(normalizedRight);
+    const fishValid = !isTooNeutral(normalizedFish);
     
-    console.log("Discarded:", {leftDiscarded, rightDiscarded, fishDiscarded});
+    let leftGradient = "#ffffff";
+    let rightGradient = "#ffffff";
+    let accentColor = "#ffffff"; // Always a valid hex color
+    let isGradient = false;
     
-    let finalAccent = "#ffffff"; // Default fallback
-    
-    // Determine accent color based on the rules
-    if (!leftDiscarded && !rightDiscarded) {
-        // Both bars are valid - use gradient between left and right
-        console.log("Both valid - using gradient");
-        finalAccent = "gradient";
-    } else if (!leftDiscarded && rightDiscarded) {
-        // Only left bar is valid
-        console.log("Only left valid - using left");
-        finalAccent = normalizedLeft;
-    } else if (leftDiscarded && !rightDiscarded) {
-        // Only right bar is valid
-        console.log("Only right valid - using right");
-        finalAccent = normalizedRight;
+    if (leftValid && rightValid) {
+        // Both sides valid → gradient
+        leftGradient = normalizedLeft;
+        rightGradient = normalizedRight;
+        accentColor = normalizedLeft; // Use left color for accent
+        isGradient = true;
+    } else if (leftValid) {
+        // Only left valid → static
+        leftGradient = normalizedLeft;
+        rightGradient = normalizedLeft;
+        accentColor = normalizedLeft;
+    } else if (rightValid) {
+        // Only right valid → static
+        leftGradient = normalizedRight;
+        rightGradient = normalizedRight;
+        accentColor = normalizedRight;
+    } else if (fishValid) {
+        // Fallback to fish
+        leftGradient = normalizedFish;
+        rightGradient = normalizedFish;
+        accentColor = normalizedFish;
     } else {
-        // Both bars discarded - use fish color
-        console.log("Both discarded - using fish");
-        if (!fishDiscarded) {
-            finalAccent = normalizedfish;
-        } else {
-            // Fish also discarded - keep default
-            console.log("Fish also discarded - using default");
-            finalAccent = "#ffffff";
-        }
+        // Ultimate fallback
+        leftGradient = "#ffffff";
+        rightGradient = "#ffffff";
+        accentColor = "#ffffff";
     }
-    
-    console.log("Final accent:", finalAccent);
     
     // Apply CSS variables
-    if (finalAccent === "gradient") {
-        // Use gradient between left and right
-        document.documentElement.style.setProperty(
-            "--accent-color",
-            normalizedLeft
-        );
-        document.documentElement.style.setProperty(
-            "--left-gradient",
-            normalizedLeft
-        );
-        document.documentElement.style.setProperty(
-            "--right-gradient",
-            normalizedRight
-        );
-    } else {
-        // Single color
-        document.documentElement.style.setProperty(
-            "--accent-color",
-            finalAccent
-        );
-        document.documentElement.style.setProperty(
-            "--left-gradient",
-            normalizedLeft || finalAccent
-        );
-        document.documentElement.style.setProperty(
-            "--right-gradient",
-            normalizedRight || finalAccent
-        );
-    }
+    document.documentElement.style.setProperty("--left-gradient", leftGradient);
+    document.documentElement.style.setProperty("--right-gradient", rightGradient);
+    document.documentElement.style.setProperty("--accent-color", accentColor);
     
-    // Glow version
-    const accentForGlow = finalAccent === "gradient" ? normalizedLeft : finalAccent;
-    const r = parseInt(accentForGlow.substr(1,2), 16);
-    const g = parseInt(accentForGlow.substr(3,2), 16);
-    const b = parseInt(accentForGlow.substr(5,2), 16);
-    
+    // Glow version – use left color if gradient, otherwise the static color
+    const glowBase = isGradient ? normalizedLeft : accentColor;
+    const r = parseInt(glowBase.substr(1,2), 16);
+    const g = parseInt(glowBase.substr(3,2), 16);
+    const b = parseInt(glowBase.substr(5,2), 16);
     document.documentElement.style.setProperty(
         "--accent-glow",
         `rgba(${r}, ${g}, ${b}, 0.4)`
     );
     
+    // Update button text contrast
     updateButtonContrast();
 }
 
@@ -718,41 +734,6 @@ document.addEventListener("DOMContentLoaded", () => {
     updateAccentColor();
     updateButtonContrast();
 });
-
-// =========================
-// TOP BAR HELPERS
-// =========================
-function updateTopbarInfo() {
-    const configSelect = document.getElementById("disabled");
-    const macroModeSelect = document.getElementById("automation_mode");
-    
-    const configNameEl = document.getElementById("topbar-config-name");
-    const macroModeEl = document.getElementById("topbar-macro-mode");
-    
-    if (configNameEl && configSelect) {
-        configNameEl.textContent = configSelect.value || "Default";
-    }
-    if (macroModeEl && macroModeSelect) {
-        const val = macroModeSelect.value;
-        macroModeEl.textContent = val ? val.charAt(0).toUpperCase() + val.slice(1) : "None";
-    }
-}
-
-async function toggleMacroFromTopbar() {
-    const btn = document.getElementById("topbar-start-btn");
-    if (btn) {
-        if (btn.classList.contains("start")) {
-            btn.className = "topbar-btn stop";
-            btn.innerHTML = `<span class="btn-icon">■</span> Stop Macro`;
-            await startMacro();
-        } else {
-            btn.className = "topbar-btn start";
-            btn.innerHTML = `<span class="btn-icon">▶</span> Start Macro`;
-            await pywebview.api.stop_macro();
-        }
-    }
-}
-
 
 async function startMacro() {
     // Save current UI settings first

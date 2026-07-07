@@ -1,4 +1,3 @@
-/* Initialization */
 * {
     margin: 0;
     padding: 0;
@@ -8,15 +7,15 @@
 }
 
 :root {
-    --accent-color: #7000ff;
+    --accent-color: #3b5cff;
     --accent-glow: rgba(59, 92, 255, 0.4);
-    --left-gradient: #553bf5;
-    --right-gradient: #9a13e5;
+    --left-gradient: #3b82f6;
+    --right-gradient: #8b5cf6;
     --button-text: white;
 }
 
 body {
-    background: #100025;
+    background: #05051b;
     color: white;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     overflow: hidden;
@@ -26,6 +25,7 @@ hr {
     margin: 20px 0;
 }
 
+/* Layout ── */
 .app {
     display: flex;
     height: 100vh;
@@ -39,11 +39,11 @@ hr {
     overflow: hidden;
 }
 
-/* Top Bar */
+/* Top Bar ── */
 .topbar {
     height: 64px;
     min-height: 64px;
-    background: rgba(10, 0, 64, 0.6);
+    background: rgba(10, 10, 32, 0.6);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -65,6 +65,25 @@ hr {
     font-weight: 500;
 }
 
+.breadcrumb-prefix {
+    color: rgba(255, 255, 255, 0.4);
+    letter-spacing: 0.5px;
+}
+
+.breadcrumb-separator {
+    color: rgba(255, 255, 255, 0.25);
+}
+
+.breadcrumb-current {
+    color: var(--accent-color);
+    text-shadow: 0 0 10px var(--accent-glow);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    transition: color 0.2s ease, text-shadow 0.2s ease;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
 .topbar-right {
     display: flex;
     align-items: center;
@@ -80,6 +99,15 @@ hr {
     border: 1px solid rgba(255, 255, 255, 0.06);
     padding: 6px 12px;
     border-radius: 8px;
+}
+
+.info-label {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.info-value {
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 600;
 }
 
 /* Premium Topbar Button ── */
@@ -122,172 +150,8 @@ hr {
     box-shadow: 0 6px 16px rgba(239, 68, 68, 0.45);
 }
 
-/* Breadcrumb */
-.breadcrumb-prefix {
-    color: rgba(255, 255, 255, 0.4);
-    letter-spacing: 0.5px;
-}
-
-.breadcrumb-separator {
-    color: rgba(255, 255, 255, 0.25);
-}
-
-.breadcrumb-current {
-    color: var(--accent-color);
-    text-shadow: 0 0 10px var(--accent-glow);
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    transition: color 0.2s ease, text-shadow 0.2s ease;
-    flex: 0 0 auto;
-    white-space: nowrap;
-}
-
-.info-label {
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.info-value {
-    color: rgba(255, 255, 255, 0.95);
-    font-weight: 600;
-}
-
 .btn-icon {
     font-size: 11px;
-}
-
-/* Card */
-.card {
-    background: #150030;
-    border: 2px solid #423350;
-    border-radius: 10px;
-    padding: 15px;
-    margin-top: 15px;
-
-    box-shadow:
-        0 4px 12px rgba(0,0,0,.35),
-        inset 0 1px 0 rgba(255,255,255,.03);
-}
-
-.card button {
-    background: linear-gradient(to right, var(--left-gradient), var(--right-gradient));
-    border: none;
-    color: var(--button-text);
-    padding: 8px 15px;
-    border-radius: 10px;
-    cursor: pointer;
-    margin-top: 16px;
-    box-shadow:
-        0 2px 5px rgba(0,0,0,.4);
-
-    transition:.18s;
-}
-
-.card button:hover{
-
-    transform:translateY(-1px);
-
-    box-shadow:
-        0 5px 15px rgba(0,0,0,.45);
-
-    filter:brightness(1.08);
-}
-
-.tab-content h1,
-.card h3 {
-    color: var(--accent-color);
-    text-shadow: 0 0 5px var(--accent-glow);
-    margin-bottom: 12px;
-}
-
-.card h3 {
-    text-shadow: 0 0 12px var(--accent-glow);
-    margin-bottom: 10px;
-}
-
-
-/* Sidebar ── */
-.sidebar {
-    width: 240px;
-    min-width: 220px;
-    max-width: 260px;
-    background: #100036;
-    border-right: 1px solid rgba(255,255,255,.10);
-    box-shadow: 2px 0 12px rgba(0,0,0,.35);
-    padding: 22px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-
-.sidebar p {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 13px;
-}
-
-
-/* Sidebar Tabs ── */
-.tab-button {
-    position: relative;
-    background: transparent;
-    border: none;
-    color: rgba(255, 255, 255, 0.78);
-    padding: 8px 14px 10px 14px;
-    border-radius: 8px;
-    text-align: left;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition:
-        background 0.16s ease,
-        color 0.16s ease,
-        transform 0.16s ease;
-}
-
-/* Left accent bar */
-.tab-button::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 8px;
-    bottom: 8px;
-    width: 3px;
-    border-radius: 999px;
-    background:
-        linear-gradient(
-            to bottom,
-            var(--left-gradient),
-            var(--right-gradient)
-        );
-    opacity: 0;
-    transition:
-        opacity 0.18s ease,
-        transform 0.18s ease;
-    transform: scaleY(0.6);
-}
-
-/* Hover */
-.tab-button:hover {
-    background: rgba(255, 255, 255, 0.06);
-    transform:translateX(3px);
-    color: rgba(255, 255, 255, 0.96);
-}
-
-/* Active */
-.tab-button.active {
-    background: rgba(255, 255, 255, 0.07);
-    color: white;
-}
-
-/* Show left line */
-.tab-button.active::before {
-    opacity: 1;
-    transform: scaleY(1);
-}
-
-/* Keyboard focus */
-.tab-button:focus-visible {
-    outline: 2px solid rgba(255,255,255,0.18);
-    outline-offset: 2px;
 }
 
 @keyframes pulse-border {
@@ -305,7 +169,25 @@ hr {
 
 }
 
-/* Logo */
+/* Sidebar ── */
+.sidebar {
+    width: 240px;
+    min-width: 220px;
+    max-width: 260px;
+    background: rgba(20, 20, 50, 0.95);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sidebar p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+}
+
+/* Merged duplicate .logo blocks */
 .logo {
     font-size: 18px;
     font-weight: 700;
@@ -315,7 +197,7 @@ hr {
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 5px var(--accent-glow);
+    text-shadow: 0 0 18px var(--accent-glow);
 }
 
 .config-section {
@@ -394,6 +276,70 @@ hr {
 
 }
 
+/* Sidebar Tabs ── */
+.tab-button {
+    position: relative;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.78);
+    padding: 8px 14px 10px 14px;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+        background 0.16s ease,
+        color 0.16s ease,
+        transform 0.16s ease;
+}
+
+/* Left accent bar */
+.tab-button::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 999px;
+    background:
+        linear-gradient(
+            to bottom,
+            var(--left-gradient),
+            var(--right-gradient)
+        );
+    opacity: 0;
+    transition:
+        opacity 0.18s ease,
+        transform 0.18s ease;
+    transform: scaleY(0.6);
+}
+
+/* Hover */
+.tab-button:hover {
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(255, 255, 255, 0.96);
+}
+
+/* Active */
+.tab-button.active {
+    background: rgba(255, 255, 255, 0.07);
+    color: white;
+}
+
+/* Show left line */
+.tab-button.active::before {
+    opacity: 1;
+    transform: scaleY(1);
+}
+
+/* Keyboard focus */
+.tab-button:focus-visible {
+    outline: 2px solid rgba(255,255,255,0.18);
+    outline-offset: 2px;
+}
+
 /* Content ── */
 .content {
     flex: 1;
@@ -420,17 +366,45 @@ hr {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #41394a; /* Slightly lighter than your dark background */
+  background: #3a3f4b; /* Slightly lighter than your dark background */
   border-radius: 10px; /* Round the ends */
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #534a5c; /* Lighten slightly on hover */
+  background: #4b515d; /* Lighten slightly on hover */
 }
 
-/* Buttons */
+/* Cards ─ */
+.card {
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 15px;
+    margin-top: 15px;
+    backdrop-filter: blur(15px);
+}
+
+/* Buttons (global) ─ */
 button {
     font-family: inherit;
+}
+
+.card button {
+    background: linear-gradient(to right, var(--left-gradient), var(--right-gradient));
+    border: none;
+    color: var(--button-text);
+    padding: 8px 15px;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-top: 16px;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.card button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px var(--accent-glow);
 }
 
 /* Form Rows */
@@ -466,11 +440,11 @@ button {
 }
 
 .text input:focus {
-    border-color: rgba(150, 70, 255, 0.8);
-    box-shadow: 0 0 12px rgba(150, 70, 255, 0.25);
+    border-color: rgba(70, 100, 255, 0.8);
+    box-shadow: 0 0 12px rgba(70, 100, 255, 0.25);
 }
 
-/* Dropdowns */
+/* Dropdowns - FIXED */
 .dropdown {
     display: flex;
     align-items: center;
@@ -482,7 +456,7 @@ button {
 /* Unified dropdown and select styles with proper padding */
 .dropdown select,
 .config-section select {
-    background-color: #1c0f29;
+    background-color: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.06);
     color: rgba(255, 255, 255, 0.9);
     border-radius: 10px;
@@ -515,20 +489,20 @@ button {
 }
 
 .dropdown select:focus {
-    border-color: rgba(150, 70, 255, 0.8);
-    box-shadow: 0 0 12px rgba(150, 70, 255, 0.25);
+    border-color: rgba(70, 100, 255, 0.8);
+    box-shadow: 0 0 12px rgba(70, 100, 255, 0.25);
 }
 
 .dropdown option,
 .config-section select option {
-    background: #1b1126;
+    background: #111827;
     color: white;
 }
 
-/* Dropdown labels */
+/* Dropdown labels - FIXED to match text size */
 .dropdown label {
     color: rgba(255, 255, 255, 0.9);
-    font-size: 15px;
+    font-size: 15px; /* Matches .text label size */
     min-width: 160px;
 }
 
@@ -615,17 +589,13 @@ button {
 }
 
 .simple-box {
-    background: #221b29;
-    border: 1px solid #393045;
+    background: #1e1e1e;
+    border: 1px solid #2d2d2d;
     border-radius: 12px;
     padding: 14px;
     display: flex;
     flex-direction: column;
     gap: 10px;
-
-    box-shadow:
-        0 4px 10px rgba(0,0,0,.30),
-        inset 0 1px 0 rgba(255,255,255,.03);
 }
 
 /* Merged duplicate .simple-box h4 blocks */
@@ -656,6 +626,19 @@ button {
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* Accent Theming */
+.tab-content h1,
+.card h3 {
+    color: var(--accent-color);
+    text-shadow: 0 0 18px var(--accent-glow);
+    margin-bottom: 12px;
+}
+
+.card h3 {
+    text-shadow: 0 0 12px var(--accent-glow);
+    margin-bottom: 10px;
+}
+
 /* Config Modal ── */
 .button-row {
     display: flex;
@@ -683,8 +666,8 @@ button {
 }
 
 .modal-window {
-    width: 450px;
-    background: rgba(40, 20, 50, 0.96);
+    width: 420px;
+    background: rgba(20, 20, 50, 0.96);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 24px;
     padding: 24px;
@@ -699,8 +682,7 @@ button {
     margin-bottom: 20px;
 }
 
-.modal-header h2,
-.modal-window h2 {
+.modal-header h2 {
     font-size: 22px;
     font-weight: 700;
     background: linear-gradient(
@@ -782,8 +764,6 @@ button {
 }
 
 /* Animated Gradient Text */
-.breadcrumb-current,
-.logo,
 .tab-content h1,
 .card h3 {
     background:
