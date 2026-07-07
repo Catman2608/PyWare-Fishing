@@ -2013,20 +2013,41 @@ class Api:
             2 = release (release only)
         """
         key = str(key2)
+
+        # Convert special key names
+        special_keys = {
+            "enter": Key.enter,
+            "return": Key.enter,
+            "tab": Key.tab,
+            "space": Key.space,
+            "esc": Key.esc,
+            "escape": Key.esc,
+            "backspace": Key.backspace,
+            "delete": Key.delete,
+            "up": Key.up,
+            "down": Key.down,
+            "left": Key.left,
+            "right": Key.right,
+        }
+
+        key = special_keys.get(key.lower(), key)
+
         if sys.platform == "darwin":
-            send_key(key, delay=delay, click_type=click_type)
+            if key == "enter":
+                key = "return"
+            send_key(key2, delay=delay, click_type=click_type)
         else:
             try:
-                if click_type == 0:           # click
+                if click_type == 0:
                     keyboard_controller.press(key)
                     time.sleep(delay)
                     keyboard_controller.release(key)
-                elif click_type == 1:         # hold
+                elif click_type == 1:
                     keyboard_controller.press(key)
-                elif click_type == 2:         # release
+                elif click_type == 2:
                     keyboard_controller.release(key)
             except Exception as e:
-                print("Error sending keys: ", e)
+                print("Error sending keys:", e)
     # Screen Capture and Capture Thread
     def _grab_screen_region(self, left, top, right, bottom):
         """Optimized path for MSS screen capture with macOS color handling. Coordinates are expected to be already scaled."""
@@ -4001,6 +4022,7 @@ class Api:
         cast_delay = float(self._get_var_number("cast_delay", 0.6, float))
         target_green = np.array(self._hex_to_bgr(green_color), dtype=np.int32)
         target_white = np.array(self._hex_to_bgr(white_color), dtype=np.int32)
+        efficiency_mode = self.vars["efficiency_mode"]
         # Resolution scaling: velocity bands are tuned at 1440p height
         scaling_factor = self.SCREEN_HEIGHT / 1440.0
         tracking_mode = False
@@ -4037,19 +4059,22 @@ class Api:
         time.sleep(delay_before_casting)
         # Perfect Cast Loop
         while self.macro_running:
-            if not self._cap_event.wait(timeout=0.5):
-                continue
+            if efficiency_mode == "on":
+                frame = self._grab_screen_full()
+            else:
+                if not self._cap_event.wait(timeout=0.5):
+                    continue
 
-            if self.macro_running == False:
-                break
+                if self.macro_running == False:
+                    break
 
-            with self._cap_lock:
-                frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id  # back-pressure release
-                self._cap_event.clear()
-            if frame is None:
-                stop_event.set()
-                return
+                with self._cap_lock:
+                    frame = self._cap_frame
+                    self._cap_consumed_id = self._cap_frame_id  # back-pressure release
+                    self._cap_event.clear()
+                if frame is None:
+                    stop_event.set()
+                    return
 
             region = frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
             if region.size == 0:
@@ -4258,15 +4283,14 @@ class Api:
         """
         # Get areas (scale factor applied inside _get_areas)
         shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, _ = self._get_areas("shake")
-        fish_left_s, fish_top_s, fish_right_s, fish_bottom_s, _, _     = self._get_areas("fish")
         friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self._get_areas("friend")
-        shake_x = (shake_left_s + shake_right_s) // 2
-        shake_y = (shake_top_s  + shake_bottom_s) // 2
+        scale = get_scale_factor()
         # Misc variables
         shake_hex = self.vars["shake_color"]
         scan_delay = float(self.vars["shake_scan_delay"])
         friend_color = self.vars["friends_color"]
         friend_tol = int(self.vars["friends_tolerance"])
+        efficiency_mode = self.vars["efficiency_mode"]
         try:
             tolerance = int(self.vars["shake_tolerance"])
             failsafe = int(self.vars["shake_failsafe"] or 80)
@@ -4279,34 +4303,38 @@ class Api:
         attempts = 0
         stop_event = self._start_capture(scan_delay)
         while self.macro_running and attempts < failsafe:
-            # Grab full screen then crop
-            if not self._cap_event.wait(timeout=0.5):
-                continue
+            # Efficiency Mode: Take a new screenshot
+            # Normal mode: Grab a fresh frame from self._cap_frame
+            if efficiency_mode == "on":
+                frame = self._grab_screen_full()
+            else:
+                if not self._cap_event.wait(timeout=0.5):
+                    continue
 
-            with self._cap_lock:
-                frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id  # back-pressure release
-                self._cap_event.clear()
-            if frame is None:
-                stop_event.set()
-                return
+                with self._cap_lock:
+                    frame = self._cap_frame
+                    self._cap_consumed_id = self._cap_frame_id  # back-pressure release
+                    self._cap_event.clear()
+                if frame is None:
+                    stop_event.set()
+                    return
 
             shake_area = frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
             if shake_area is None or shake_area.size == 0:
                 time.sleep(scan_delay)
                 continue
 
-            # 1. Look for shake pixel
+            # Step 1. Look for shake pixel
             if shake_mode == "Pixel":
                 shake_pixel = self._find_first_pixel(shake_area, shake_hex, tolerance)
             else:
                 shake_pixel = self._find_circles(shake_area)
             if shake_pixel:
                 x, y = shake_pixel
-                screen_x = shake_left_s + x
-                screen_y = shake_top_s + y
+                screen_x = int((shake_left_s + x) / scale)
+                screen_y = int((shake_top_s + y) / scale)
                 self._click_at(screen_x, screen_y, shake_clicks)
-            # 2. Fish detection — Friend Area (green gone = minigame started)
+            # Step 2. Fish Detection
             detected = False
             while detected == False and self.macro_running:
                 detection_area = frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
@@ -4320,7 +4348,7 @@ class Api:
                 else:
                     break
 
-            # 3. Fish detected → enter minigame
+            # Step 3. Fish detected → enter minigame
             if detected == True:
                 self.set_status("Finished Shaking - entering minigame")
                 mouse_controller.press(Button.left)
@@ -4343,25 +4371,23 @@ class Api:
         friend_color = self.vars["friends_color"]
         friend_tol = int(self.vars["friends_tolerance"])
         try:
-            tolerance = int(self.vars["shake_tolerance"])
             failsafe = int(self.vars["shake_failsafe"] or 80)
         except:
-            tolerance = 5
             failsafe = 80
-        if sys.platform == "darwin":
-            tolerance += 15
+        efficiency_mode = self.vars["efficiency_mode"]
         attempts = 0
         stop_event = self._start_capture(scan_delay)
         while self.macro_running and attempts < failsafe:
-            # 1. Navigation shake (Enter key)
-            keyboard_controller.press(Key.enter)
-            time.sleep(0.03)
-            keyboard_controller.release(Key.enter)
+            # Step 1. Navigation shake (Enter key)
+            self._send_key("enter")
             time.sleep(scan_delay)
-            # 2. Fish detection — Friend Area (green gone = minigame started)
+            # Step 2. Fish detection — Friend Area (green gone = minigame started)
             detected = False
-            while detected == False and self.macro_running:
-                # Grab full screen then crop
+            # Efficiency Mode: Take a new screenshot
+            # Normal mode: Grab a fresh frame from self._cap_frame
+            if efficiency_mode == "on":
+                frame = self._grab_screen_full()
+            else:
                 if not self._cap_event.wait(timeout=0.5):
                     continue
 
@@ -4371,9 +4397,8 @@ class Api:
                     self._cap_event.clear()
                 if frame is None:
                     stop_event.set()
-                    # print("Finished (no frame)")
                     return
-
+            while detected == False and self.macro_running:
                 detection_area = frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
                 if detection_area is None or detection_area.size == 0:
                     break
@@ -4385,7 +4410,7 @@ class Api:
                 else:
                     break
 
-            # 3. Fish detected → enter minigame
+            # Step 3. Fish detected → enter minigame
             if detected == True:
                 self.set_status("Finished Shaking - entering minigame")
                 mouse_controller.press(Button.left)
@@ -4412,6 +4437,7 @@ class Api:
         restart_delay = float(self.vars["restart_delay"])
         friend_color = self.vars["friends_color"]
         friend_tol = int(self.vars["friends_tolerance"])
+        efficiency_mode = self.vars["efficiency_mode"]
         # Get hotkeys
         tranquility_key_1 = str(self.vars["tranquility_key_1"])
         tranquility_key_2 = str(self.vars["tranquility_key_2"])
@@ -4426,17 +4452,20 @@ class Api:
         _minigame_stop = self._start_capture(scan_delay)
         while self.macro_running:
             # Step 1: Grab Full Screen Then Crop (better on macOS)
-            if not self._cap_event.wait(timeout=0.5):
-                continue
+            if efficiency_mode == "on":
+                frame = self._grab_screen_full()
+            else:
+                if not self._cap_event.wait(timeout=0.5):
+                    continue
 
-            with self._cap_lock:
-                frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id  # back-pressure release
-                self._cap_event.clear()
-            if frame is None:
-                _minigame_stop.set()
-                self._set_fish_overlay_mode("idle")
-                return
+                with self._cap_lock:
+                    frame = self._cap_frame
+                    self._cap_consumed_id = self._cap_frame_id  # back-pressure release
+                    self._cap_event.clear()
+                if frame is None:
+                    _minigame_stop.set()
+                    self._set_fish_overlay_mode("idle")
+                    return
 
             self._set_fish_overlay_mode("tranquility")
             # Step 2: Crop images
@@ -4540,7 +4569,8 @@ class Api:
         # Areas
         fish_left, fish_top, fish_right, fish_bottom, fish_width, _ = self._get_areas("fish")
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
-        fish_area_center = int((fish_right - fish_left) / 2) + fish_left
+        shake_x = (fish_left + fish_right) // 2
+        shake_y = (fish_top  + fish_right) // 2
         # Colors
         fish_hex = self.vars["fish_color"]
         left_bar_hex = self.vars["left_color"]
@@ -4550,6 +4580,7 @@ class Api:
         # Misc Settings
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
         lock_cursor = self.vars["lock_cursor"]
+        efficiency_mode = self.vars["efficiency_mode"]
         fishing_mode = self.vars["fishing_mode"].lower()
         restart_delay = float(self.vars["restart_delay"])
         # Misc Initialization
@@ -4584,19 +4615,22 @@ class Api:
         # Start Capture Thread (with failsafe)
         _minigame_stop = self._start_capture(scan_delay)
         while self.macro_running:
-            # Step 1: Grab Full Screen Then Crop (better on macOS)
-            if not self._cap_event.wait(timeout=0.5):
-                continue
+            if efficiency_mode == "on":
+                frame = self._grab_screen_full()
+            else:
+                if not self._cap_event.wait(timeout=0.5):
+                    continue
 
-            with self._cap_lock:
-                frame = self._cap_frame
-                self._cap_consumed_id = self._cap_frame_id
-                self._cap_event.clear()
-            if frame is None:
-                _minigame_stop.set()
-                self._set_fish_overlay_mode("idle")
-                return
-
+                with self._cap_lock:
+                    frame = self._cap_frame
+                    self._cap_consumed_id = self._cap_frame_id
+                    self._cap_event.clear()
+                if frame is None:
+                    _minigame_stop.set()
+                    self._set_fish_overlay_mode("idle")
+                    return
+            if lock_cursor == "on":
+                mouse_controller.position = (shake_x, shake_y)
             # Step 2: Crop image into fish and friend areas
             self.fish_overlay.clear()
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
