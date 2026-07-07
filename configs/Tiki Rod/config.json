@@ -1,5 +1,6 @@
 {
     "automation_mode": "disabled",
+    "fishing_profile": "normal",
     "start_stop": "F5",
     "change_areas": "F6",
     "force_stop": "F7",
@@ -38,7 +39,6 @@
     "select_rod_duration": "0.35",
     "casting_mode": "normal",
     "shake_mode": "navigation",
-    "fishing_profile": "normal",
     "fishing_mode": "line",
     "fall_scan_timeout": "5",
     "cast_scan_delay": "0.05",

@@ -1,8 +1,7 @@
 const APP_VERSION = "4.32";
 const BETA_VERSION = "0";
-let currentConfig = null;
-const validHexColor = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
 
+let currentConfig = null;
 window.setStatus = (message) => {
     const statusLabel = document.getElementById("status-label");
     const statusDot = document.querySelector(".status-dot");
@@ -27,7 +26,6 @@ window.setStatus = (message) => {
         }
     }
 };
-
 window.addEventListener("pywebviewready", async () => {
     await refreshConfigs();
     await loadStartupConfig();
@@ -37,7 +35,27 @@ window.addEventListener("pywebviewready", async () => {
     bindColorPreviewInputs();
     updateColorPreviews();
 });
-
+async function startMacro() {
+    // Save current UI settings first
+    const configName =
+        document.getElementById(
+            "disabled"
+        ).value;
+    const settings = getSettings();
+    await pywebview.api.save_config(
+        configName,
+        settings
+    );
+    // Sync runtime variables to Python
+    await syncSettings();
+    // Start macro
+    let result =
+        await pywebview.api.start_macro();
+    console.log(result);
+}
+// =========================
+// TAB SWITCHING
+// =========================
 function switchTab(tabId) {
     document.querySelectorAll(".tab-content").forEach(tab => {
         tab.classList.remove("active");
@@ -59,7 +77,9 @@ function switchTab(tabId) {
         breadcrumbTitle.textContent = titleMap[tabId] || "Settings";
     }
 }
-
+// =========================
+// PERFECT CAST CARD
+// =========================
 function updateCastingMode() {
     const mode = document.getElementById("casting_mode").value;
     const perfectCard = document.getElementById("perfect-cast-card");
@@ -70,6 +90,7 @@ function updateCastingMode() {
     }
 }
 
+// Save settings
 function getSettings() {
     const settings = {};
     // Get all input elements
@@ -421,7 +442,6 @@ async function importConfig() {
         setStatus("Import failed");
     }
 }
-
 async function openConfigsFolder() {
     await pywebview.api.open_base_folder();
 }
@@ -491,6 +511,7 @@ document.addEventListener("click", (e) => {
         closeConfigManager();
     }
 });
+const validHexColor = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
 
 function normalizeHexColor(hex) {
     hex = String(hex || "").trim();
@@ -546,7 +567,6 @@ function bindColorPreviewInputs() {
         updateColorPreview(input);
     });
 }
-
 function hexBrightness(hex) {
     hex = normalizeHexColor(hex);
     if (!hex) {
@@ -577,22 +597,20 @@ function updateAccentColor() {
     const normalizedRight = normalizeHexColor(right);
     const normalizedfish = normalizeHexColor(fish);
     
-    // Debug logging
-    console.log("Normalized colors:", {normalizedLeft, normalizedRight, normalizedfish});
-    
     // Check if a color is too close to white, gray, or black
     function isTooNeutral(hex) {
         if (!hex) return true;
         const brightness = hexBrightness(hex);
+        // Too close to white: brightness > 240
+        // Too close to black: brightness < 15
+        // Too close to gray: saturation is very low
+        // Check if RGB values are all within 30 of each other (gray)
         const { r, g, b } = hexToRgb(hex);
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const isGray = (max - min) < 30;
-        const isWhite = brightness > 235; // Lowered threshold to catch #F1F1F1
+        const isWhite = brightness > 240;
         const isBlack = brightness < 15;
-        
-        console.log(`Color ${hex}: brightness=${brightness}, isWhite=${isWhite}, isGray=${isGray}, isBlack=${isBlack}`);
-        
         return isWhite || isBlack || isGray;
     }
     
@@ -600,43 +618,34 @@ function updateAccentColor() {
     const rightDiscarded = isTooNeutral(normalizedRight);
     const fishDiscarded = isTooNeutral(normalizedfish);
     
-    console.log("Discarded:", {leftDiscarded, rightDiscarded, fishDiscarded});
-    
-    let finalAccent = "#ffffff"; // Default fallback
+    let finalAccent = "#3b5cff"; // Default fallback
     
     // Determine accent color based on the rules
     if (!leftDiscarded && !rightDiscarded) {
         // Both bars are valid - use gradient between left and right
-        console.log("Both valid - using gradient");
-        finalAccent = "gradient";
+        finalAccent = "gradient"; // Special flag for gradient
     } else if (!leftDiscarded && rightDiscarded) {
         // Only left bar is valid
-        console.log("Only left valid - using left");
         finalAccent = normalizedLeft;
     } else if (leftDiscarded && !rightDiscarded) {
         // Only right bar is valid
-        console.log("Only right valid - using right");
         finalAccent = normalizedRight;
     } else {
         // Both bars discarded - use fish color
-        console.log("Both discarded - using fish");
         if (!fishDiscarded) {
             finalAccent = normalizedfish;
         } else {
             // Fish also discarded - keep default
-            console.log("Fish also discarded - using default");
-            finalAccent = "#ffffff";
+            finalAccent = "#3b5cff";
         }
     }
-    
-    console.log("Final accent:", finalAccent);
     
     // Apply CSS variables
     if (finalAccent === "gradient") {
         // Use gradient between left and right
         document.documentElement.style.setProperty(
             "--accent-color",
-            normalizedLeft
+            normalizedLeft // Primary accent is left
         );
         document.documentElement.style.setProperty(
             "--left-gradient",
@@ -662,7 +671,7 @@ function updateAccentColor() {
         );
     }
     
-    // Glow version
+    // Glow version (only for single color, use left if gradient)
     const accentForGlow = finalAccent === "gradient" ? normalizedLeft : finalAccent;
     const r = parseInt(accentForGlow.substr(1,2), 16);
     const g = parseInt(accentForGlow.substr(3,2), 16);
@@ -751,24 +760,4 @@ async function toggleMacroFromTopbar() {
             await pywebview.api.stop_macro();
         }
     }
-}
-
-
-async function startMacro() {
-    // Save current UI settings first
-    const configName =
-        document.getElementById(
-            "disabled"
-        ).value;
-    const settings = getSettings();
-    await pywebview.api.save_config(
-        configName,
-        settings
-    );
-    // Sync runtime variables to Python
-    await syncSettings();
-    // Start macro
-    let result =
-        await pywebview.api.start_macro();
-    console.log(result);
 }

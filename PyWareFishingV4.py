@@ -59,14 +59,17 @@ BETA_VERSION = 0
 def get_macos_menu_offset():
     if sys.platform != "darwin":
         return 0
+
     try:
         import AppKit
         screen = AppKit.NSScreen.mainScreen()
         full_frame = screen.frame()
         visible_frame = screen.visibleFrame()
         return int(full_frame.size.height - visible_frame.size.height)
+
     except Exception:
         return 0
+
 def cgimage_to_srgb_numpy(image):
     if sys.platform == "darwin":
         width = Quartz.CGImageGetWidth(image)
@@ -98,8 +101,10 @@ def cgimage_to_srgb_numpy(image):
         # RGBA -> BGR
         bgr = raw[:, :, :3][:, :, ::-1]
         return bgr.copy()
+
     else:
         return image
+
 # Screen dimensions via mss — use monitor[1] (primary) not monitor[0] (virtual combined).
 # On Windows with DPI scaling, pywebview's x/y/width/height use physical pixels,
 # so we must query the raw physical resolution, not the scaled logical resolution.
@@ -151,9 +156,11 @@ if sys.platform == "win32":
             # DPI awareness set (fallback method)
         except:
             pass  # DPI awareness could not be set - coordinates may be inconsistent
+
     # Windows API related functions
     def get_scale_factor():
         return 1
+
     def _get_hwnd(window):
         """Return a Windows HWND int from a pywebview window/native object."""
         native = getattr(window, "native", window)
@@ -166,25 +173,33 @@ if sys.platform == "win32":
         for candidate in candidates:
             if not candidate:
                 continue
+
             if isinstance(candidate, int):
                 return candidate
+
             if hasattr(candidate, "value") and candidate.value:
                 return int(candidate.value)
+
             if hasattr(candidate, "ToInt64"):
                 value = int(candidate.ToInt64())
                 if value:
                     return value
+
             if hasattr(candidate, "ToInt32"):
                 value = int(candidate.ToInt32())
                 if value:
                     return value
+
             try:
                 value = int(candidate)
             except (TypeError, ValueError):
                 continue
+
             if value:
                 return value
+
         return None
+
     def make_window_translucent(window, transparency):
         """Make a pywebview Windows window translucent once its HWND exists."""
         hwnd = None
@@ -192,14 +207,17 @@ if sys.platform == "win32":
             hwnd = _get_hwnd(window)
             if hwnd:
                 break
+
             time.sleep(0.05)
         if not hwnd:
             return False
+
         current_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
         user32.SetWindowLongW(hwnd, GWL_EXSTYLE, current_style | WS_EX_LAYERED)
         # Range is 0 (fully transparent) to 255 (fully opaque).
         opacity_alpha = int(255 * transparency)
         return bool(user32.SetLayeredWindowAttributes(hwnd, 0, opacity_alpha, LWA_ALPHA))
+
 # macOS (Keyboard, scale factor, mouse button)
 elif sys.platform == "darwin":
     _scale_cache = None
@@ -214,15 +232,18 @@ elif sys.platform == "darwin":
         global _scale_cache
         if _scale_cache is not None:
             return _scale_cache
+
         try:
             _scale_cache = float(NSScreen.mainScreen().backingScaleFactor())
         except Exception:
             _scale_cache = 1.0
         return _scale_cache
+
     def get_mouse_position():
         event = Quartz.CGEventCreate(None)
         loc = Quartz.CGEventGetLocation(event)
         return loc.x, loc.y
+
     def _move_mouse(x, y):
         """Expects logical points."""
         point = Quartz.CGPointMake(x, y)
@@ -267,6 +288,7 @@ elif sys.platform == "darwin":
         keycode = MAC_KEY_MAP.get(str(key).lower())
         if keycode is None:
             return
+
         if click_type == 0:           # Click (press + release)
             Quartz.CGEventPost(
                 Quartz.kCGHIDEventTap,
@@ -300,6 +322,7 @@ elif sys.platform == "darwin":
             )
     def make_window_translucent(window, transparency):
         pass
+
 # Linux (Mouse positions and Xdisplay)
 elif sys.platform.startswith("linux"):
     _xdisplay = None
@@ -308,17 +331,20 @@ elif sys.platform.startswith("linux"):
         if _xdisplay is None:
             _xdisplay = Xdisplay.Display()
         return _xdisplay
+
     def get_scale_factor():
         """
         X11 normally works in physical pixels.
         Return 1.0 unless you implement desktop-specific scaling detection.
         """
         return 1.0
+
     def get_mouse_position():
         d = _get_xdisplay()
         root = d.screen().root
         pointer = root.query_pointer()
         return pointer.root_x, pointer.root_y
+
     def _move_mouse(x, y):
         d = _get_xdisplay()
         root = d.screen().root
@@ -352,9 +378,11 @@ elif sys.platform.startswith("linux"):
             keysym = XK.string_to_keysym(str(key).lower())
         if keysym == 0:
             return
+
         keycode = d.keysym_to_keycode(keysym)
         if keycode == 0:
             return
+
         xtest.fake_input(d, X.KeyPress, keycode)
         d.sync()
         time.sleep(delay)
@@ -362,6 +390,7 @@ elif sys.platform.startswith("linux"):
         d.sync()
     def make_window_translucent(window, transparency):
         pass
+
 # Config management
 def get_base_path():
     """Unified base directory for app data."""
@@ -374,21 +403,25 @@ def get_base_path():
         # Compiled App → Use User Directory
         if sys.platform == "darwin":
             return os.path.join(
+
                 os.path.expanduser("~"),
                 "Library", "Application Support",
                 "PyWareFishingV4", beta
             ), compiled
         elif sys.platform == "win32":
             return os.path.join(
+
                 os.path.expanduser("~"),
                 "AppData", "Roaming",
                 "PyWareFishingV4", beta
             ), compiled
         else:
             return os.path.join(os.path.expanduser("~"), "PyWareFishingV4"), compiled
+
     compiled = False
     # Dev Mode → Project Directory
     return os.path.dirname(os.path.abspath(__file__)), compiled
+
 def open_base_folder():
     folder = BASE_PATH
     if sys.platform == "win32":
@@ -453,7 +486,6 @@ class AreaSelector:
             self._win = webview.create_window("Area Selector", self.HTML_FILE, js_api=self, 
                                               transparent=False, frameless=True, easy_drag=False, 
                                               on_top=True, resizable=False, background_color="#000000")
-
             # Maximize on Windows after the window is created
             def maximize_area_selector():
                 try:
@@ -462,7 +494,6 @@ class AreaSelector:
                         user32.ShowWindow(wintypes.HWND(hwnd), SW_MAXIMIZE)
                 except Exception as e:
                     print("Failed to maximize area selector:", e)
-
             self._win.events.shown += maximize_area_selector
         else:
             self._win = webview.create_window( "Area Selector", self.HTML_FILE, js_api=self, 
@@ -482,6 +513,7 @@ class AreaSelector:
     def _to_ratios(self, area):
         """Convert any area dict to ratios (0-1 range)"""
         return {
+
             "x": area.get("x", 0),
             "y": area.get("y", 0),
             "width": area.get("width", area.get("w", 0)),
@@ -497,6 +529,7 @@ class AreaSelector:
             x_pixels += self._win_origin_x
             y_pixels += self._win_origin_y
         return {
+
             "x": x_pixels,
             "y": y_pixels,
             "width": w_pixels,
@@ -510,6 +543,7 @@ class AreaSelector:
             x_pixels -= self._win_origin_x
             y_pixels -= self._win_origin_y
         return {
+
             "x": x_pixels / SCREEN_WIDTH,
             "y": y_pixels / SCREEN_HEIGHT,
             "width": pixels.get("w", pixels.get("width", 0)) / SCREEN_WIDTH,
@@ -554,6 +588,7 @@ class AreaSelector:
                 "height": pixels["height"],
             }
         return out
+
     def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
         """
         Called by JS on every mousemove so the main window status bar
@@ -563,6 +598,7 @@ class AreaSelector:
         """
         if not self._open:
             return
+
         # Update cached areas with latest from JS (JS sends canvas-relative pixels)
         menu_offset = get_macos_menu_offset()
         for name in ("shake", "fish", "friend", "totem"):
@@ -583,6 +619,7 @@ class AreaSelector:
             ratios = self._areas.get(name, {})
             if not ratios:
                 continue
+
             # Hit test using ratios (multiply by screen dimensions)
             bx = ratios["x"] * SCREEN_WIDTH
             by = ratios["y"] * SCREEN_HEIGHT
@@ -596,6 +633,7 @@ class AreaSelector:
                 last_xr = xr
                 last_yr = yr
                 return
+
     def save_areas(self, areas):
         """
         Called by JS when the user presses Escape/F6 to confirm and close.
@@ -603,6 +641,7 @@ class AreaSelector:
         """
         if not self._open:
             return
+
         self._open = False
         menu_offset = get_macos_menu_offset()
         out = {}
@@ -621,6 +660,7 @@ class AreaSelector:
             self._win.destroy()
         except Exception:
             pass
+
     # ── Internal 
     def _on_closed(self):
         """Fires when the webview window is destroyed for any reason."""
@@ -634,6 +674,7 @@ class AreaSelector:
             self.parent.set_status("Area selector closed")
     def is_open(self):
         return self._open
+
     def close(self):
         """Force-close from Python (e.g. hotkey toggle)."""
         if self._open:
@@ -693,9 +734,11 @@ class Eyedropper:
         """Gets the pixel from the full-screen capture with screen freeze (memory-based)"""
         if not self._open:
             return "#000000"
+
         frame = self._screen_capture
         if frame is None:
             return "#000000"
+
         menu_offset = get_macos_menu_offset()
         screen_x = x + self._win_origin_x
         screen_y = y + self._win_origin_y + menu_offset
@@ -708,6 +751,7 @@ class Eyedropper:
             x >= frame.shape[1]
         ):
             return "#000000"
+
         b = int(frame[y, x, 0])
         g = int(frame[y, x, 1])
         r = int(frame[y, x, 2])
@@ -716,7 +760,9 @@ class Eyedropper:
             self.parent.set_status(f"{hex_color} • Click to pick • Esc to cancel")
         except Exception:
             pass
+
         return hex_color
+
     def window_ready(self, win_x, win_y):
         if sys.platform == "darwin":
             self._win_origin_x = 0
@@ -731,6 +777,7 @@ class Eyedropper:
         """
         if not self._open:
             return
+
         self.last_picked_color = hex_color
         self._cancelled = False
         self.parent.set_status(f"Picked color: {hex_color}")
@@ -739,6 +786,7 @@ class Eyedropper:
             self._win.destroy()
         except Exception:
             pass
+
     def close_eyedropper(self):
         """
         Called by JS when user presses Escape.
@@ -746,16 +794,19 @@ class Eyedropper:
         """
         if not self._open:
             return
+
         self._cancelled = True
         self._open = False
         try:
             self.parent.set_status("Eyedropper cancelled")
         except Exception:
             pass
+
         try:
             self._win.destroy()
         except Exception:
             pass
+
     def _on_closed(self, window=None):
         """
         Event handler for when the pywebview window is closed
@@ -772,20 +823,24 @@ class Eyedropper:
                 self.parent.set_status("Eyedropper closed")
         except Exception:
             pass
+
         # Any additional cleanup (e.g. releasing capture buffer) can go here
     def is_open(self):
         return self._open
+
     def close(self):
         """
         Force-close from Python during application shutdown.
         """
         if not self._open:
             return
+
         self._open = False
         try:
             self._win.destroy()
         except Exception:
             pass
+
 class FishOverlay:
     """Fishing minigame overlay visualization implemented with pywebview."""
     HTML_FILE = os.path.join(UI_PATH, "fish_overlay.html")
@@ -802,6 +857,7 @@ class FishOverlay:
     def init_window(self):
         if self._win and self._open:
             return
+
         self._win = webview.create_window(
             "PyWare Fish Overlay",
             self.HTML_FILE,
@@ -826,16 +882,21 @@ class FishOverlay:
     def _eval(self, script):
         if not self._win or not self._open:
             return
+
         try:
             self._win.evaluate_js(script)
         except Exception:
             pass
+
     def set_layout(self, x, y, width, height):
         scale = get_scale_factor()
         x /= scale
         y /= scale
         width /= scale
-        height /= scale
+        if sys.platform == "darwin":
+            height /= scale
+        else:
+            height = int(height / 2)
         width = max(1, int(width))
         height = max(1, int(height))
         x = max( 0, min( int(x), max(0, int(self.parent_app.SCREEN_WIDTH) - width) ) )
@@ -847,11 +908,13 @@ class FishOverlay:
         self.init_window()
         if not self._win:
             return
+
         try:
             self._win.resize(width, height)
             self._win.move(x, y)
         except Exception:
             pass
+
     def show(self):
         self.init_window()
         if self._win:
@@ -859,6 +922,7 @@ class FishOverlay:
                 self._win.show()
             except Exception:
                 pass
+
             # Re-assert on_top z-order after un-hiding without stealing keyboard focus.
             # hide()/show() on edgechromium does not guarantee the window is re-stacked
             # above the game; nudging move() forces the compositor to re-evaluate z-order.
@@ -866,6 +930,7 @@ class FishOverlay:
                 self._win.move(self.x, self.y)
             except Exception:
                 pass
+
         self._visible = True
     def hide(self):
         if self._win and self._open:
@@ -873,6 +938,7 @@ class FishOverlay:
                 self._win.hide()
             except Exception:
                 pass
+
         self._visible = False
     def clear(self):
         self._eval("window.fishOverlay && window.fishOverlay.clear()")
@@ -880,6 +946,7 @@ class FishOverlay:
             show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
         if bar_center is None:
             return
+
         scale = get_scale_factor()
         self.init_window()
         bar_center = float(bar_center) / scale
@@ -911,6 +978,7 @@ class FishOverlay:
         """
         if not self._win or not self._open:
             return
+
         try:
             scale = get_scale_factor()
             shape = {
@@ -926,6 +994,7 @@ class FishOverlay:
         except Exception:
             # Silently ignore if JS side doesn't support drawCircle yet
             pass
+
     def close(self):
         if self._win and self._open:
             self._open = False
@@ -933,8 +1002,10 @@ class FishOverlay:
                 self._win.destroy()
             except Exception:
                 pass
+
     def is_open(self):
         return self._open
+
 class SetupGuide(ctk.CTk):
     def __init__(self, error):
         super().__init__()
@@ -1021,7 +1092,6 @@ class SetupGuide(ctk.CTk):
             command=self.destroy
         ).pack(side="bottom", pady=20)
     def move_folders(self):
-        
         from tkinter import messagebox
         source = os.path.dirname(sys.executable)
         folders = {
@@ -1041,6 +1111,7 @@ class SetupGuide(ctk.CTk):
             new = os.path.join(BASE_PATH, folder)
             if not os.path.exists(old):
                 continue
+
             # Configs
             if is_config:
                 if keep_configs:
@@ -1081,8 +1152,10 @@ class SetupGuide(ctk.CTk):
     def check_accessibility(self):
         if sys.platform == "darwin":
             return Quartz.AXIsProcessTrusted()
+
         else:
             return True
+
     def check_screen_recording(self):
         try:
             with MSS() as sct:
@@ -1093,8 +1166,10 @@ class SetupGuide(ctk.CTk):
                     "height": 10
                 })
             return True
+
         except:
             return False
+
     def open_accessibility(self):
         if sys.platform == "darwin":
             subprocess.Popen([
@@ -1233,6 +1308,7 @@ class Api:
         if hasattr(self, "eyedropper") and self.eyedropper and self.eyedropper.is_open():
             self.eyedropper.close()
             return
+
         # Create and show eyedropper
         self.eyedropper = Eyedropper(parent=self)
         self.set_status("Eyedropper opened • Hover to preview • Click to pick • Esc to cancel")
@@ -1245,6 +1321,7 @@ class Api:
                 html = f.read()
         except Exception:
             return defaults
+
         input_pattern = re.compile(
             r"<input\b(?=[^>]*\bid\s*=\s*['\"]?([^'\"\s>]+))"
             r"(?=[^>]*\bplaceholder\s*=\s*['\"]([^'\"]*)['\"])[^>]*>",
@@ -1268,6 +1345,7 @@ class Api:
             if match:
                 defaults[field_id] = match.group(1).strip()
         return defaults
+
     def _get_saved_default_config(self):
         default_path = os.path.join(
             CONFIGS_FOLDER,
@@ -1278,14 +1356,17 @@ class Api:
             with open(default_path, "r") as f:
                 data = json.load(f)
             return data if isinstance(data, dict) else {}
+
         except Exception:
             return {}
+
     def _get_config_defaults(self):
         defaults = self._get_saved_default_config()
         defaults.update(self._get_prompt_defaults())
         if hasattr(self, "default_settings_data"):
             defaults.update(getattr(self, "default_settings_data", {}))
         return defaults
+
     def _fill_blank_settings(self, settings):
         clean_settings = dict(settings or {})
         defaults = self._get_config_defaults()
@@ -1293,6 +1374,7 @@ class Api:
             if isinstance(value, str) and value.strip() == "" and key in defaults:
                 clean_settings[key] = defaults[key]
         return clean_settings
+
     def _load_config_data(self, config_name):
         config_path = os.path.join(
             CONFIGS_FOLDER,
@@ -1303,10 +1385,12 @@ class Api:
             settings = json.load(f)
         settings = self._fill_blank_settings(settings)
         return settings, config_path
+
     def save_config(self, config_name, settings, text="Settings saved"):
         try:
             if not config_name:
                 return {
+
                     "success": False,
                     "error": "No config selected."
                 }
@@ -1331,10 +1415,12 @@ class Api:
                 )
             self.set_status(text)
             return {
+
                 "success": True
             }
         except Exception as e:
             return {
+
                 "success": False,
                 "error": str(e)
             }
@@ -1343,6 +1429,7 @@ class Api:
         try:
             if not config_name:
                 return {
+
                     "success": False,
                     "error": "No config selected."
                 }
@@ -1357,11 +1444,13 @@ class Api:
             self.current_config = config_name
             self.save_last_config(config_name)
             return {
+
                 "success": True,
                 "settings": settings
             }
         except Exception as e:
             return {
+
                 "success": False,
                 "error": str(e)
             }
@@ -1373,13 +1462,16 @@ class Api:
                 if os.path.isdir(os.path.join(CONFIGS_FOLDER, folder))
             ])
             return configs
+
         except Exception:
             return []
+
     # Settings State
     def update_settings(self, settings):
         self.vars.update(settings)
         self._apply_fish_overlay_state()
         return {
+
             "success": True
         }
     def get_last_config(self):
@@ -1388,9 +1480,12 @@ class Api:
                 with open(LAST_CONFIG_FILE, "r") as f:
                     data = json.load(f)
                 return data.get("last_config", "")
+
         except Exception:
             pass
+
         return ""
+
     def save_last_config(self, config_name):
         try:
             data = {}
@@ -1406,14 +1501,18 @@ class Api:
         configs = self.list_configs()
         if config_name in configs:
             return config_name
+
         for name in configs:
             if name.lower() == str(config_name).lower():
                 return name
+
         return configs[0] if configs else ""
+
     def load_settings_into_vars(self, config_name):
         config_name = self.resolve_config_name(config_name)
         if not config_name:
             return
+
         try:
             settings, config_path = self._load_config_data(config_name)
             with open(config_path, "w") as f:
@@ -1431,6 +1530,7 @@ class Api:
         config_name = self.resolve_config_name(self.current_config)
         if not config_name:
             return {
+
                 "success": False,
                 "error": "No configs found."
             }
@@ -1438,6 +1538,7 @@ class Api:
         if result.get("success"):
             result["config_name"] = config_name
         return result
+
     # Delete Config
     def delete_config(self, config_name):
         try:
@@ -1454,10 +1555,12 @@ class Api:
             if os.path.exists(folder):
                 os.rmdir(folder)
             return {
+
                 "success": True
             }
         except Exception as e:
             return {
+
                 "success": False,
                 "error": str(e)
             }
@@ -1479,6 +1582,7 @@ class Api:
             path = os.path.join(BASE_PATH, "last_config.json")
             if not os.path.exists(path):
                 return
+
             with open(path, "r") as f:
                 data = json.load(f)
             # Rod
@@ -1515,6 +1619,7 @@ class Api:
                     data = json.load(f)
             except:
                 pass
+
         # Clean Areas
         clean_bar_areas = {}
         for key in ["shake", "fish", "friend", "totem"]:
@@ -1541,6 +1646,7 @@ class Api:
         open_base_folder()
     def get_default_settings(self):
         return self._get_config_defaults()
+
     def get_default_colors(self):
         default_settings = self.get_default_settings()
         color_keys = [
@@ -1564,6 +1670,7 @@ class Api:
             "friends_tolerance",
         ]
         return {
+
             key: default_settings[key]
             for key in color_keys
             if key in default_settings
@@ -1601,10 +1708,12 @@ class Api:
                     indent=4
                 )
             return {
+
                 "success": True
             }
         except Exception as e:
             return {
+
                 "success": False,
                 "error": str(e)
             }
@@ -1638,10 +1747,12 @@ class Api:
                     indent=4
                 )
             return {
+
                 "success": True
             }
         except Exception as e:
             return {
+
                 "success": False,
                 "error": str(e)
             }
@@ -1652,25 +1763,22 @@ class Api:
                 BASE_PATH,
                 "last_config.json"
             )
-
             if not os.path.exists(config_path):
                 return {
+
                     "success": True
                 }
-
             with open(config_path, "r") as f:
                 config_data = json.load(f)
-
             # Remove saved custom areas
             config_data.pop("bar_areas", None)
-
             with open(config_path, "w") as f:
                 json.dump(config_data,f,indent=4)
-
             return {"success": True}
 
         except Exception as e:
             return {
+
                 "success": False,
                 "error": str(e)
             }
@@ -1682,44 +1790,51 @@ class Api:
             )
             if not path:
                 return {"success": False, "error": "Cancelled"}
+
             if isinstance(path, (list, tuple)):
                 path = path[0]
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(settings, f, indent=4)
             return {"success": True, "path": path}
+
         except Exception as e:
             return {"success": False, "error": str(e)}
+
     def open_link(self, url):
         """Open a URL in the default web browser."""
         try:
             webbrowser.open(url)
             return {
+
                 "success": True
             }
         except Exception as e:
             return {
+
                 "success": False,
                 "error": str(e)
             }
     def get_macro_version(self):
         return APP_VERSION
+
     def set_status(self, message):
         """Push a status message to the main webview window's JS."""
         try:
             safe = message.replace("\\", "\\\\").replace("`", "\\`").replace("'", "\\'")
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
-            if IS_COMPILED == False:
-                print(message)
         except Exception:
             pass
+
     # Area Selector
     def _get_scale_factor(self):
         return get_scale_factor()
+
     def open_area_selector(self):
         # Toggle Off If Already Open
         if hasattr(self, "area_selector") and self.area_selector and self.area_selector.is_open():
             self.area_selector.close()
             return
+
         # Default Fallback Areas
         def default_shake_area():
             left = 0.1041
@@ -1727,6 +1842,7 @@ class Api:
             right = 0.8958
             bottom = 0.7888
             return {"x": left, "y": top,
+
                     "width": right - left, "height": bottom - top}
         def default_fish_area():
             left = 0.2844
@@ -1734,6 +1850,7 @@ class Api:
             right = 0.7141
             bottom = 0.8370
             return {"x": left, "y": top,
+
                     "width": right - left, "height": bottom - top}
         def default_friend_area():
             left = 0.0046
@@ -1741,6 +1858,7 @@ class Api:
             right = 0.0401
             bottom = 0.94
             return {"x": left, "y": top,
+
                     "width": right - left, "height": bottom - top}
         def default_totem_area():
             left = 0.9531
@@ -1748,6 +1866,7 @@ class Api:
             right = 0.9739
             bottom = 0.8796
             return {"x": left, "y": top,
+
                     "width": right - left, "height": bottom - top}
         # Load Saved Areas Or Fallback
         shake_area  = self.bar_areas.get("shake")  if isinstance(self.bar_areas.get("shake"),  dict) else default_shake_area()
@@ -1783,11 +1902,14 @@ class Api:
             areas_key = "f6"
             stop_key = "f7"
         return start_key, areas_key, stop_key
+
     def normalize_key(self, key):
         try:
             return key.char.lower()  # Letter Keys
+
         except AttributeError:
             return str(key).replace("Key.", "").lower()
+
     def on_key_press(self, key):
         key = self.normalize_key(key)
         start_key, bar_areas_key, stop_key = self._get_hotkeys()
@@ -1797,6 +1919,7 @@ class Api:
                 window.hide()
                 if self.macro_running == True:
                     return
+
                 else:
                     # Save current settings to config before starting
                     self.save_config(self.current_config, self.vars)
@@ -1820,8 +1943,10 @@ class Api:
         # Try Special Keys
         if hasattr(Key, key_string):
             return getattr(Key, key_string)
+
         # Fallback To Character
         return key_string
+
     # Keyboard/Mouse Functions (Platform-specific)
     # Hold Mouse
     def hold_mouse(self, mouse=False):
@@ -1915,15 +2040,18 @@ class Api:
             )
             if image is None:
                 return None
+
             frame = cgimage_to_srgb_numpy(image)
             # Manual crop using actual coordinates
             cropped = frame[top:bottom, left:right]
             return cropped.copy()
+
         else:
             width  = right - left
             height = bottom - top
             if width <= 0 or height <= 0:
                 return None
+
             # Use a local dict rather than self._monitor to avoid concurrent mutation
             m = {"left": left, "top": top, "width": width, "height": height}
             if not hasattr(self._thread_local, "sct"):
@@ -1935,6 +2063,7 @@ class Api:
             bgr_frame = frame[:, :, :3]
             # Mathematical shift correction safely applied for macOS stability
             return bgr_frame
+
     def _grab_screen_full(self, thread_local=None):
         # Fallback like grab_screen_region
         if thread_local is None:
@@ -1951,11 +2080,13 @@ class Api:
             )
             if image is None:
                 return None
+
             frame = cgimage_to_srgb_numpy(image)
             # Crop manually for coordinate consistency.
             # cgimage_to_srgb_numpy already returns an owned copy, so no second
             # .copy() is needed here — the slice is just a view into that buffer.
             return frame[0:height, 0:width]
+
         else:
             if not hasattr(thread_local, "sct"):
                 thread_local.sct = MSS()
@@ -1974,6 +2105,7 @@ class Api:
             # Remove alpha channel
             bgr_frame = frame[:, :, :3]
             return bgr_frame
+
     def _capture_loop_full(self, stop_event, scan_delay):
         thread_local = threading.local()
         # On Macos, Mss Uses Core Graphics Which Is Slow To Call In A Tight Loop.
@@ -1999,6 +2131,7 @@ class Api:
                     sct.close()
                 except Exception:
                     pass
+
             self._cap_event.set()
     def _stop_active_capture(self, join_timeout=2.0):
         """Stops the current capture thread with proper cleanup and synchronization.
@@ -2079,6 +2212,7 @@ class Api:
                     if producer_ahead:
                         stop_event.wait(0.005)  # 5 ms yield; wakes early on stop
                         continue
+
                     t0 = time.perf_counter()
                     frame = self._grab_screen_full(thread_local)
                     with self._cap_lock:
@@ -2104,6 +2238,7 @@ class Api:
                         sct.close()
                     except Exception:
                         pass
+
                 # Wake any consumer blocked on _cap_event so it can detect the stop
                 self._cap_event.set()
                 # Clear tracking references
@@ -2116,6 +2251,7 @@ class Api:
         self._active_capture_thread = thread
         thread.start()
         return stop_event
+
     # Take Debug Screenshot (no _)
     def take_debug_screenshot(self):
         """
@@ -2133,6 +2269,7 @@ class Api:
         if full_img is None:
             self.set_status("Failed to grab full screen")
             return
+
         # Save full screenshot for debugging
         try:
             cv2.imwrite(os.path.join(BASE_PATH, "debug_full.png"), full_img)
@@ -2159,6 +2296,7 @@ class Api:
         except Exception as e:
             self.set_status(f"Error saving region screenshots: {e}")
             return
+
     # Get values (with fallback)
     def _get_areas(self, area_key):
         # Apply Scale Factor
@@ -2182,6 +2320,7 @@ class Api:
         width2  = int(width * scale * self.SCREEN_WIDTH)
         height2 = int(height * scale * self.SCREEN_HEIGHT)
         return left2, top2, right2, bottom2, width2, height2
+
     def _get_default_areas(self, area):
         if area == "shake":
             left = int(self.SCREEN_WIDTH * 0.1041)
@@ -2204,9 +2343,11 @@ class Api:
             right = int(self.SCREEN_WIDTH * 0.9739)
             bottom = int(self.SCREEN_HEIGHT * 0.8796)
         return left, top, right, bottom
+
     def _get_overlay_anchor_area(self, area_name):
         left, top, right, bottom, _, _ = self._get_areas(area_name)
         return left, top, right, bottom
+
     def _build_horizontal_overlay_layout(self, area_bounds):
         left, top, right, bottom = area_bounds
         width = max(1, right - left)
@@ -2216,6 +2357,7 @@ class Api:
         below_y = bottom
         y = above_y if above_y >= 0 else below_y
         return x, y, width, height
+
     def _get_fish_overlay_layout(self, mode=None):
         fishing_profile = self.vars["fishing_profile"].lower()
         mode = mode or self._fish_overlay_mode
@@ -2234,6 +2376,7 @@ class Api:
                 y = cast_top
             x = shake_right if cast_center_x <= shake_center_x else shake_left - overlay_width
             return x, y, overlay_width, overlay_height
+
         elif mode == "fishing":
             if fishing_profile == "lanes":
                 shake_left, shake_top, shake_right, shake_bottom = self._get_overlay_anchor_area("shake")
@@ -2245,6 +2388,7 @@ class Api:
                 x = int(shake_left - 20 - (fish_left / 2))
                 y = shake_top
                 return x, y, overlay_width, overlay_height
+
             else:
                 x, y, overlay_width, overlay_height = self._build_horizontal_overlay_layout(
                     self._get_overlay_anchor_area("fish")
@@ -2252,15 +2396,20 @@ class Api:
                 half_height = int(self.SCREEN_HEIGHT / 2)
                 y = y - 80 if y > half_height else y + 80
                 return x, y, overlay_width, overlay_height
+
         return self._build_horizontal_overlay_layout(self._get_overlay_anchor_area("friend"))
+
     def _is_fish_overlay_enabled(self):
         return self.vars.get("fish_overlay") == "on"
+
     def _apply_fish_overlay_state(self):
         if not hasattr(self, "fish_overlay"):
             return
+
         if not self._is_fish_overlay_enabled() or self._fish_overlay_mode == "idle":
             self.fish_overlay.hide()
             return
+
         x, y, width, height = self._get_fish_overlay_layout()
         self.fish_overlay.set_layout(x, y, width, height)
         self.fish_overlay.show()
@@ -2280,16 +2429,21 @@ class Api:
                     value = self.vars.get("perfect_cast_timing_1600plus")
                 if value is None:
                     return default
+
             if isinstance(value, str):
                 value = value.strip()
                 if value == "":
                     return default
+
             return cast(value)
+
         except Exception:
             return default
+
     def _find_first_pixel(self, frame, hex, tolerance=8):
         if frame is None or frame.size == 0:
             return None
+
         tolerance = int(np.clip(tolerance, 0, 255))
         b, g, r = self._hex_to_bgr(hex)
         target = np.array([b, g, r], dtype=np.int32)
@@ -2300,10 +2454,13 @@ class Api:
         if coords.size > 0:
             y, x = coords[0]
             return int(x), int(y)
+
         return None
+
     def _find_last_pixel(self, frame, hex, tolerance=8):
         if frame is None or frame.size == 0:
             return None
+
         tolerance = int(np.clip(tolerance, 0, 255))
         b, g, r = self._hex_to_bgr(hex)
         target = np.array([b, g, r], dtype=np.int32)
@@ -2314,7 +2471,9 @@ class Api:
         if coords.size > 0:
             y, x = coords[-1]  # Changed from [0] to [-1]
             return int(x), int(y)
+
         return None
+
     def _find_circles(self, frame):
         """
         Detect circles in frame using strict Hough Circle Transform for perfect circles only.
@@ -2361,11 +2520,14 @@ class Api:
                     x, y, r = largest_circle
                     # print(f"    🔍 Circle detected at local ({x}, {y}) with radius {r} (scale: {scale_factor:.3f})")
                     return (int(x), int(y))
+
             # Only use strict HoughCircles detection - no backup methods to avoid false positives
             return None
+
         except Exception as e:
             self.set_status(f"    Error in circle detection: {e}")
             return None
+
     def _find_all_circles(self, frame):
         """
         Detect all circles in frame.
@@ -2394,6 +2556,7 @@ class Api:
             )
             if circles is None:
                 return []
+
             circles = np.round(circles[0, :]).astype("int")
             # First radius filter
             good_circles = [
@@ -2403,6 +2566,7 @@ class Api:
             ]
             if not good_circles:
                 return []
+
             # Require similar sizes
             radii = [r for _, _, r in good_circles]
             median_radius = np.median(radii)
@@ -2414,9 +2578,11 @@ class Api:
                 if abs(r - median_radius) <= tolerance
             ]
             return similar_circles
+
         except Exception as e:
             self.set_status(f"    Error in circle detection: {e}")
             return []
+
     def _find_color_center(self, frame, target_color_hex, tolerance=8):
         """
         Find the center point of a color cluster in a frame
@@ -2425,6 +2591,7 @@ class Api:
         """
         if frame is None:
             return None
+
         # Convert Color
         target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int32)
         # Convert Frame For Safe Subtraction
@@ -2436,10 +2603,12 @@ class Api:
         y_coords, x_coords = np.where(mask)
         if len(x_coords) == 0:
             return None
+
         # Center Calculation (Vectorized Mean)
         center_x = int(np.mean(x_coords))
         center_y = int(np.mean(y_coords))
         return (center_x, center_y)
+
     def _find_color_cluster(self, frame, target_color_hex, tolerance=8, min_area=10):
         """
         Find the largest color cluster and return its center, leftmost point, and rightmost point.
@@ -2453,6 +2622,7 @@ class Api:
         """
         if frame is None:
             return None
+
         # Color Mask (Vectorized)
         target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int32)
         frame_int = frame.astype(np.int32)
@@ -2460,10 +2630,12 @@ class Api:
         mask = (np.sqrt(np.sum((frame_int - target_bgr) ** 2, axis=2)) <= tol).astype(np.uint8)
         if not np.any(mask):
             return None, None, None
+
         # Connected Components (Cluster Detection)
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
         if num_labels <= 1:
             return None, None, None  # Only background
+
         # Find largest cluster (skip label 0 = background)
         largest_label = None
         largest_area = 0
@@ -2474,10 +2646,12 @@ class Api:
                 largest_label = label
         if largest_label is None:
             return None, None, None
+
         # Get all pixel coordinates belonging to the largest cluster
         ys, xs = np.where(labels == largest_label)
         if len(xs) == 0:
             return None, None, None
+
         # Center = centroid (from connectedComponentsWithStats)
         center_x, center_y = centroids[largest_label]
         center = (int(center_x), int(center_y))
@@ -2488,6 +2662,7 @@ class Api:
         right_idx = np.argmax(xs)
         right = (int(xs[right_idx]), int(ys[right_idx]))
         return center, left, right
+
     def _update_arrow_box_estimation(self, arrow_center_x, any_bar_detected_this_frame, width):
         """
         Arrow fallback logic: ONLY triggers if NO bar colors were detected in this frame
@@ -2544,6 +2719,7 @@ class Api:
                         # print(f"🐟 Arrow mode: Arrow LEFT of center - L={bar_left_x:.0f} (arrow), R={bar_right_x:.0f} (kept)")
                     else:
                         pass # print(f"🐟 Arrow mode: Invalid - arrow left {bar_left_x:.0f} >= right {bar_right_x:.0f}")
+
                 else:
                     # Arrow is on the RIGHT side - update right bar, keep left bar from memory
                     bar_right_x = arrow_center_x
@@ -2561,6 +2737,7 @@ class Api:
                         # print(f"🐟 Arrow mode: Arrow RIGHT of center - L={bar_left_x:.0f} (kept), R={bar_right_x:.0f} (arrow)")
                     else:
                         pass # print(f"🐟 Arrow mode: Invalid - left {bar_left_x:.0f} >= arrow right {bar_right_x:.0f}")
+
             # Fallback: Try to establish initial box size from previous positions
             elif self.last_left_x is not None and self.last_right_x is not None:
                 box_size = self.last_right_x - self.last_left_x
@@ -2595,10 +2772,12 @@ class Api:
                     bar_center_found = True
                     # print(f"🐟 Arrow mode: Invalid box size (<=0), using fish area width/2={default_box_size}px - L={bar_left_x:.0f}, R={bar_right_x:.0f}")
         return bar_center, bar_left_x, bar_right_x
+
     def _hex_to_bgr(self, hex_color):
         "Convert hex color to BGR tuple for OpenCV."
         if hex_color is None or hex_color.lower() in ["none", "# None", ""]:
             return None
+
         hex_color = hex_color.lstrip('# ')
         if len(hex_color) == 6:
             try:
@@ -2606,32 +2785,34 @@ class Api:
                 g = int(hex_color[2:4], 16)
                 b = int(hex_color[4:6], 16)
                 return (b, g, r)  # Bgr Format For Opencv
+
             except ValueError:
                 return None
+
         return None
+
     # Do Pixel/Image/line Search
     def _do_pixel_search(self, frame, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol):
         _, fish_pos_left, fish_pos_right = self._find_color_cluster(frame, fish_hex, fish_tol, 5)
-
         left = self._find_first_pixel(frame, left_bar_hex, left_tol)
         if left == None:
             left = self._find_first_pixel(frame, right_bar_hex, right_tol)
         right = self._find_last_pixel(frame, right_bar_hex, right_tol)
         if right == None:
             right = self._find_last_pixel(frame, left_bar_hex, left_tol)
-
         try:
             left_bar = left[0]
             right_bar = right[0]
         except:
             left_bar = None
             right_bar = None
-
         return fish_pos_left, fish_pos_right, left_bar, right_bar
+
     def do_circle_search(self, detection_img):
         circles = self._find_all_circles(detection_img)
         if not circles:
             return {}
+
         height, width = detection_img.shape[:2]
         lanes = {
             0: [],
@@ -2657,6 +2838,7 @@ class Api:
                     "bottom": None
                 }
                 continue
+
             # The circle with the largest y_ratio (lowest on screen) is the stationary bottom target.
             # All others (if any) are falling notes above it. This supports multiple falling notes
             # per lane (double/triple notes) as requested.
@@ -2667,6 +2849,7 @@ class Api:
                 "bottom": bottom_ratio
             }
         return results
+
     def _do_line_search(self, frame, fish_area_center):
         # Initialization
         line_coordinates = self._detect_lines_in_frame(frame)
@@ -2675,7 +2858,6 @@ class Api:
         target_right_x = None
         left_bar_x = None
         right_bar_x = None
-        
         # Initialize teleport tracking variables if they don't exist
         if not hasattr(self, 'potential_teleport_target_left'):
             self.potential_teleport_target_left = None
@@ -2683,12 +2865,10 @@ class Api:
             self.potential_teleport_left_bar = None
             self.potential_teleport_right_bar = None
             self.teleport_first_detected_time = None
-        
         # Process lines - need at least 2 lines to continue tracking
         if len(line_coordinates) >= 2:
             # Reset fish lost timer
             self.fish_lost_timer = 0.0
-            
             if self.is_initial_run or self.initial_target_gap is None:
                 # INITIAL RUN: Find 2 closest lines to center as target lines
                 distance_coords = sorted([(abs(coord - fish_area_center), coord) for coord in line_coordinates], key=lambda x: x[0])
@@ -2696,13 +2876,11 @@ class Api:
                 target_left_x = target_pair[0]
                 target_right_x = target_pair[1]
                 self.initial_target_gap = target_right_x - target_left_x
-                
                 # Find bars - closest to left of left target, closest to right of right target
                 left_candidates = [x for x in line_coordinates if x < target_left_x]
                 right_candidates = [x for x in line_coordinates if x > target_right_x]
                 left_bar_x = max(left_candidates) if left_candidates else target_left_x
                 right_bar_x = min(right_candidates) if right_candidates else target_right_x
-                
                 # Store for next run
                 self.last_fish_left = target_left_x
                 self.last_fish_right = target_right_x
@@ -2715,7 +2893,6 @@ class Api:
                 # Rule 1: Find pair with gap matching self.initial_target_gap
                 best_gap_diff = float('inf')
                 best_pair = None
-                
                 for i in range(len(line_coordinates) - 1):
                     curr_left = line_coordinates[i]
                     curr_right = line_coordinates[i + 1]
@@ -2724,24 +2901,19 @@ class Api:
                     if gap_diff < best_gap_diff:
                         best_gap_diff = gap_diff
                         best_pair = (curr_left, curr_right)
-                
                 if best_pair:
                     target_left_x, target_right_x = best_pair
-                
                 # If best gap is more than 3x initial gap, keep old positions (detection error)
                 actual_gap = target_right_x - target_left_x
                 if actual_gap > self.initial_target_gap * 3:
                     target_left_x = self.last_fish_left
                     target_right_x = self.last_fish_right
-                
                 # Rule 2: Find bars - exclude target lines
                 # Get all lines that are NOT the target lines
                 other_lines = [x for x in line_coordinates if x not in (target_left_x, target_right_x)]
-                
                 # Sort other lines by position relative to targets
                 left_candidates = [x for x in other_lines if x < target_left_x]
                 right_candidates = [x for x in other_lines if x > target_right_x]
-                
                 # Select best bars with preference for candidates on correct side
                 if left_candidates and right_candidates:
                     # Perfect case: have bars on both sides
@@ -2759,36 +2931,32 @@ class Api:
                     # No bars on either side - use last known positions
                     left_bar_x = self.last_left_x if self.last_left_x is not None else target_left_x - self.initial_target_gap
                     right_bar_x = self.last_right_x if self.last_right_x is not None else target_right_x + self.initial_target_gap
-                
                 # Ensure bars are on correct sides of targets
                 if left_bar_x >= target_left_x:
                     # Left bar is on or right of left target - find a suitable left bar
                     left_candidates = [x for x in other_lines if x < target_left_x]
                     left_bar_x = max(left_candidates) if left_candidates else target_left_x - self.initial_target_gap
                     left_bar_x = max(left_bar_x, 0)  # Don't go negative
-                
                 if right_bar_x <= target_right_x:
                     # Right bar is on or left of right target - find a suitable right bar
                     right_candidates = [x for x in other_lines if x > target_right_x]
                     right_bar_x = min(right_candidates) if right_candidates else target_right_x + self.initial_target_gap
                     right_bar_x = min(right_bar_x, self.frame_width if hasattr(self, 'frame_width') else 1920)
-                
         else:
             # Less than 2 lines detected - use last known positions or estimate
             self.fish_lost_timer += 0.033  # Approximate frame time (30 FPS)
-            
             if hasattr(self, 'last_fish_left') and self.last_fish_left is not None:
                 # Use last known positions
                 target_left_x = self.last_fish_left
                 target_right_x = self.last_fish_right
                 left_bar_x = self.last_left_x
                 right_bar_x = self.last_right_x
-                
                 # If lost for more than 1 second, try to recover with wider search
                 if self.fish_lost_timer > 1.0:
                     # print(f"⚠️ Lost targets for {self.fish_lost_timer:.1f}s - attempting recovery")
                     # Use last positions as fallback
                     pass
+
             else:
                 # No history - use center estimation
                 target_left_x = int(fish_area_center - 20)
@@ -2796,14 +2964,12 @@ class Api:
                 left_bar_x = target_left_x - 40
                 right_bar_x = target_right_x + 40
                 # print("⚠️ No lines detected and no history - using estimated positions")
-        
         # Store current positions for next frame (always update with best available data)
         if target_left_x is not None:
             self.last_fish_left = target_left_x
             self.last_fish_right = target_right_x
             self.last_left_x = left_bar_x
             self.last_right_x = right_bar_x
-        
         return target_left_x, target_right_x, left_bar_x, right_bar_x
 
     def _detect_lines_in_frame(self, frame, original_width=None):
@@ -2823,38 +2989,30 @@ class Api:
             # Get minimum line density from settings (configurable via GUI)
             MIN_LINE_DENSITY = float(self.vars.get("fish_line_min_density", 0.1))
             BRIGHTNESS_THRESHOLD = 10  # Minimum brightness for edge pixels
-            
             # Reference fish box dimensions at 1280x720 (lower detail for better edge detection)
             # At 1280x720: fish box is 762*(1280/2560) to 1797*(1280/2560) = 381 to 898 (width=517)
             # Height: 1215*(720/1440) to 1258*(720/1440) = 607 to 629 (height=22)
             REFERENCE_FISH_WIDTH = 517   # Fish box width at 720p
             REFERENCE_FISH_HEIGHT = 22   # Fish box height at 720p
-            
             # Store original dimensions for coordinate scaling
             original_height, original_frame_width = frame.shape[:2]
             if original_width is None:
                 original_width = original_frame_width
-            
             # Normalize frame to reference dimensions for consistent detection
             if original_frame_width != REFERENCE_FISH_WIDTH or original_height != REFERENCE_FISH_HEIGHT:
                 frame = cv2.resize(frame, (REFERENCE_FISH_WIDTH, REFERENCE_FISH_HEIGHT), interpolation=cv2.INTER_LINEAR)
                 width_scale = original_width / REFERENCE_FISH_WIDTH
             else:
                 width_scale = 1.0
-            
             # Step 1: Convert to grayscale
             grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            
             # Step 2: Laplacian edge detection (NLM removed for 10x speedup)
             laplacian = cv2.Laplacian(grayscale, cv2.CV_8U)
-            
             # Step 3: Filter vertical lines by brightness threshold and density
             height, width = laplacian.shape
-            
             # Vectorized column density calculation (10x faster than Python loop)
             column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
             line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
-            
             # Merge adjacent lines (consecutive x-coordinates) into single lines
             # Takes the middle position of each group of adjacent pixels
             # lines must be within 2 pixels to be considered part of the same group
@@ -2877,60 +3035,51 @@ class Api:
                 middle = (group_start + group_end) // 2
                 merged_lines.append(middle)
                 line_coordinates = merged_lines
-            
             # Scale line coordinates back to original frame dimensions
             if width_scale != 1.0:
                 line_coordinates = [int(x * width_scale) for x in line_coordinates]
-            
             # Sort coordinates for consistent processing
             line_coordinates.sort()
-            
             return line_coordinates
+
         except Exception as e:
             # print(f"    Error in line detection: {e}")
             return []
+
     # PID control
     def _reset_pid_state(self):
         """Reset controller state before a new minigame."""
-
         # PID
         self.last_error = 0.0
         self.last_fish_x = None
         self.last_scan_time = None
-
         # Bar tracking
         self.last_left_x = None
         self.last_right_x = None
         self.last_bar_size = None
         self.last_bar_center = None
-
         # Arrow estimation
         self.last_indicator_x = None
-
         # Prediction
         self.color_check_target_velocity = 0.0
         self.color_check_bar_velocity = 0.0
-
         # Dual fishing
         self.last_error2 = 0.0
         self.last_fish_x2 = 0.0
         self.last_scan_time2 = 0.0
         self.last_bar_center2 = 0.0
-
         # Line detection
         self.last_fish_left = None
         self.last_fish_right = None
         self.is_initial_run = True
         self.initial_target_gap = None
         self.fish_lost_timer = 0
-
         # Color Detection
         self.estimation_mode = False
         self.consecutive_failures = 0
     def _normal_control(self, error, dual_fishing=False):
         """
         Traditional PD controller with clamps based on user areas.
-
         Args:
             error:      fish_x - bar_center  (positive = target is right of bar)
         Returns:
@@ -2943,39 +3092,31 @@ class Api:
             self.last_scan_time = current_time
             self.last_error = error
             return 0.0
-        
+
         time_delta = current_time - self.last_scan_time
-        time_delta = min(0.15, time_delta)
         if time_delta <= 0:
             return 0.0
+
         kp       = self._get_var_number("kp", 0.6)
         kd       = self._get_var_number("kd", 0.5)
-
         # Derivative
-        bar_velocity = (error - self.last_error) / time_delta
-        bar_velocity = min(fish_width, max(-fish_width, bar_velocity))
-
+        bar_velocity = (error - self.last_error)
+        bar_velocity = min(max(bar_velocity, (fish_width / -10)), (fish_width / 10)) / time_delta
         # Final calculations
         p_term = kp * error
         d_term = kd * bar_velocity
-
-        d_term_clamp = 80.0 # Leave some headroom for the p_term within your 100.0 pd_clamp
-        d_term = max(-d_term_clamp, min(d_term_clamp, d_term))
-
         output = (p_term + d_term)
-
         if dual_fishing == True:
             self.last_error2      = error
             self.last_scan_time2  = current_time
         else:
             self.last_error      = error
             self.last_scan_time  = current_time
-
         return output
+
     def _steady_control(self, error, bar_center, dual_fishing=False):
         """
         Asymmetric PD controller.
-
         Args:
             error:      fish_x - bar_center  (positive = target is right of bar)
             bar_center: current bar centre in screen coordinates
@@ -3005,10 +3146,11 @@ class Api:
             time_delta = min(0.15, time_delta)
             if time_delta <= 0:
                 return 0.0
+
             # Bar velocity: how fast the bar centre moved since last frame
             last_bar_x   = self.last_fish_x - self.last_error
-            bar_velocity = (bar_center_x - last_bar_x) / time_delta
-            bar_velocity = min(fish_width, max(-fish_width, bar_velocity))
+            bar_velocity = (bar_center_x - last_bar_x)
+            bar_velocity = min(max(bar_velocity, (fish_width / -10)), (fish_width / 10)) / time_delta # Clamp
             error_magnitude_decreasing = abs(error) < abs(self.last_error)
             bar_moving_toward_target = (
                 (bar_velocity > 0 and error > 0)
@@ -3022,9 +3164,6 @@ class Api:
             else:
                 # CHASING – light damping to allow fast movement
                 d_term = -kd * 0.2 * bar_velocity
-            # FIX: Clamp the d_term so it can never completely overpower the controller
-            d_term_clamp = 80.0 # Leave some headroom for the p_term within your 100.0 pd_clamp
-            d_term = max(-d_term_clamp, min(d_term_clamp, d_term))
         # Update state for next frame
         if dual_fishing == True:
             self.last_error2      = error
@@ -3037,41 +3176,34 @@ class Api:
         # Combined and clamped control signal
         control_signal = p_term + d_term
         return control_signal
+
     def _predictive_control(self, fish_x, bar_center, dual_fishing=False):
         """
         Predictive controller.
         Uses linear stopping distance and counter-thrust.
-
         Args:
         fish_x: Fish X
         bar_center: Bar Center
         """
-
         # Init Failsafe 
         if self.last_bar_center is None:
             self.last_bar_center = None
-
         if self.last_fish_x is None:
             self.last_fish_x = None
-
         if self.last_scan_time is None:
             self.last_scan_time = time.perf_counter()
-
         if self.color_check_bar_velocity is None:
             self.color_check_bar_velocity = 0.0
-
         if self.color_check_target_velocity is None:
             self.color_check_target_velocity = 0.0
-
         # Failsafe: Missing Data
         if fish_x is None or bar_center is None:
             should_hold = False
             return should_hold
-        
+
         # Get variables
         stopping_distance_multiplier = self._get_var_number("stopping_distance_multiplier", 3)
         velocity_smoothing = self._get_var_number("velocity_smoothing", 1)
-        
         # Calculate velocities
         current_time = time.perf_counter()
         if self.last_bar_center is not None and self.last_fish_x is not None:
@@ -3079,12 +3211,10 @@ class Api:
             if delta_time > 0:
                 raw_bar_velocity = (bar_center - self.last_bar_center) / delta_time
                 raw_target_velocity = (fish_x - self.last_fish_x) / delta_time
-                
                 self.color_check_bar_velocity = (velocity_smoothing * raw_bar_velocity + 
                                             (1 - velocity_smoothing) * self.color_check_bar_velocity)
                 self.color_check_target_velocity = (velocity_smoothing * raw_target_velocity + 
                                                 (1 - velocity_smoothing) * self.color_check_target_velocity)
-        
         # Update previous values
         if dual_fishing == True:
             self.last_bar_center2 = bar_center
@@ -3094,7 +3224,6 @@ class Api:
             self.last_bar_center = bar_center
             self.last_fish_x = fish_x
             self.last_scan_time = current_time
-
         # Calculate error and relative velocity FIRST
         error = bar_center - fish_x
         try:
@@ -3103,15 +3232,14 @@ class Api:
             self.color_check_bar_velocity = 0
             self.color_check_target_velocity = 0
             return False
-        
+
         # Nan Guard AFTER variables are defined
         if not np.isfinite(relative_velocity):
             should_hold = False
             return should_hold
-        
+
         # Calculate stopping distance based on relative velocity
         stopping_distance = abs(relative_velocity) * stopping_distance_multiplier
-        
         # On-Bar: Use Stopping-Distance / Counter-Thrust Logic
         if error < -stopping_distance:
             # Bar Is Left Of Fish Beyond Stopping Distance → Hold To Move Right
@@ -3128,23 +3256,26 @@ class Api:
                 # Bar Moving Left Relative To Fish → Hold (Apply Right Thrust)
                 should_hold = True
         return should_hold
+
     # Utility Functions
     def _format_elapsed_time(self, seconds):
         seconds = int(seconds)
-
         days = seconds // 86400
         hours = (seconds % 86400) // 3600
         minutes = (seconds % 3600) // 60
         secs = seconds % 60
-
         if days > 0:
             return f"{days}d {hours:02d}h {minutes:02d}m {secs:02d}s"
+
         elif hours > 0:
             return f"{hours}h {minutes:02d}m {secs:02d}s"
+
         elif minutes > 0:
             return f"{minutes}m {secs:02d}s"
+
         else:
             return f"{secs}s"
+
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status, catch_rate):
         """Worker function to send text webhook."""
         logging_name = self.vars["logging_name"]
@@ -3242,12 +3373,14 @@ class Api:
         if logging_mode == "Disabled":
             self.set_status("⚠ Logging is disabled.")
             return
+
         if not logging_mode == "File":
             # logging_url
             webhook_url = self.vars["logging_url"].strip()
             if not webhook_url.startswith("https://discord.com/api/webhooks/"):
                 self.set_status("Error: Invalid webhook URL.")
                 return
+
         if show_status == True:
             self.set_status("Sending test webhook...")
         if logging_mode == "screenshot":
@@ -3277,6 +3410,7 @@ class Api:
         frame2 = self._grab_screen_region(totem_left, totem_top, totem_right, totem_bottom)
         if frame2 is None or frame2.size == 0:
             return None, 0.0
+
         image_size = int(50 / self.SCREEN_SCALE)
         frame = cv2.resize(frame2, (image_size, image_size))
         def white_mask(img):
@@ -3286,20 +3420,25 @@ class Api:
             # If completely empty, return early
             if mask is None or mask.size == 0:
                 return None
+
             k = np.ones((3, 3), np.uint8)
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
             mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, k)
             return mask
+
         def best_match(frame_mask, ref_mask):
             if frame_mask is None or ref_mask is None:
                 return 0.0
+
             if frame_mask.size == 0 or ref_mask.size == 0:
                 return 0.0
+
             fh, fw = frame_mask.shape
             rh, rw = ref_mask.shape
             # Ensure valid dimensions
             if fh == 0 or fw == 0 or rh == 0 or rw == 0:
                 return 0.0
+
             # Resize reference if needed
             if rh > fh or rw > fw:
                 scale = min(fh / rh, fw / rw)
@@ -3307,23 +3446,29 @@ class Api:
                 new_h = max(1, int(rh * scale))
                 if new_w <= 0 or new_h <= 0:
                     return 0.0
+
                 ref_mask = cv2.resize(ref_mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
                 rh, rw = ref_mask.shape
             # Final safety check (CRITICAL)
             if rh > fh or rw > fw:
                 return 0.0
+
             try:
                 result = cv2.matchTemplate(frame_mask, ref_mask, cv2.TM_CCOEFF_NORMED)
                 # THIS prevents your exact crash
                 if result is None or result.size == 0:
                     return 0.0
+
                 _, max_val, _, _ = cv2.minMaxLoc(result)
                 return float(max_val)
+
             except Exception:
                 return 0.0
+
         frame_mask = white_mask(frame)
         if frame_mask is None:
             return None, 0.0
+
         sun_path  = os.path.join(IMAGES_PATH, "sun.png")
         moon_path = os.path.join(IMAGES_PATH, "moon.png")
         sun_img  = cv2.imread(sun_path)
@@ -3331,6 +3476,7 @@ class Api:
         if sun_img is None or moon_img is None:
             self.set_status("Totem detection: sun.png or moon.png missing.")
             return None, 0.0
+
         sun_mask  = white_mask(sun_img)
         moon_mask = white_mask(moon_img)
         sun_conf  = best_match(frame_mask, sun_mask)
@@ -3338,8 +3484,10 @@ class Api:
         best_conf = max(sun_conf, moon_conf)
         if best_conf < confidence_threshold:
             return None, best_conf
+
         result = "Day" if sun_conf >= moon_conf else "Night"
         return result, best_conf
+
     # Start utilities
     def start_angler(self):
         self._stop_active_capture()
@@ -3397,6 +3545,7 @@ class Api:
                 self.set_status("Could not read fish name")
                 time.sleep(utility_restart_delay)
                 continue
+
             # STEP 3: OPEN BACKPACK
             self._send_key(backpack_slot)
             time.sleep(0.5)
@@ -3427,6 +3576,7 @@ class Api:
                     conf = -1
                 if conf < 40 or not tok:
                     continue
+
                 if tok in required_fish or required_fish in tok:
                     qx = ocr_data_q["left"][i]
                     qy = ocr_data_q["top"][i]
@@ -3436,6 +3586,7 @@ class Api:
                     quest_click_x = quest_left + (qx + qw // 2) // 3
                     quest_click_y = quest_top  + (qy + qh // 2) // 3
                     break
+
             if quest_click_x is not None:
                 self.set_status(
                     f"Quest text '{required_fish}' found at "
@@ -3560,7 +3711,6 @@ class Api:
         catch_rate_show = 100
         successful_catches = 0
         self.webhook_start_time = time.time()
-
         rod_slot = str(self.vars["rod_slot"])
         bag_slot = str(self.vars["bag_slot"])
         shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self._get_areas("shake")
@@ -3638,7 +3788,6 @@ class Api:
                 # Clean the error string so it doesn't break JavaScript execution syntax
                 # We escape backslashes, single quotes, and newlines
                 escaped_error = full_error.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
-                
                 # Construct the self-invoking JS code block
                 js_code = f"""
                 (function() {{
@@ -3654,9 +3803,9 @@ class Api:
                 window.evaluate_js(js_code)
             except Exception:
                 pass # Keep it safe just like set_status
+
             if IS_COMPILED == False:
                 print(full_error)
-                
             self.macro_running = False
             self.stop_macro(f"Error at line {error_line}: {e}")
     # Utilities
@@ -3671,6 +3820,7 @@ class Api:
         cd_mode = self.vars["logging_trigger"].lower()
         if cd_mode == "disabled":
             return  # webhook type is disabled; do nothing
+
         try:
             trigger_every = int(self.vars["logging_cycle"])
         except (ValueError, KeyError):
@@ -3703,8 +3853,10 @@ class Api:
         # self.SCREEN_SCALE
         if mode == "Disabled":
             return
+
         if not self.macro_running == True:
             return
+
         try:
             trigger_every = int(self.vars["totem_cycles"])
         except (ValueError, KeyError):
@@ -3718,16 +3870,19 @@ class Api:
             self.totem_cycle_counter += 1
             if not (trigger_every > 0 and self.totem_cycle_counter % trigger_every == 0):
                 return
+
         # Time Mode
         elif mode == "Time":
             elapsed = time.time() - self.totem_start_time
             if not (trigger_secs > 0 and elapsed >= trigger_secs):
                 return
+
             # Reset Timer Before Execution So It Starts Fresh Regardless Of Success/Failure
             self.totem_start_time = time.time()
             self.totem_cycle_counter += 1
         else:
             return
+
         # Execute Totem
         self.set_status("Using Totem")
         sundial_slot = str(self.vars["sundial_slot"])
@@ -3741,6 +3896,7 @@ class Api:
         current_time, best_conf = self._detect_day_or_night(confidence_threshold)
         if current_time is None:
             return  # Below confidence threshold — skip this cycle
+
         # Decide Whether To Use Sundial
         use_sundial = (
             desired_time in ["Day", "Night"] and
@@ -3804,6 +3960,7 @@ class Api:
                 time.sleep(0.2)
                 self._click_at(mirror_click_x, mirror_click_y)
             return
+
     # Casting
     def _execute_cast_perfect(self):
         """
@@ -3846,6 +4003,7 @@ class Api:
             img_i = img.astype(np.int32)
             diff = img_i - target_bgr
             return np.sqrt(np.sum(diff ** 2, axis=2)) <= tolerance
+
         def reset_tracking():
             nonlocal tracking_mode, green_left_x, green_right_x, green_y
             nonlocal last_time_to_impact
@@ -3864,6 +4022,10 @@ class Api:
         while self.macro_running:
             if not self._cap_event.wait(timeout=0.5):
                 continue
+
+            if self.macro_running == False:
+                break
+
             with self._cap_lock:
                 frame = self._cap_frame
                 self._cap_consumed_id = self._cap_frame_id  # back-pressure release
@@ -3871,11 +4033,14 @@ class Api:
             if frame is None:
                 stop_event.set()
                 return
+
             region = frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
             if region.size == 0:
                 if time.time() - start_time > max_time:
                     break
+
                 continue
+
             if self._is_fish_overlay_enabled():
                 self.fish_overlay.clear()
             if not tracking_mode:
@@ -3890,7 +4055,9 @@ class Api:
                     tracking_mode = True
                 elif time.time() - start_time > max_time:
                     break
+
                 continue
+
             green_top = max(0, green_y - green_padding)
             green_bottom = min(region.shape[0], green_y + green_padding)
             green_left = max(0, green_left_x - green_padding)
@@ -3899,11 +4066,13 @@ class Api:
             if green_frame.size == 0:
                 reset_tracking()
                 continue
+
             mask = color_mask(green_frame, target_green, green_tol)
             rows, cols = np.nonzero(mask)
             if rows.size == 0:
                 reset_tracking()
                 continue
+
             found_y_relative = int(rows[0])
             cols_in_row = cols[rows == found_y_relative]
             green_left_x = int(np.min(cols_in_row)) + green_left
@@ -3913,24 +4082,30 @@ class Api:
             if green_right_x <= green_left_x:
                 reset_tracking()
                 continue
+
             scan_bottom = int(region.shape[0] * 0.9)
             white_frame = region[green_y:scan_bottom, green_left_x:green_right_x]
             if white_frame.size == 0:
                 if time.time() - start_time > max_time:
                     break
+
                 continue
+
             mask_white = color_mask(white_frame, target_white, white_tol)
             rows_white, _ = np.nonzero(mask_white)
             if rows_white.size == 0:
                 if time.time() - start_time > max_time:
                     break
+
                 continue
+
             white_y_top = int(rows_white[0]) + green_y
             white_y_bottom = int(rows_white[-1]) + green_y
             total_distance = white_y_bottom - green_y
             current_distance = white_y_top - green_y
             if total_distance <= 0:
                 continue
+
             cast_left = shake_left_s + green_left_x
             cast_top = shake_top_s + green_y
             cast_right = shake_left_s + green_right_x
@@ -4035,8 +4210,10 @@ class Api:
                         released = True
             if released:
                 break
+
             if time.time() - start_time > max_time:
                 break
+
         # Cleanup
         stop_event.set()
         self.release_mouse(False)
@@ -4044,6 +4221,7 @@ class Api:
         self._fish_overlay_cast_bounds = None
         self._set_fish_overlay_mode("idle")
         return
+
     def execute_cast_normal(self):
         delay_before_casting = float(self._get_var_number("delay_before_casting", 0.5, float))
         cast_duration = float(self._get_var_number("cast_duration", 0.5, float))
@@ -4054,6 +4232,7 @@ class Api:
         self.release_mouse(False)
         time.sleep(delay_after_casting)
         return
+
     def _execute_shake_click(self, shake_mode):
         """
         IF shake_mode = pixel: Search for pixel
@@ -4086,6 +4265,7 @@ class Api:
             # Grab full screen then crop
             if not self._cap_event.wait(timeout=0.5):
                 continue
+
             with self._cap_lock:
                 frame = self._cap_frame
                 self._cap_consumed_id = self._cap_frame_id  # back-pressure release
@@ -4093,10 +4273,12 @@ class Api:
             if frame is None:
                 stop_event.set()
                 return
+
             shake_area = frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
             if shake_area is None or shake_area.size == 0:
                 time.sleep(scan_delay)
                 continue
+
             # 1. Look for shake pixel
             if shake_mode == "Pixel":
                 shake_pixel = self._find_first_pixel(shake_area, shake_hex, tolerance)
@@ -4113,12 +4295,14 @@ class Api:
                 detection_area = frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
                 if detection_area is None or detection_area.size == 0:
                     break
+
                 friend_x = self._find_color_center(detection_area, friend_color, friend_tol)
                 if not friend_x:
                     detected = True
                     time.sleep(0.005)
                 else:
                     break
+
             # 3. Fish detected → enter minigame
             if detected == True:
                 self.set_status("Finished Shaking - entering minigame")
@@ -4126,8 +4310,13 @@ class Api:
                 time.sleep(0.003)
                 mouse_controller.release(Button.left)
                 return  # exit shake cleanly
+
             attempts += 1
             time.sleep(scan_delay)
+        # If macro is not running, stop here
+        time.sleep(2)
+        self._set_fish_overlay_mode("idle")
+        return True
     def _execute_shake_navigation(self):
         """Spams the enter key until fish detection is found"""
         self.set_status("Shake Mode: Navigation")
@@ -4160,6 +4349,7 @@ class Api:
                 # Grab full screen then crop
                 if not self._cap_event.wait(timeout=0.5):
                     continue
+
                 with self._cap_lock:
                     frame = self._cap_frame
                     self._cap_consumed_id = self._cap_frame_id  # back-pressure release
@@ -4168,15 +4358,18 @@ class Api:
                     stop_event.set()
                     # print("Finished (no frame)")
                     return
+
                 detection_area = frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
                 if detection_area is None or detection_area.size == 0:
                     break
+
                 friend_x = self._find_color_center(detection_area, friend_color, friend_tol)
                 if not friend_x:
                     detected = True
                     time.sleep(0.005)
                 else:
                     break
+
             # 3. Fish detected → enter minigame
             if detected == True:
                 self.set_status("Finished Shaking - entering minigame")
@@ -4184,8 +4377,13 @@ class Api:
                 time.sleep(0.003)
                 mouse_controller.release(Button.left)
                 return  # exit shake cleanly
+
             attempts += 1
             time.sleep(scan_delay)
+        # If macro is not running, stop here
+        time.sleep(2)
+        self._set_fish_overlay_mode("idle")
+        return True
     def _enter_minigame_tranquility(self):
         # Get colors
         left_color = self.vars["left_color"]
@@ -4216,6 +4414,7 @@ class Api:
             # Step 1: Grab Full Screen Then Crop (better on macOS)
             if not self._cap_event.wait(timeout=0.5):
                 continue
+
             with self._cap_lock:
                 frame = self._cap_frame
                 self._cap_consumed_id = self._cap_frame_id  # back-pressure release
@@ -4224,6 +4423,7 @@ class Api:
                 _minigame_stop.set()
                 self._set_fish_overlay_mode("idle")
                 return
+
             self._set_fish_overlay_mode("tranquility")
             # Step 2: Crop images
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
@@ -4240,6 +4440,7 @@ class Api:
                 time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
                 return
+
             keys = [
                 tranquility_key_1,
                 tranquility_key_2,
@@ -4257,9 +4458,11 @@ class Api:
                 lane_info = lane_data.get(lane)
                 if not lane_info:
                     continue
+
                 bottom_ratio = lane_info["bottom"]
                 if bottom_ratio is None:
                     continue
+
                 note_distances = []
                 for note_ratio in lane_info["notes"]:
                     note_distances.append(bottom_ratio - note_ratio)
@@ -4270,9 +4473,11 @@ class Api:
                     lane_info = lane_data.get(lane)
                     if not lane_info:
                         continue
+
                     bottom_ratio = lane_info["bottom"]
                     if bottom_ratio is None:
                         continue
+
                     for note_ratio in lane_info["notes"]:
                         # draw falling note
                         self.fish_overlay.draw_circle(
@@ -4288,6 +4493,7 @@ class Api:
                     )
             except:
                 pass
+
             # Step 8: Compare note ratios to user given target (based on tranquility mode)
             if tranquility_mode.lower() == "rapid":
                 for lane in range(4):
@@ -4305,12 +4511,17 @@ class Api:
                         if distance <= target:
                             should_press = True
                             break
+
                     if should_press:
                         time.sleep(target_delay)
                         self._send_key(keys[lane], 0.03, 1)
                     else:
                         self._send_key(keys[lane], 0.03, 2)
             time.sleep(scan_delay)
+        # If macro is not running, stop here
+        time.sleep(restart_delay)
+        self._set_fish_overlay_mode("idle")
+        return True
     def _enter_minigame_dreambreaker(self):
         # Areas
         fish_left, fish_top, fish_right, fish_bottom, fish_width, _ = self._get_areas("fish")
@@ -4362,6 +4573,7 @@ class Api:
             # Step 1: Grab Full Screen Then Crop (better on macOS)
             if not self._cap_event.wait(timeout=0.5):
                 continue
+
             with self._cap_lock:
                 frame = self._cap_frame
                 self._cap_consumed_id = self._cap_frame_id
@@ -4370,6 +4582,7 @@ class Api:
                 _minigame_stop.set()
                 self._set_fish_overlay_mode("idle")
                 return
+
             # Step 2: Crop image into fish and friend areas
             self.fish_overlay.clear()
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
@@ -4408,6 +4621,7 @@ class Api:
                 time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
                 return
+
             # Step 5: Fish Overlay
             self.fish_overlay.draw(
                 bar_center=bar_center, box_size=bar_size,
@@ -4428,6 +4642,11 @@ class Api:
             # Step 7: Cleanup
             last_detection_source = detection_source
             time.sleep(scan_delay)
+        # If macro is not running, stop here
+        release_mouse()
+        time.sleep(restart_delay)
+        self._set_fish_overlay_mode("idle")
+        return True
     def _enter_minigame(self):
         # Areas
         shake_left, shake_top, shake_right, shake_bottom, _, _ = self._get_areas("shake")
@@ -4457,7 +4676,6 @@ class Api:
         bar_ratio = float(self.vars["bar_ratio_from_side"] or 0.5)
         restart_delay = float(self.vars["restart_delay"])
         scan_delay = float(self.vars["minigame_scan_delay"] or 0.05)
-
         fishing_profile = self.vars["fishing_profile"].lower()
         lock_cursor = (self.vars["lock_cursor"])
         minigame_controller_mode = self.vars["controller_mode"].lower()
@@ -4495,6 +4713,7 @@ class Api:
             # Step 1: Grab Full Screen and Crop Images
             if not self._cap_event.wait(timeout=0.5):
                 continue
+
             with self._cap_lock:
                 frame = self._cap_frame
                 self._cap_consumed_id = self._cap_frame_id
@@ -4503,6 +4722,10 @@ class Api:
                 _minigame_stop.set()
                 self._set_fish_overlay_mode("idle")
                 return catch_success
+            
+            if self.macro_running == False:
+                break
+
             if fishing_profile == "dual":
                 # Fish images
                 fish_img = frame[fish_top:fish_bottom, fish_left:fish_area_center]
@@ -4632,6 +4855,7 @@ class Api:
                 time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
                 return catch_success
+
             # Use cached coordinates if current detection is None or bar bounds are invalid
             bar_valid = True
             if left_x is None or right_x is None:
@@ -4688,6 +4912,7 @@ class Api:
                     release_mouse()
                 time.sleep(scan_delay)
                 continue   # skip all normal controller / overlay / dual logic
+
             # Step 6: Check controller mode condition and convert everything to screen coordinates
             if any_bar_detected_this_frame and bar_center is not None: # Bar Found
                 if note_coords is not None:
@@ -4703,12 +4928,14 @@ class Api:
                         fish_x = note_screen_x
                 elif not fishing_profile == "notes":
                     pass
+
                 # Important: Bar left and right check is moved below the calculation
                 try:
                     if not left_x <= fish_x <= right_x:
                         catch_success = False
                 except:
                     pass
+
             # Step 7: Controller mode selection
             controller_mode = 0
             if bar_center is not None and fish_x is not None:
@@ -4859,6 +5086,11 @@ class Api:
                 elif control2 < -thresh:
                     release_mouse(True)
             time.sleep(scan_delay)
+        # If macro is not running, stop here
+        release_mouse()
+        time.sleep(restart_delay)
+        self._set_fish_overlay_mode("idle")
+        return True
     # Stop macro
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False
@@ -4871,6 +5103,7 @@ class Api:
             window.show()
         except Exception:
             pass
+
 # Check for version
 def check_setup_guide():
     cleaned = 0 # Failsafe
@@ -4920,6 +5153,7 @@ Please redownload the application from the Google Drive."""
         # Optional: log the error for debugging
         # print(f"Error reading app.js: {e}")
     return show_setup_guide, error_message
+
 show_setup_guide, error_message = check_setup_guide()
 if show_setup_guide == True:
     dialogue = SetupGuide(error_message)
@@ -4943,16 +5177,19 @@ if show_setup_guide == False:
             api.macro_running = False
         except:
             pass
+
         try:
             api._stop_active_capture(join_timeout=1.0)
         except:
             pass
+
         try:
             if getattr(api, "area_selector", None):
                 api.area_selector.close()
                 api.area_selector = None
         except:
             pass
+
         try:
             if getattr(api, "eyedropper", None):
                 api.eyedropper.close()
@@ -4965,17 +5202,20 @@ if show_setup_guide == False:
                 api.fish_overlay = None
         except:
             pass
+
         try:
             if getattr(api, "key_listener", None):
                 api.key_listener.stop()
                 api.key_listener = None
         except:
             pass
+
         try:
             if hasattr(api._thread_local, "sct"):
                 api._thread_local.sct.close()
         except:
             pass
+
     # Attach shutdown handler
     window.events.closed += on_main_window_closed
     webview.start(gui="edgechromium")
