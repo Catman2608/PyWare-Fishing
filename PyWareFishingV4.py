@@ -54,7 +54,7 @@ keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-APP_VERSION = "4.4"
+APP_VERSION = "4.41"
 BETA_VERSION = 0
 def get_macos_menu_offset():
     if sys.platform != "darwin":
@@ -1954,6 +1954,8 @@ class Api:
     # Hold Mouse
     def hold_mouse(self, mouse=False):
         "Hold mouse. True for right click, False for left click."
+        if self.macro_running == False:
+            return
         if sys.platform == "win32":
             if mouse:
                 windll.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
@@ -1967,6 +1969,8 @@ class Api:
     # Release Mouse
     def release_mouse(self, mouse=False):
         "Release mouse. True for right click, False for left click."
+        if self.macro_running == False:
+            return
         if sys.platform == "win32":
             if mouse:
                 windll.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
@@ -1979,6 +1983,8 @@ class Api:
             _mouse_event(button="right" if mouse else "left", press=False)
     # Click At
     def _click_at(self, x, y, click_count=1):
+        if self.macro_running == False:
+            return
         # Convert coordinates if needed (Retina scaling)
         if sys.platform == "darwin":
             scale = self._get_scale_factor()
@@ -2012,6 +2018,8 @@ class Api:
             1 = hold (press only)
             2 = release (release only)
         """
+        if self.macro_running == False:
+            return
         key = str(key2)
 
         # Convert special key names
@@ -2050,43 +2058,51 @@ class Api:
                 print("Error sending keys:", e)
     # Screen Capture and Capture Thread
     def _grab_screen_region(self, left, top, right, bottom):
-        """Optimized path for MSS screen capture with macOS color handling. Coordinates are expected to be already scaled."""
+        """Optimized path for MSS screen capture with macOS color handling. 
+        Coordinates are expected to be already scaled."""
+        # Clamp coordinates to screen bounds
+        left = max(0, min(left, SCREEN_WIDTH - 1))
+        top = max(0, min(top, SCREEN_HEIGHT - 1))
+        right = max(left + 1, min(right, SCREEN_WIDTH))
+        bottom = max(top + 1, min(bottom, SCREEN_HEIGHT))
+        # Calculate width and height
         width = right - left
         height = bottom - top
-        if sys.platform == "darwin":
-            region = Quartz.CGRectMake(left, top, width, height) # Get region
-            # Capture full screen
-            image = Quartz.CGWindowListCreateImage(
-                Quartz.CGRectInfinite,
-                Quartz.kCGWindowListOptionOnScreenOnly,
-                Quartz.kCGNullWindowID,
-                Quartz.kCGWindowImageDefault
-            )
-            if image is None:
-                return None
+        # Failsafe: invalid coordinates
+        if width <= 0 or height <= 0:
+            return None
+        try:
+            if sys.platform == "darwin":
+                region = Quartz.CGRectMake(left, top, width, height) # Get region
+                # Capture full screen
+                image = Quartz.CGWindowListCreateImage(
+                    Quartz.CGRectInfinite,
+                    Quartz.kCGWindowListOptionOnScreenOnly,
+                    Quartz.kCGNullWindowID,
+                    Quartz.kCGWindowImageDefault
+                )
+                if image is None:
+                    return None
 
-            frame = cgimage_to_srgb_numpy(image)
-            # Manual crop using actual coordinates
-            cropped = frame[top:bottom, left:right]
-            return cropped.copy()
+                frame = cgimage_to_srgb_numpy(image)
+                # Manual crop using actual coordinates
+                cropped = frame[top:bottom, left:right]
+                return cropped.copy()
 
-        else:
-            width  = right - left
-            height = bottom - top
-            if width <= 0 or height <= 0:
-                return None
-
-            # Use a local dict rather than self._monitor to avoid concurrent mutation
-            m = {"left": left, "top": top, "width": width, "height": height}
-            if not hasattr(self._thread_local, "sct"):
-                self._thread_local.sct = MSS()
-            img = self._thread_local.sct.grab(m)
-            # MSS Returns BGRA. We convert the memory view to a standard numpy array safely.
-            frame = np.array(img, dtype=np.uint8) 
-            # Slice to BGR (dropping Alpha channel).
-            bgr_frame = frame[:, :, :3]
-            # Mathematical shift correction safely applied for macOS stability
-            return bgr_frame
+            else:
+                # Use a local dict rather than self._monitor to avoid concurrent mutation
+                m = {"left": left, "top": top, "width": width, "height": height}
+                if not hasattr(self._thread_local, "sct"):
+                    self._thread_local.sct = MSS()
+                img = self._thread_local.sct.grab(m)
+                # MSS Returns BGRA. We convert the memory view to a standard numpy array safely.
+                frame = np.array(img, dtype=np.uint8) 
+                # Slice to BGR (dropping Alpha channel).
+                bgr_frame = frame[:, :, :3]
+                # Mathematical shift correction safely applied for macOS stability
+                return bgr_frame
+        except:
+            return None
 
     def _grab_screen_full(self, thread_local=None):
         # Fallback like grab_screen_region
@@ -2095,47 +2111,51 @@ class Api:
         scale = self._get_scale_factor()
         width = int(self.SCREEN_WIDTH * scale)
         height = int(self.SCREEN_HEIGHT * scale)
-        if sys.platform == "darwin":
-            image = Quartz.CGWindowListCreateImage(
-                Quartz.CGRectInfinite,
-                Quartz.kCGWindowListOptionOnScreenOnly,
-                Quartz.kCGNullWindowID,
-                Quartz.kCGWindowImageDefault
-            )
-            if image is None:
-                return None
+        try:
+            if sys.platform == "darwin":
+                image = Quartz.CGWindowListCreateImage(
+                    Quartz.CGRectInfinite,
+                    Quartz.kCGWindowListOptionOnScreenOnly,
+                    Quartz.kCGNullWindowID,
+                    Quartz.kCGWindowImageDefault
+                )
+                if image is None:
+                    return None
 
-            frame = cgimage_to_srgb_numpy(image)
-            # Crop manually for coordinate consistency.
-            # cgimage_to_srgb_numpy already returns an owned copy, so no second
-            # .copy() is needed here — the slice is just a view into that buffer.
-            return frame[0:height, 0:width]
+                frame = cgimage_to_srgb_numpy(image)
+                # Crop manually for coordinate consistency.
+                # cgimage_to_srgb_numpy already returns an owned copy, so no second
+                # .copy() is needed here — the slice is just a view into that buffer.
+                return frame[0:height, 0:width]
 
-        else:
-            if not hasattr(thread_local, "sct"):
-                thread_local.sct = MSS()
-            cached = getattr(thread_local, "monitor", None)
-            if cached is None or cached["width"] != width or cached["height"] != height:
-                thread_local.monitor = {
-                    "left": 0,
-                    "top": 0,
-                    "width": width,
-                    "height": height
-                }
-            m = thread_local.monitor
-            img = thread_local.sct.grab(m)
-            # Convert MSS image safely
-            frame = np.array(img, dtype=np.uint8)
-            # Remove alpha channel
-            bgr_frame = frame[:, :, :3]
-            return bgr_frame
+            else:
+                if not hasattr(thread_local, "sct"):
+                    thread_local.sct = MSS()
+                cached = getattr(thread_local, "monitor", None)
+                if cached is None or cached["width"] != width or cached["height"] != height:
+                    thread_local.monitor = {
+                        "left": 0,
+                        "top": 0,
+                        "width": width,
+                        "height": height
+                    }
+                m = thread_local.monitor
+                img = thread_local.sct.grab(m)
+                # Convert MSS image safely
+                frame = np.array(img, dtype=np.uint8)
+                # Remove alpha channel
+                bgr_frame = frame[:, :, :3]
+                return bgr_frame
+        except:
+            return None
 
     def _capture_loop_full(self, stop_event, scan_delay):
+        """On macOS, MSS Uses Core Graphics Which Is Slow To Call In A Tight Loop.
+        Enforce A Minimum Sleep So We Don't Saturate The CPU And Starve The Game
+        And The PID Thread.  At 20 FPS A Frame Is ~0.05 s; Floor At 0.033 s
+        (~30 Fps) So We Never Spin Faster Than The Game Can Produce New Pixels.
+        """
         thread_local = threading.local()
-        # On Macos, Mss Uses Core Graphics Which Is Slow To Call In A Tight Loop.
-        # Enforce A Minimum Sleep So We Don'T Saturate The Cpu And Starve The Game
-        # And The Pid Thread.  At 20 Fps A Frame Is ~0.05 S; Floor At 0.033 S
-        # (~30 Fps) So We Never Spin Faster Than The Game Can Produce New Pixels.
         _mac_floor = 0.033 if sys.platform == "darwin" else 0.0
         try:
             while self.macro_running and not stop_event.is_set():
@@ -3426,6 +3446,25 @@ class Api:
                 daemon=True
             )
         thread.start()
+    def _calculate_speed_and_predict(self, white_positions, timestamps):
+        """
+        Calculate white pixel movement speed using linear regression on recent
+        positions for smooth, stable velocity estimation.
+        Returns velocity in pixels/second (positive = moving down, negative = up),
+        or None if insufficient data.
+        """
+        if len(white_positions) < 2:
+            return None
+        n = len(white_positions)
+        y_values = [pos[1] for pos in white_positions]
+        time_values = [t - timestamps[0] for t in timestamps]
+        mean_t = sum(time_values) / n
+        mean_y = sum(y_values) / n
+        numerator = sum(t * y for t, y in zip(time_values, y_values)) - n * mean_t * mean_y
+        denominator = sum(t * t for t in time_values) - n * mean_t * mean_t
+        if abs(denominator) < 0.0001:
+            return None
+        return numerator / denominator
     def _detect_day_or_night(self, confidence_threshold=0.7):
         """
         Robust day/night detection using white-mask template matching.
@@ -4637,7 +4676,7 @@ class Api:
             fish_img = frame[fish_top:fish_bottom, fish_left:fish_right]
             # Step 3: Pixel Search
             if fishing_mode == "line":
-                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_left, fish_right)
+                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, (fish_right - fish_left))
             else:
                 fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
             try:
@@ -4804,7 +4843,7 @@ class Api:
             # Step 2. Do pixel search
             # Left Side / Main Image
             if fishing_mode == "line":
-                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_left, fish_right)
+                fish_pos_left, fish_pos_right, left_x, right_x = self._do_line_search(fish_img, fish_area_center)
             else:
                 fish_pos_left, fish_pos_right, left_x, right_x = self._do_pixel_search(fish_img, fish_hex, left_bar_hex, right_bar_hex, fish_tol, left_tol, right_tol)
             try:
@@ -4826,6 +4865,7 @@ class Api:
                     metronome_center_y = None
             # Right Side (Only Triggers If fishing_profile Is dual)
             # Dual Fishing: LEFT (primary) is strong, RIGHT (secondary) is basic controls (no overlay)
+            skip_arrow_scan = True if "None" in arrow_hex else False
             if fishing_profile == "dual":
                 if fishing_mode == "line":
                     fish_pos_left2, fish_pos_right2, left_x2, right_x2 = self._do_line_search(fish_img2, fish_area_center)
@@ -4835,8 +4875,10 @@ class Api:
                     fish_x2 = int((fish_pos_left2[0] + fish_pos_right2[0]) / 2)
                 except:
                     fish_x2 = None
-                arrow_indicator_x2 = self._find_color_center(fish_img2, arrow_hex, arrow_tol)
-            arrow_indicator_x = self._find_color_center(fish_img, arrow_hex, arrow_tol)
+                if not skip_arrow_scan:
+                    arrow_indicator_x2 = self._find_color_center(fish_img2, arrow_hex, arrow_tol)
+            if not skip_arrow_scan:
+                arrow_indicator_x = self._find_color_center(fish_img, arrow_hex, arrow_tol)
             if fishing_profile == "notes":
                 note_coords = self._find_color_center(note_img, note_box_hex, note_box_tol)
             else:
@@ -4844,57 +4886,74 @@ class Api:
             # Extract arrow x coordinate safely
             try:
                 arrow_indicator_x = arrow_indicator_x[0]
+                arrow_indicator_x2 = arrow_indicator_x2[0]
             except (TypeError, IndexError):
                 arrow_indicator_x = None
+                arrow_indicator_x2 = None
             # Step 3: Pre-restart calculations
             if fishing_profile == "dual":
-                any_bar_detected_this_frame2 = left_x2 is not None and right_x2 is not None # Check 1 for dual mode
+                any_bar_detected_this_frame2 = left_x2 is not None and right_x2 is not None # Check 1 for normal mode
+                bar_valid2 = True
                 if any_bar_detected_this_frame2:
                     detection_source2 = 0
                 else:
-                    bar_center2, left_x2, right_x2 = self._update_arrow_box_estimation(arrow_indicator_x, any_bar_detected_this_frame2, fish_width)
+                    bar_center2, left_x2, right_x2 = self._update_arrow_box_estimation(arrow_indicator_x2, any_bar_detected_this_frame2, fish_width)
                     any_bar_detected_this_frame2 = True # Check 2
                     detection_source2 = 1
-                if any_bar_detected_this_frame2 and not (left_x == None or right_x == None): # Bar Or Arrows Found
-                    bar_size2 = abs(right_x2 - left_x2)
-                    bar_center2 = (left_x2 + bar_size2 / 2.0) # Add Fish Left Here (float to preserve sub-pixel precision for velocity)
-                    left_deadzone2 = bar_size2 * bar_ratio
-                    right_deadzone2 = bar_size2 * bar_ratio
-                    # Calculate max left and max right
-                    max_left2 = fish_left + left_deadzone2
-                    max_right2 = fish_right - right_deadzone2
-                else:
-                    bar_size2 = 0
-                    bar_center2 = None
-                    # Max left and right changed from None to 0 to prevent TypeError
-                    max_left2 = fish_left
-                    max_right2 = fish_right
+                if left_x2 is not None and right_x2 is not None:
+                    # Both bars detected - validate and save positions
+                    # Ensure left is never greater than right (swap if needed)
+                    if left_x2 > right_x2:
+                        left_x2, right_x2 = right_x2, left_x2
+
+                    # Calculate current frame values (don't update memory yet - edge detection does that)
+                    bar_center2 = (left_x2 + right_x2) / 2.0
+                elif left_x2 is not None:
+                    if left_x2 < right_x2:
+                        bar_center2 = (left_x2 + right_x2) / 2.0
+                    else:
+                        bar_valid2 = False
+                elif right_x2 is not None:
+                    if right_x2 > left_x2:
+                        bar_center2 = (left_x2 + right_x2) / 2.0
+                    else:
+                        bar_valid2 = False
+                try: bar_size2 = right_x2 - left_x2
+                except: bar_size2 = 0
             any_bar_detected_this_frame = left_x is not None and right_x is not None # Check 1 for normal mode
+            bar_valid = True
             if any_bar_detected_this_frame:
                 detection_source = 0
             else:
                 bar_center, left_x, right_x = self._update_arrow_box_estimation(arrow_indicator_x, any_bar_detected_this_frame, fish_width)
                 any_bar_detected_this_frame = True # Check 2
                 detection_source = 1
-            if any_bar_detected_this_frame and not (left_x == None or right_x == None): # Bar Or Arrows Found
-                bar_size = abs(right_x - left_x)
-                bar_center = (left_x + bar_size / 2.0)
-                left_deadzone = bar_size * bar_ratio
-                right_deadzone = bar_size * bar_ratio
-                # Calculate max left and max right
-                max_left = left_deadzone
-                max_right = fish_right - fish_left - right_deadzone
-            else:
-                bar_size = 0
-                bar_center = None
-                # Max left and right changed to local coordinates
-                max_left = 0
-                max_right = fish_right - fish_left
+            if left_x is not None and right_x is not None:
+                # Both bars detected - validate and save positions
+                # Ensure left is never greater than right (swap if needed)
+                if left_x > right_x:
+                    left_x, right_x = right_x, left_x
+
+                # Calculate current frame values (don't update memory yet - edge detection does that)
+                bar_center = (left_x + right_x) / 2.0
+            elif left_x is not None:
+                if left_x < right_x:
+                    bar_center = (left_x + right_x) / 2.0
+                else:
+                    bar_valid = False
+            elif right_x is not None:
+                if right_x > left_x:
+                    bar_center = (left_x + right_x) / 2.0
+                else:
+                    bar_valid = False
+            try: bar_size = right_x - left_x
+            except: bar_size = 0
             # Deadzone calculations
             if deadzone_action == 3:
                 deadzone_action = 0
             else:
                 deadzone_action = deadzone_action + 1
+            # Thresh: 3 pixels (scaled with scale factor and screen width)
             thresh = 3 * scale * int(SCREEN_WIDTH / 1920)
             # Step 4: Restart and Cache (using Friend Area)
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
@@ -4903,13 +4962,7 @@ class Api:
                 time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
                 return catch_success
-
-            # Use cached coordinates if current detection is None or bar bounds are invalid
-            bar_valid = True
-            if left_x is None or right_x is None:
-                bar_valid = False
-            elif right_x <= left_x:
-                bar_valid = False
+            # Validate positions and update cache
             if bar_valid == False:
                 left_x = self.last_left_x if self.last_left_x is not None else 0
                 right_x = self.last_right_x if self.last_right_x is not None else 0
@@ -4942,41 +4995,51 @@ class Api:
                 if target_metronome is not None and metronome_center_x is not None:
                     distance = abs(target_metronome - metronome_center_x)
                     # Tolerance for "touches" — scaled to resolution. 25-35 px typical at 1440p.
-                    touch_tol = max(8, int(28 * scale))
+                    touch_tol = max(8, int(28 * int(SCREEN_WIDTH / 1920) * scale))
                     if distance <= touch_tol:
                         # Clean short tap — never hold across frames
-                        release_mouse()
-                        time.sleep(0.006)
-                        hold_mouse()
-                        time.sleep(0.032)   # short press so Roblox registers a click
-                        release_mouse()
-                        did_click = True
-                        self.set_status(f"Metronome hit ✓  dist={distance:.0f}")
+                        error = fish_x - bar_center
+                        if error > 0:
+                            release_mouse()
+                        else:
+                            hold_mouse()
                     else:
-                        # Not aligned → must stay released
-                        release_mouse()
+                        continue # Keep holding/releasing
                 else:
-                    # No valid detection → stay safe (released)
-                    release_mouse()
+                    # No valid detection → stay safe (do nothing)
+                    continue
                 time.sleep(scan_delay)
                 continue   # skip all normal controller / overlay / dual logic
 
-            # Step 6: Check controller mode condition and convert everything to screen coordinates
+            # Step 6: Check controller mode condition and calculate boundaries
             if any_bar_detected_this_frame and bar_center is not None: # Bar Found
                 if note_coords is not None:
                     # Direct Mapping (Already In Fish Space)
                     note_screen_x = note_coords[0]
                     note_screen_y = note_coords[1]
                     note_screen_y_ratio = note_screen_y / (fish_bottom - fish_top)
+                    overlay_fish_color = "#ff9c00"
                 else:
+                    overlay_fish_color = "#ff0000"
                     note_screen_x = None
                 if note_coords is not None and fishing_profile == "notes":
                     if note_screen_y_ratio >= note_track_ratio:
-                        # print(fish_x, note_screen_x)
                         fish_x = note_screen_x
                 elif not fishing_profile == "notes":
                     pass
-
+                
+                # Boundary Calculations
+                if fishing_mode == "dual":
+                    boundary_bar_size = int(bar_size * bar_ratio)
+                    max_left = boundary_bar_size
+                    max_right = (fish_area_center - fish_left) - boundary_bar_size
+                    boundary_bar_size2 = int(bar_size2 * bar_ratio)
+                    max_left2 = boundary_bar_size2
+                    max_right2 = (fish_right - fish_area_center) - boundary_bar_size2
+                else:
+                    boundary_bar_size = int(bar_size * bar_ratio)
+                    max_left = boundary_bar_size
+                    max_right = (fish_right - fish_left) - boundary_bar_size
                 # Important: Bar left and right check is moved below the calculation
                 try:
                     if not left_x <= fish_x <= right_x:
@@ -5041,7 +5104,7 @@ class Api:
                     if fish_x is not None:
                         self.fish_overlay.draw(
                             bar_center=fish_x2, box_size=fish_pos_size2,
-                            color="red", canvas_offset=canvas_offset2
+                            color=overlay_fish_color, canvas_offset=canvas_offset2
                         )
             if self._is_fish_overlay_enabled() and bar_center is not None:
                 self.fish_overlay.draw(
@@ -5066,7 +5129,7 @@ class Api:
                 if fish_x is not None:
                     self.fish_overlay.draw(
                         bar_center=fish_x, box_size=fish_pos_size,
-                        color="red", canvas_offset=canvas_offset
+                        color=overlay_fish_color, canvas_offset=canvas_offset
                     )
             # Step 9: Controller logic
             controller_found = 1

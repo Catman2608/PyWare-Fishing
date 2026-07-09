@@ -4,7 +4,7 @@
     padding: 0;
     box-sizing: border-box;
     scrollbar-width: thin; /* Firefox */
-    scrollbar-color: #3a3f4b transparent; /* Firefox: thumb track */
+    scrollbar-color: #5a4a7a transparent; /* Firefox: thumb track */
 }
 
 :root {
@@ -13,11 +13,18 @@
     --left-gradient: #553bf5;
     --right-gradient: #9a13e5;
     --button-text: white;
+
+    /* Dark purple theme text colors - solid colors for reliable contrast on Windows/macOS */
+    --text-primary: #f4edff;
+    --text-secondary: #d9ccff;
+    --text-muted: #b9a8e8;
+    --text-subtle: #9a88d0;
+    --text-label: #c8b8f0;
 }
 
 body {
-    background: #100025;
-    color: white;
+    background: #0d0022;
+    color: var(--text-primary);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     overflow: hidden;
 }
@@ -76,8 +83,8 @@ hr {
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(180, 140, 255, 0.06);
+    border: 1px solid rgba(180, 140, 255, 0.15);
     padding: 6px 12px;
     border-radius: 8px;
 }
@@ -124,12 +131,13 @@ hr {
 
 /* Breadcrumb */
 .breadcrumb-prefix {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-subtle);
     letter-spacing: 0.5px;
 }
 
 .breadcrumb-separator {
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--text-subtle);
+    opacity: 0.6;
 }
 
 .breadcrumb-current {
@@ -143,11 +151,11 @@ hr {
 }
 
 .info-label {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-subtle);
 }
 
 .info-value {
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--text-primary);
     font-weight: 600;
 }
 
@@ -157,8 +165,8 @@ hr {
 
 /* Card */
 .card {
-    background: #150030;
-    border: 2px solid #423350;
+    background: #16002f;
+    border: 2px solid #4a3a60;
     border-radius: 10px;
     padding: 15px;
     margin-top: 15px;
@@ -210,8 +218,8 @@ hr {
     width: 240px;
     min-width: 220px;
     max-width: 260px;
-    background: #100036;
-    border-right: 1px solid rgba(255,255,255,.10);
+    background: #11002e;
+    border-right: 1px solid rgba(180, 140, 255, 0.12);
     box-shadow: 2px 0 12px rgba(0,0,0,.35);
     padding: 22px 16px;
     display: flex;
@@ -220,7 +228,7 @@ hr {
 }
 
 .sidebar p {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-secondary);
     font-size: 13px;
 }
 
@@ -230,7 +238,7 @@ hr {
     position: relative;
     background: transparent;
     border: none;
-    color: rgba(255, 255, 255, 0.78);
+    color: var(--text-muted);
     padding: 8px 14px 10px 14px;
     border-radius: 8px;
     text-align: left;
@@ -269,13 +277,13 @@ hr {
 .tab-button:hover {
     background: rgba(255, 255, 255, 0.06);
     transform:translateX(3px);
-    color: rgba(255, 255, 255, 0.96);
+    color: var(--text-primary);
 }
 
 /* Active */
 .tab-button.active {
     background: rgba(255, 255, 255, 0.07);
-    color: white;
+    color: var(--text-primary);
 }
 
 /* Show left line */
@@ -327,9 +335,9 @@ hr {
 }
 
 .config-section button {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: white;
+    background: rgba(180, 140, 255, 0.08);
+    border: 1px solid rgba(180, 140, 255, 0.18);
+    color: var(--text-primary);
     padding: 8px 14px;
     border-radius: 12px;
     cursor: pointer;
@@ -352,8 +360,8 @@ hr {
     flex: 1;
     min-width: 0;
     padding: 7px 10px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(180, 140, 255, 0.06);
+    border: 1px solid rgba(180, 140, 255, 0.15);
     border-radius: 10px;
 }
 
@@ -372,7 +380,7 @@ hr {
     flex: 1;
     min-width: 0;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
@@ -420,12 +428,12 @@ hr {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #41394a; /* Slightly lighter than your dark background */
+  background: #5a4a7a; /* Purple-tinted for dark purple theme */
   border-radius: 10px; /* Round the ends */
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #534a5c; /* Lighten slightly on hover */
+  background: #7a6aa0; /* Lighten slightly on hover */
 }
 
 /* Buttons */
@@ -444,15 +452,15 @@ button {
 }
 
 .text label {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-label);
     font-size: 15px;
     min-width: 160px;
 }
 
 .text input {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: white;
+    background: #1a0a35;
+    border: 1px solid rgba(180, 140, 255, 0.25);
+    color: var(--text-primary);
     padding: 8px 12px;
     border-radius: 6px;
     outline: none;
@@ -462,7 +470,7 @@ button {
 }
 
 .text input::placeholder {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-subtle);
 }
 
 .text input:focus {
@@ -482,9 +490,9 @@ button {
 /* Unified dropdown and select styles with proper padding */
 .dropdown select,
 .config-section select {
-    background-color: #1c0f29;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.9);
+    background-color: #1a0a35;
+    border: 1px solid rgba(180, 140, 255, 0.25);
+    color: var(--text-primary);
     border-radius: 10px;
     outline: none;
     font-size: 13px; /* Fixed: consistent font size */
@@ -521,13 +529,13 @@ button {
 
 .dropdown option,
 .config-section select option {
-    background: #1b1126;
-    color: white;
+    background: #1a0a35;
+    color: var(--text-primary);
 }
 
 /* Dropdown labels */
 .dropdown label {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-label);
     font-size: 15px;
     min-width: 160px;
 }
@@ -541,7 +549,7 @@ button {
 }
 
 .switch2 p {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-label);
     font-size: 15px;
 }
 
@@ -598,7 +606,7 @@ button {
 
 .arrow {
     font-size: 1.5rem;
-    color: #666;
+    color: var(--text-subtle);
     user-select: none;
 }
 
@@ -615,8 +623,8 @@ button {
 }
 
 .simple-box {
-    background: #221b29;
-    border: 1px solid #393045;
+    background: #1f1528;
+    border: 1px solid #4a3a60;
     border-radius: 12px;
     padding: 14px;
     display: flex;
@@ -630,7 +638,7 @@ button {
 
 /* Merged duplicate .simple-box h4 blocks */
 .simple-box p {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-secondary);
     font-size: 13px;
 }
 
@@ -646,9 +654,9 @@ button {
     width: 100%;
     padding: 8px;
     border-radius: 6px;
-    border: 2px solid rgba(255, 255, 255, 0.08);
-    background: #121212;
-    color: white;
+    border: 2px solid rgba(180, 140, 255, 0.25);
+    background: #1a0a35;
+    color: var(--text-primary);
     box-sizing: border-box;
     outline: none;
     appearance: none;
@@ -738,9 +746,9 @@ button {
 
 .modal-content button {
     width: 100%;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: white;
+    background: rgba(180, 140, 255, 0.08);
+    border: 1px solid rgba(180, 140, 255, 0.18);
+    color: var(--text-primary);
     padding: 8px;
     border-radius: 8px;
     font-size: 15px;
