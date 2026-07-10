@@ -1984,7 +1984,7 @@ class Api:
                     time.sleep(0.03)
         else:
             _move_mouse(x, y)
-            _move_mouse(x + 2, y + 2)
+            _move_mouse(x + 1, y + 1)
             _move_mouse(x, y)
             for i in range(click_count):
                 _mouse_event(button="left", press=True)   # mouse down
@@ -2004,26 +2004,30 @@ class Api:
         if self.macro_running == False:
             return
         key = str(key2)
+
+        # Convert special key names
+        special_keys = {
+            "enter": Key.enter,
+            "return": Key.enter,
+            "tab": Key.tab,
+            "space": Key.space,
+            "esc": Key.esc,
+            "escape": Key.esc,
+            "backspace": Key.backspace,
+            "delete": Key.delete,
+            "up": Key.up,
+            "down": Key.down,
+            "left": Key.left,
+            "right": Key.right,
+        }
+
+        key = special_keys.get(key.lower(), key)
+
         if sys.platform == "darwin":
+            if key == "enter":
+                key = "return"
             send_key(key2, delay=delay, click_type=click_type)
         else:
-            # Convert special key names
-            special_keys = {
-                "enter": Key.enter,
-                "return": Key.enter,
-                "tab": Key.tab,
-                "space": Key.space,
-                "esc": Key.esc,
-                "escape": Key.esc,
-                "backspace": Key.backspace,
-                "delete": Key.delete,
-                "up": Key.up,
-                "down": Key.down,
-                "left": Key.left,
-                "right": Key.right,
-            }
-
-            key = special_keys.get(key.lower(), key)
             try:
                 if click_type == 0:
                     keyboard_controller.press(key)
@@ -3910,7 +3914,7 @@ class Api:
         """
         mode = self.vars["auto_totem_mode"]
         # self.SCREEN_SCALE
-        if mode == "disabled":
+        if mode == "Disabled":
             return
 
         if not self.macro_running == True:
@@ -3925,13 +3929,13 @@ class Api:
         except (ValueError, KeyError):
             trigger_secs = 60.0  # Safe Fallback
         # Cycles Mode
-        if mode == "cycles":
+        if mode == "Cycles":
             self.totem_cycle_counter += 1
             if not (trigger_every > 0 and self.totem_cycle_counter % trigger_every == 0):
                 return
 
         # Time Mode
-        elif mode == "time":
+        elif mode == "Time":
             elapsed = time.time() - self.totem_start_time
             if not (trigger_secs > 0 and elapsed >= trigger_secs):
                 return
@@ -4316,11 +4320,9 @@ class Api:
             tolerance = 5
             failsafe = 80
             shake_clicks = 1
-        # Initialize attempts and stop event to prevent TypeError
+        # Initialize attempts and stop event
         attempts = 0
-        last_shake_pixel = 0
-        if efficiency_mode == "off":
-            stop_event = self._start_capture(scan_delay)
+        stop_event = self._start_capture(scan_delay)
         while self.macro_running and attempts < failsafe:
             # Efficiency Mode: Take a new screenshot
             # Normal mode: Grab a fresh frame from self._cap_frame
@@ -4348,8 +4350,6 @@ class Api:
                 shake_pixel = self._find_first_pixel(shake_area, shake_hex, tolerance)
             else:
                 shake_pixel = self._find_circles(shake_area)
-            if last_shake_pixel == shake_pixel:
-                attempts += 1
             if shake_pixel:
                 x, y = shake_pixel
                 screen_x = int((shake_left_s + x) / scale)
@@ -4377,7 +4377,7 @@ class Api:
                 mouse_controller.release(Button.left)
                 return  # exit shake cleanly
 
-            last_shake_pixel = shake_pixel
+            attempts += 1
             time.sleep(scan_delay)
         # If macro is not running, stop here
         self._set_fish_overlay_mode("idle")
@@ -4666,9 +4666,9 @@ class Api:
                 fish_pos_size = int(fish_pos_right - fish_pos_left)
             except:
                 fish_x = None
-                fish_pos_size = 10
+                fish_pos_size = 0
             detection_source = 0
-            arrow_indicator_x = self._find_color_center(fish_img, arrow_hex, arrow_tol)
+            arrow_indicator_x, _, _ = self._find_color_cluster(fish_img, arrow_hex, arrow_tol)
             try:
                 arrow_indicator_x = arrow_indicator_x[0]
             except:
@@ -4752,7 +4752,6 @@ class Api:
         lullaby_metronome_ratio = float(self.vars["lullaby_metronome_ratio"])
         lullaby_fishing_ratio = float(self.vars["lullaby_fishing_ratio"])
         fishing_mode = self.vars["fishing_mode"].lower()
-        bag_spam = self.vars["bag_spam"]
         # Other Settings
         catch_success = True
         shake_x = int((shake_left + shake_right) / 2)
@@ -4761,8 +4760,6 @@ class Api:
         scale = self._get_scale_factor()
         deadzone_action = 0
         canvas_offset = 0
-        bag_slot = str(self.vars["bag_slot"])
-        bag_frame = 1
         self._reset_pid_state()
         mouse_down = False
         self._set_fish_overlay_mode("fishing")
@@ -4823,11 +4820,6 @@ class Api:
             friend_img = frame[friend_top:friend_bottom, friend_left:friend_right]
             # Make sure to clear overlay before searching
             self.fish_overlay.clear()
-            if bag_spam == "on":
-                bag_frame += 1
-                if bag_frame == 6:
-                    self._send_key(bag_slot)
-                    bag_frame = 1
             if lock_cursor == "on":
                 mouse_controller.position = (shake_x, shake_y)
             # Step 2. Do pixel search
@@ -4867,12 +4859,7 @@ class Api:
                     fish_x2 = None
                 if not skip_arrow_scan:
                     arrow_indicator_x2 = self._find_color_center(fish_img2, arrow_hex, arrow_tol)
-            else:
-                fish_pos_left2, fish_pos_right2, left_x2, right_x2 = None, None, None, None
-                arrow_indicator_x2 = None
-            if skip_arrow_scan:
-                arrow_indicator_x = None
-            else:
+            if not skip_arrow_scan:
                 arrow_indicator_x = self._find_color_center(fish_img, arrow_hex, arrow_tol)
             if fishing_profile == "notes":
                 note_coords = self._find_color_center(note_img, note_box_hex, note_box_tol)
@@ -4881,12 +4868,9 @@ class Api:
             # Extract arrow x coordinate safely
             try:
                 arrow_indicator_x = arrow_indicator_x[0]
-            except (TypeError, IndexError):
-                arrow_indicator_x = None
-            # Extract arrow x2 coordinate safely
-            try:
                 arrow_indicator_x2 = arrow_indicator_x2[0]
             except (TypeError, IndexError):
+                arrow_indicator_x = None
                 arrow_indicator_x2 = None
             # Step 3: Pre-restart calculations
             if fishing_profile == "dual":
@@ -4931,6 +4915,7 @@ class Api:
                 # Ensure left is never greater than right (swap if needed)
                 if left_x > right_x:
                     left_x, right_x = right_x, left_x
+
                 # Calculate current frame values (don't update memory yet - edge detection does that)
                 bar_center = (left_x + right_x) / 2.0
             elif left_x is not None:
@@ -4943,10 +4928,8 @@ class Api:
                     bar_center = (left_x + right_x) / 2.0
                 else:
                     bar_valid = False
-            elif left_x is None and right_x is None:
-                bar_valid = False # Failsafe: Missing data
             try: bar_size = right_x - left_x
-            except: bar_size = 10
+            except: bar_size = 0
             # Deadzone calculations
             if deadzone_action == 3:
                 deadzone_action = 0
@@ -4958,27 +4941,21 @@ class Api:
             friend_x = self._find_color_center(friend_img, friend_color, friend_tol)
             if friend_x is not None:
                 release_mouse()
-                if bag_spam == "on":
-                    for i in range(int(restart_delay * 2)):
-                        self._send_key(bag_slot)
-                        time.sleep(0.5)
-                else:
-                    time.sleep(restart_delay)
+                time.sleep(restart_delay)
                 self._set_fish_overlay_mode("idle")
                 return catch_success
             # Validate positions and update cache
-            # Bar validation
-            bar_size = max(10, bar_size)
             if bar_valid == False:
                 left_x = self.last_left_x if self.last_left_x is not None else 0
                 right_x = self.last_right_x if self.last_right_x is not None else 0
                 bar_center = (left_x + right_x) / 2.0
-                bar_size = right_x - left_x
             if bar_valid == True:
+                self.last_cached_box_length = bar_size
+                self.estimated_box_length = bar_size
                 self.last_left_x = left_x
                 self.last_right_x = right_x
-                self.last_bar_center = bar_center
                 self.last_bar_size = bar_size
+                self.last_bar_center_x = (left_x + right_x) / 2.0 if left_x is not None and right_x is not None else 0
             fish_valid = True
             if fish_x is None:
                 fish_valid = False
@@ -5249,8 +5226,8 @@ This uses a different folder to prevent crashes on the stable version"""
             # Parse third line for DEVELOPER
             third_line = lines[2]
             js_developer = third_line.replace("const DEVELOPER = ", "").replace('"', "").replace(";", "")
-        # Compatibility for 4.4 - 4.42 update
-        if js_developer == "let currentConfig = null" or js_developer == "":
+        # Compatibility for 4.4 - 4.41 update
+        if js_developer == "let currentConfig = null":
             js_developer = DEVELOPER
         # Check release version, beta version and developer
         if not js_developer == DEVELOPER:
@@ -5331,7 +5308,7 @@ if show_setup_guide == False:
                 api.eyedropper.close()
                 api.eyedropper = None
         except Exception as e:
-            pass
+            print(f"Eyedropper cleanup error: {e}")
         try:
             if getattr(api, "fish_overlay", None):
                 api.fish_overlay.close()

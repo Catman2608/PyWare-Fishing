@@ -1,5 +1,6 @@
 const APP_VERSION = "4.41";
 const BETA_VERSION = "0";
+const DEVELOPER = "Catman2608";
 let currentConfig = null;
 const validHexColor = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
 

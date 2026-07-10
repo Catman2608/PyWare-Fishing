@@ -1,15 +1,18 @@
 Step 1: run this code to change direction (change to your actual directory):
 cd /Users/YourName/directory/PyWareFishing
-Step 2: Identify if the macro is open source or not. If not:
-pyinstaller --onedir --windowed --target-architecture arm64 \
+Step 2: Convert to application
+
+macOS command:
+pyinstaller --onedir --windowed \
 --icon="icon.icns" \
 "PyWareFishingV4.py"
-If it's open source:
-nuitka --onedir --windowed \
---icon="icon.icns" \
-"PyWareFishingV3.py"
 
-Step 3: run this code to create setup instructions 
+Windows command:
+pyinstaller --onefile --windowed \
+--icon="icon.ico" \
+"PyWareFishingV4.py"
+
+Step 3: Run this code to create setup instructions (if macOS) and if Windows compress to ZIP
 
 hdiutil create -volname "VolumeName" -srcfolder cd /Users/YourName/directory/PyWareFishing
  -ov -format UDZO name.dmg
