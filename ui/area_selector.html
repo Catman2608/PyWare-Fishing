@@ -54,8 +54,15 @@ let offscreenCanvas = null;
 let offscreenCtx = null;
 
 function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // Determine the scaling ratio (1 at 100%, 1.25 at 125%, etc.)
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Set actual backing store dimensions (Physical pixels)
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    
+    // Scale context back to logical pixels so standard drawing coords work
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     
     if (!offscreenCanvas || offscreenCanvas.width !== canvas.width || offscreenCanvas.height !== canvas.height) {
         offscreenCanvas = document.createElement('canvas');
@@ -63,6 +70,9 @@ function resize() {
         offscreenCanvas.height = canvas.height;
         offscreenCtx = offscreenCanvas.getContext('2d');
     }
+    
+    // Scale offscreen context as well
+    offscreenCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     
     draw();
 }
@@ -89,7 +99,7 @@ function sendToPython(clientX, clientY) {
             for (const name of AREA_ORDER) {
                 const b = boxesCopy[name];
                 if (!b) continue;
-                
+                 
                 // Check if mouse is inside this box
                 if (clientX >= b.x && clientX <= b.x + b.w && 
                     clientY >= b.y && clientY <= b.y + b.h) {
@@ -163,6 +173,10 @@ function draw() {
         if (!b) continue;
         drawBoxOptimized(octx, b, AREAS[name].color, AREAS[name].label);
     }
+    
+    // --- FIX FOR BUG 1: Clear the main canvas before drawing ---
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // -----------------------------------------------------------
     
     ctx.drawImage(offscreenCanvas, 0, 0);
 }

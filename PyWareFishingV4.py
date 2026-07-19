@@ -54,7 +54,7 @@ keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
-APP_VERSION = 4.41
+APP_VERSION = 4.42
 BETA_VERSION = 0
 DEVELOPER = "Catman2608"
 def get_macos_menu_offset():
@@ -485,7 +485,8 @@ class AreaSelector:
         if sys.platform == "win32":
             self._win = webview.create_window("Area Selector", self.HTML_FILE, js_api=self, 
                                               transparent=False, frameless=True, easy_drag=False, 
-                                              on_top=True, resizable=False, background_color="#000000")
+                                              on_top=True, resizable=False, width=SCREEN_WIDTH, height=SCREEN_HEIGHT,
+                                               x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000")
             # Maximize on Windows after the window is created
             def maximize_area_selector():
                 try:
@@ -854,9 +855,12 @@ class FishOverlay:
         self.height = int(60)
         self.x = int(SCREEN_WIDTH * 0.5 - self.width / 2)
         self.y = int(SCREEN_HEIGHT * 0.65)
-    def init_window(self):
+    def init_window(self, width=None, height=None):
         if self._win and self._open:
             return
+
+        width = width or self.width
+        height = height or self.height
 
         self._win = webview.create_window(
             "PyWare Fish Overlay",
@@ -866,12 +870,16 @@ class FishOverlay:
             easy_drag=False,
             on_top=True,
             resizable=False,
-            width=self.width,
-            height=self.height,
+            width=width,
+            height=height,
             x=self.x,
             y=self.y,
             background_color="#000000",
         )
+
+        self.width = width
+        self.height = height
+
         self._open = True
         self._visible = True
         self._win.events.closed += self._on_closed
@@ -906,6 +914,10 @@ class FishOverlay:
         self.width = width
         self.height = height
         self.init_window()
+        if not self._open:
+            self.width = width
+            self.height = height
+            self.init_window(width, height)
         if not self._win:
             return
 
@@ -1186,9 +1198,6 @@ class SetupGuide(ctk.CTk):
             self.listener.stop()
         super().destroy()
 class Api:
-    GENERIC_PLACEHOLDERS = {
-        "tolerance",
-    }
     def __init__(self):
         self.vars = {} # Save Entry Variables Here
         self.current_config = self.get_last_config()
@@ -1210,33 +1219,7 @@ class Api:
         self.macro_running = False
         self.macro_thread = None
         # Detection Variables
-        self.last_fish_x = None
-        self.last_bar_left = None
-        self.last_bar_right = None
-        self.last_bar_size = None  # Cached Bar Size From Minigame For Arrow Estimation
-        self.last_input_time = 0.0
-        self.cooldown_duration = 1.0  # 1 second cooldown
-        # P/D State Variables
-        self.last_error = 0.0      # Previous Error Term
-        self.last_scan_time = None      # Timestamp Of Last Pd Sample
-        self.last_bar_size = None
-        self.last_bar_center = None  # Last bar center for _normal_control D-term
-        # Arrow-Based Box Estimation Variables
-        self.last_indicator_x = None
-        self.last_holding_state = None
-        self.pending_holding_state = None
-        self.pending_indicator_x = None
-        self.last_bar_size = None
-        self.last_bar_left = None
-        self._last_bar_right = None
-        self.last_bar_size = None
-        self.last_bar_center = None
-        self.last_arrow_delta = None
-        # Estimation internal position state — initialised here so that
-        # the first arrow_centroid_x=None call never raises AttributeError
-        self.last_bar_center = None
-        self.last_left_x = None
-        self.last_right_x = None
+        self._reset_pid_state()
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         self.current_rod_name = "Basic Rod"
@@ -1313,8 +1296,7 @@ class Api:
         )
         for field_id, placeholder in input_pattern.findall(html):
             prompt = placeholder.strip()
-            if prompt and prompt.lower() not in self.GENERIC_PLACEHOLDERS:
-                defaults[field_id] = prompt
+            defaults[field_id] = prompt
         select_pattern = re.compile(
             r"<select\b(?=[^>]*\bid\s*=\s*['\"]?([^'\"\s>]+))[^>]*>"
             r"(.*?)</select>",
@@ -2430,9 +2412,11 @@ class Api:
             return
 
         if not self._is_fish_overlay_enabled() or self._fish_overlay_mode == "idle":
-            self.fish_overlay.hide()
+            try:
+                self.fish_overlay.hide()
+            except:
+                pass
             return
-
         x, y, width, height = self._get_fish_overlay_layout()
         self.fish_overlay.set_layout(x, y, width, height)
         self.fish_overlay.show()
@@ -3124,7 +3108,8 @@ class Api:
         kd       = self._get_var_number("kd", 0.5)
         # Derivative
         bar_velocity = (error - self.last_error)
-        bar_velocity = min(max(bar_velocity, (fish_width / -10)), (fish_width / 10)) / time_delta
+        if abs(bar_velocity) > (fish_width / 2.5):
+            bar_velocity = bar_velocity / 2
         # Final calculations
         p_term = kp * error
         d_term = kd * bar_velocity
@@ -3173,7 +3158,8 @@ class Api:
             # Bar velocity: how fast the bar centre moved since last frame
             last_bar_x   = self.last_fish_x - self.last_error
             bar_velocity = (bar_center_x - last_bar_x)
-            bar_velocity = min(max(bar_velocity, (fish_width / -10)), (fish_width / 10)) / time_delta # Clamp
+            if abs(bar_velocity) > (fish_width / 2.5):
+                bar_velocity = bar_velocity / 2
             error_magnitude_decreasing = abs(error) < abs(self.last_error)
             bar_moving_toward_target = (
                 (bar_velocity > 0 and error > 0)
@@ -3908,7 +3894,7 @@ class Api:
           Time    – trigger every N seconds elapsed
           Disabled – never trigger
         """
-        mode = self.vars["auto_totem_mode"]
+        mode = self.vars["auto_totem_mode"].lower()
         # self.SCREEN_SCALE
         if mode == "disabled":
             return
@@ -3948,7 +3934,7 @@ class Api:
         target_slot  = str(self.vars["target_slot"])
         rod_slot  = str(self.vars["rod_slot"])
         sundial_delay  = int(self.vars["sundial_delay"])
-        desired_time = self.vars["use_sundial_mode_when"]  # "Day", "Night", Or Maybe "Disabled"
+        desired_time = self.vars["use_sundial_mode_when"].lower()  # "day", "night", Or Maybe "disabled"
         totem_success = False
         confidence_threshold = 0.6
         # Detect Day / Night
@@ -3957,10 +3943,7 @@ class Api:
             return  # Below confidence threshold — skip this cycle
 
         # Decide Whether To Use Sundial
-        use_sundial = (
-            desired_time in ["Day", "Night"] and
-            current_time != desired_time
-        )
+        use_sundial = (desired_time in ["day", "night"] and current_time != desired_time)
         # Use Sundial (If Needed)
         if use_sundial:
             time.sleep(0.2)
@@ -4948,7 +4931,7 @@ class Api:
             try: bar_size = right_x - left_x
             except: bar_size = 10
             # Deadzone calculations
-            if deadzone_action == 3:
+            if deadzone_action == 2:
                 deadzone_action = 0
             else:
                 deadzone_action = deadzone_action + 1
@@ -5237,7 +5220,7 @@ def check_setup_guide():
 This uses a different folder to prevent crashes on the stable version"""
     
     try:
-        with open(os.path.join(UI_PATH, "app.js"), "r") as file:
+        with open(os.path.join(UI_PATH, "app.js"), "r", encoding="utf-8-sig") as file:
             # Read first two lines
             lines = [file.readline().strip() for _ in range(3)]
             # Parse first line for APP_VERSION

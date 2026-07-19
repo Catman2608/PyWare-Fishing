@@ -1,4 +1,4 @@
-const APP_VERSION = "4.41";
+const APP_VERSION = "4.42";
 const BETA_VERSION = "0";
 const DEVELOPER = "Catman2608";
 let currentConfig = null;
@@ -466,7 +466,7 @@ async function startEyedropper() {
     await pywebview.api.start_eyedropper();
 }
 async function takeScreenshot() {
-    setStatus("Saved debug screenshots (JavaScript)");
+    setStatus("Error saving debug screenshots");
     await pywebview.api.take_debug_screenshot();
 }
 async function openLink(link) {
