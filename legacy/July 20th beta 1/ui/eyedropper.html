@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            user-select: none;
+    }
+    canvas {
+        display: block;
+        width: 100%; height: 100%;
+        cursor: crosshair;
+    }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+window.addEventListener("pywebviewready", () => {
+        pywebview.api.window_ready(
+                window.screenX,
+                window.screenY
+        );
+});
+//  Canvas setup ─
+const canvas = document.getElementById("c");
+const ctx    = canvas.getContext("2d");
+
+let currentHexColor = null;
+
+function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    draw();
+}
+window.addEventListener("resize", resize);
+resize();
+
+//  Drawing 
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Use canvas to ensure consistent cross-platform semi-transparent overlay
+    // Drawing directly on canvas avoids CSS opacity issues on Windows
+    ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw crosshair if we have a color
+    if (currentHexColor) {
+        const mouseX = canvas.dataset.mouseX || canvas.width / 2;
+        const mouseY = canvas.dataset.mouseY || canvas.height / 2;
+        
+        // Crosshair circle
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(mouseX, mouseY, 20, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Crosshair lines
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(mouseX - 30, mouseY);
+        ctx.lineTo(mouseX + 30, mouseY);
+        ctx.moveTo(mouseX, mouseY - 30);
+        ctx.lineTo(mouseX, mouseY + 30);
+        ctx.stroke();
+        
+        // Color preview square
+        ctx.fillStyle = currentHexColor;
+        ctx.fillRect(mouseX - 15, mouseY - 15, 30, 30);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mouseX - 15, mouseY - 15, 30, 30);
+    }
+}
+
+//  Mouse events ──
+canvas.addEventListener("mousemove", e => {
+    canvas.dataset.mouseX = e.clientX;
+    canvas.dataset.mouseY = e.clientY;
+    
+    // Request pixel color from Python
+    pywebview.api.get_pixel_at(e.clientX, e.clientY).then(hexColor => {
+        currentHexColor = hexColor;
+        draw();
+    });
+});
+
+canvas.addEventListener("click", e => {
+    if (currentHexColor) {
+        // Notify Python and close
+        pywebview.api.pick_color(currentHexColor).then(() => {
+            // Python will close the window
+        });
+    }
+});
+
+//  Keyboard: Escape closes ──
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+        pywebview.api.close_eyedropper();
+    }
+});
+</script>
+</body>
+</html>

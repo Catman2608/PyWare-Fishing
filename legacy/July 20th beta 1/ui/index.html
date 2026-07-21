@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PyWare Fishing V4.42</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <script src="app.js"></script>
+    <div class="app">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                PyWare Fishing V4.42
+            </div>
+            <button class="tab-button active" onclick="switchTab('basic')">
+                Basic
+            </button>
+            <button class="tab-button" onclick="switchTab('automation')">
+                Automation
+            </button>
+            <button class="tab-button" onclick="switchTab('utilities')">
+                Utilities
+            </button>
+            <div class="config-section">
+                <p>Active Configuration</p>
+                <select id="disabled" onchange="switchConfig(this.value)"></select>
+                <p>Utility Selection</p>
+                <div class="dropdown">
+                    <select name="automation_mode" id="automation_mode">
+                    <option value="fishing">Fishing</option>
+                    <option value="appraisal">Appraisal</option>
+                    <option value="enchant">Enchant</option>
+                    <option value="angler">Angler</option>
+                    <option value="disabled">Disabled</option>
+                    </select>
+                </div>
+                <p>Rod Ability</p>
+                <div class="dropdown">
+                    <select name="fishing_profile" id="fishing_profile">
+                    <option value="normal">Normal</option>
+                    <option value="notes">Notes (Pinion)</option>
+                    <option value="reverse">Reverse (Dreambreaker)</option>
+                    <option value="dual">Dual (Bellona)</option>
+                    <option value="lanes">4 Lanes (Tranquility)</option>
+                    <option value="metronome">Metronome (Lullaby)</option>
+                    </select>
+                </div>
+                <button onclick="openConfigManager()"> Manage </button>
+                <button onclick="openSupportTab()"> Support </button>
+                <button onclick="openAboutTab()"> About </button>
+            </div>
+        </div>
+        <div class="main-area">
+            <!-- Top Bar -->
+            <div class="topbar">
+                <div class="topbar-left">
+                    <span class="breadcrumb-current" id="active-tab-title">Basic</span>
+                    <div class="status-container">
+                        <span class="status-dot"></span>
+                        <span id="status-label" class="status-text">Error: Status Label can't load properly</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Main Content -->
+            <div class="content">
+            <!-- Basic Tab -->
+            <div id="basic" class="tab-content active">
+                <div class="card">
+                    <h3>Hotkeys</h3>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Start Key</p>
+                            <input id="start_stop" type="text" placeholder="F5">
+                        </div>
+                        <div class="simple-box">
+                            <p>Area Selector Key</p>
+                            <input id="change_areas" type="text" placeholder="F6">
+                        </div>
+                        <div class="simple-box">
+                            <p>Stop Key</p>
+                            <input id="force_stop" type="text" placeholder="F7">
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Rod Slot</p>
+                            <input id="rod_slot" type="text" placeholder="1">
+                        </div>
+                        <div class="simple-box">
+                            <p>Bag Slot</p>
+                            <input id="bag_slot" type="text" placeholder="2">
+                        </div>
+                        <div class="simple-box">
+                            <p>Sundial Slot</p>
+                            <input id="sundial_slot" type="text" placeholder="6">
+                        </div>
+                        <div class="simple-box">
+                            <p>Totem Slot</p>
+                            <input id="target_slot" type="text" placeholder="7">
+                        </div>
+                        <div class="simple-box">
+                            <p>Mystic Mirror Slot</p>
+                            <input id="mirror_slot" type="text" placeholder="8">
+                        </div>
+                        <div class="simple-box">
+                            <p>Backpack Slot</p>
+                            <input id="backpack_slot" type="text" placeholder="2">
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Key 1 (Tranquility)</p>
+                            <input id="tranquility_key_1" type="text" placeholder="D">
+                        </div>
+                        <div class="simple-box">
+                            <p>Key 2 (Tranquility)</p>
+                            <input id="tranquility_key_2" type="text" placeholder="F">
+                        </div>
+                        <div class="simple-box">
+                            <p>Key 3 (Tranquility)</p>
+                            <input id="tranquility_key_3" type="text" placeholder="J">
+                        </div>
+                        <div class="simple-box">
+                            <p>Key 4 (Tranquility)</p>
+                            <input id="tranquility_key_4" type="text" placeholder="K">
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Color Options</h3>
+                    <button onclick="startEyedropper()"> Pick Colors </button>
+                    <button onclick="takeScreenshot()"> Take Screenshot </button>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Left Bar</p>
+                            <input id="left_color" type="text" placeholder="#FFFFFF">
+                            <input id="left_tolerance" type="number" placeholder="8">
+                        </div>
+                        <div class="simple-box">
+                            <p>Right Bar</p>
+                            <input id="right_color" type="text" placeholder="#FFFFFF">
+                            <input id="right_tolerance" type="number" placeholder="8">
+                        </div>
+                        <div class="simple-box">
+                            <p>Arrows</p>
+                            <input id="arrow_color" type="text" placeholder="#848587">
+                            <input id="arrow_tolerance" type="number" placeholder="8">
+                        </div>
+                        <div class="simple-box">
+                            <p>Fish</p>
+                            <input id="fish_color" type="text" placeholder="#5B4B43">
+                            <input id="fish_tolerance" type="number" placeholder="4">
+                        </div>
+                        <div class="simple-box">
+                            <p>Shake</p>
+                            <input id="shake_color" type="text" placeholder="#FFFFFF">
+                            <input id="shake_tolerance" type="number" placeholder="5">
+                        </div>
+                        <div class="simple-box">
+                            <p>Green Cast</p>
+                            <input id="green_cast_color" type="text" placeholder="#64a04c">
+                            <input id="green_cast_tolerance" type="number" placeholder="16">
+                        </div>
+                        <div class="simple-box">
+                            <p>White Cast</p>
+                            <input id="white_cast_color" type="text" placeholder="#d4d3ca">
+                            <input id="white_cast_tolerance" type="number" placeholder="20">
+                        </div>
+                        <div class="simple-box">
+                            <p>Tracking</p>
+                            <input id="tracking_color" type="text" placeholder="#149604">
+                            <input id="tracking_tolerance" type="number" placeholder="5">
+                        </div>
+                        <div class="simple-box">
+                            <p>Friends Area</p>
+                            <input id="friends_color" type="text" placeholder="#9BFF9B">
+                            <input id="friends_tolerance" type="number" placeholder="5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Automation Tab -->
+            <div id="automation" class="tab-content">
+                <div class="card">
+                    <h3>Basic Options</h3>
+                    <div class="switch2">
+                        <p>Auto Zoom</p>
+                        <label class="switch">
+                            <input id=auto_zoom type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Auto Refresh</p>
+                        <label class="switch">
+                            <input id=auto_refresh type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Fish Overlay</p>
+                        <label class="switch">
+                            <input id=fish_overlay type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Efficiency Mode</p>
+                        <label class="switch">
+                            <input id=efficiency_mode type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Bag Spam</p>
+                        <label class="switch">
+                            <input id=bag_spam type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Lock Cursor</p>
+                        <label class="switch">
+                            <input id=lock_cursor type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <hr>
+                    <div class="text">
+                        <label>Select Rod Duration</label>
+                        <input id=select_rod_duration type="text" placeholder="0.35">
+                    </div>
+                    <div class="dropdown">
+                        <label for="casting_mode">Casting Mode:</label>
+                        <select name="casting_mode" id="casting_mode" onchange="updateCastingMode()">
+                        <option value="normal">Normal</option>
+                        <option value="perfect">Perfect</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="shake_mode">Shake Mode:</label>
+                        <select name="shake_mode" id="shake_mode">
+                        <option value="pixel">Pixel</option>
+                        <option value="circle">Circle</option>
+                        <option value="navigation">Navigation</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="fishing_mode">Fishing Mode:</label>
+                        <select name="fishing_mode" id="fishing_mode">
+                        <option value="line">Line</option>
+                        <option value="color">Color</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card" id="perfect-cast-card">
+                    <h3>Perfect Cast Settings</h3>
+                    <div class="text">
+                        <label>Fall Scan Timeout</label>
+                        <input id=fall_scan_timeout type="text" placeholder="5">
+                    </div>
+                    <div class="text">
+                        <label>Cast Scan Delay</label>
+                        <input id=cast_scan_delay type="text" placeholder="0.01">
+                    </div>
+                    <div class="box-grid">
+                        <div class="simple-box">
+                            <p>Under 700px/s</p>
+                            <input id="perfect_cast_timing_700" type="text" placeholder="0.1">
+                        </div>
+                        <div class="simple-box">
+                            <p>700-800 px/s</p>
+                            <input id="perfect_cast_timing_800" type="text" placeholder="0.08">
+                        </div>
+                        <div class="simple-box">
+                            <p>800-900 px/s</p>
+                            <input id="perfect_cast_timing_900" type="text" placeholder="0.06">
+                        </div>
+                        <div class="simple-box">
+                            <p>900-1000 px/s</p>
+                            <input id="perfect_cast_timing_1000" type="text" placeholder="0.04">
+                        </div>
+                        <div class="simple-box">
+                            <p>1000-1100 px/s</p>
+                            <input id="perfect_cast_timing_1100" type="text" placeholder="0.02">
+                        </div>
+                        <div class="simple-box">
+                            <p>1100-1200 px/s</p>
+                            <input id="perfect_cast_timing_1200" type="text" placeholder="0">
+                        </div>
+                        <div class="simple-box">
+                            <p>1200-1300 px/s</p>
+                            <input id="perfect_cast_timing_1300" type="text" placeholder="-0.02">
+                        </div>
+                        <div class="simple-box">
+                            <p>1300-1400 px/s</p>
+                            <input id="perfect_cast_timing_1400" type="text" placeholder="-0.04">
+                        </div>
+                        <div class="simple-box">
+                            <p>1400-1500 px/s</p>
+                            <input id="perfect_cast_timing_1500" type="text" placeholder="-0.06">
+                        </div>
+                        <div class="simple-box">
+                            <p>1500-1600 px/s</p>
+                            <input id="perfect_cast_timing_1600" type="text" placeholder="-0.08">
+                        </div>
+                        <div class="simple-box">
+                            <p>1600+ px/s</p>
+                            <input id="perfect_cast_timing_1600_plus" type="text" placeholder="-0.1">
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Casting</h3>
+                    <div class="text">
+                        <label>Delay</label>
+                        <input id=delay_before_cating type="text" placeholder="0.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Duration</label>
+                        <input id=cast_duration type="text" placeholder="0.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Delay</label>
+                        <input id=delay_after_casting type="text" placeholder="1">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Shaking</h3>
+                    <div class="text">
+                        <label>Shake Delay</label>
+                        <input id=shake_scan_delay type="text" placeholder="0.08">
+                    </div>
+                    <div class="text">
+                        <label>Shake Failsafe (attempts)</label>
+                        <input id=shake_failsafe type="text" placeholder="80">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Minigame</h3>
+                    <div class="text">
+                        <label>Minigame Scan Delay (seconds)</label>
+                        <input id=minigame_scan_delay type="text" placeholder="0.01">
+                    </div>
+                    <div class="text">
+                        <label>Restart Delay</label>
+                        <input id=restart_delay type="text" placeholder="2.5">
+                    </div>
+                    <div class="text">
+                        <label>Minimum Line Density</label>
+                        <input id=fish_line_min_density type="text" placeholder="0.8">
+                    </div>
+                    <div class="text">
+                        <label>Bar Ratio From Side</label>
+                        <input id=bar_ratio_from_side type="text" placeholder="0.5">
+                    </div>
+                    <hr>
+                    <div class="dropdown">
+                        <label for="controller_mode">Controller Mode:</label>
+                        <select name="controller_mode" id="controller_mode">
+                        <option value="normal">Normal</option>
+                        <option value="steady">Steady</option>
+                        <option value="predictive">Predictive</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>KP (Proportional)</label>
+                        <input id=kp type="text" placeholder="0.4">
+                    </div>
+                    <div class="text">
+                        <label>KD (Derivative)</label>
+                        <input id=kd type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Stopping Distance</label>
+                        <input id=stopping_distance type="text" placeholder="1.4">
+                    </div>
+                    <div class="text">
+                        <label>Velocity Smoothing</label>
+                        <input id=velocity_smoothing type="text" placeholder="0.07">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Special Rods</h3>
+                    <div class="text">
+                        <label>Note Tracking Ratio (Pinion)</label>
+                        <input id=pinion_note_ratio type="text" placeholder="0.3">
+                    </div>
+                    <div class="dropdown">
+                        <label for="tranquility_mode">Tranquility Mode:</label>
+                        <select name="tranquility_mode" id="tranquility_mode">
+                        <option value="rapid">Rapid</option>
+                        <option value="steady">Steady</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Note Target Ratio (Tranquility)</label>
+                        <input id=tranquility_note_ratio type="text" placeholder="0.8">
+                    </div>
+                    <div class="text">
+                        <label>Note Target Delay (Tranquility)</label>
+                        <input id=target_delay type="text" placeholder="0">
+                    </div>
+                    <div class="text">
+                        <label>Metronome Ratio (Lullaby)</label>
+                        <input id=lullaby_metronome_ratio type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Fishing Ratio (Lullaby)</label>
+                        <input id=lullaby_fishing_ratio type="text" placeholder="0.7">
+                    </div>
+                </div>
+            </div>
+            <!-- Utilities Tab -->
+            <div id="utilities" class="tab-content">
+                <div class="card">
+                    <h3>Global</h3>
+                    <div class="text">
+                        <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
+                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
+                    </div>
+                    <div class="text">
+                        <label>Delay After E (Enchant, Angler)</label>
+                        <input id=e_delay type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Delay After Click (Appraisal, Enchant, Angler)</label>
+                        <input id=click_delay type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Delay After Click 2 (Enchant, Angler)</label>
+                        <input id=click_delay2 type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Restart Delay (Angler)</label>
+                        <input id=utility_restart_delay type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Logging</h3>
+                    <div class="dropdown">
+                        <label for="logging_mode">Logging Mode:</label>
+                        <select name="logging_mode" id="logging_mode">
+                        <option value="Screenshot">Screenshot</option>
+                        <option value="Text">Text</option>
+                        <option value="Disabled">Disabled</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Webhook URL</label>
+                        <input id=logging_url type="text" placeholder="">
+                    </div>
+                    <div class="text">
+                        <label>Webhook Name</label>
+                        <input id=logging_name type="text" placeholder="PyWare Fishing V5">
+                    </div>
+                    <div class="text">
+                        <label>Cycles</label>
+                        <input id=logging_cycle type="text" placeholder="10">
+                    </div>
+                    <button onclick="testLogging()">Test Webhook</button>
+                </div>
+                <div class="card">
+                    <h3>Auto Totem</h3>
+                    <div class="switch2">
+                        <p>Enable Totem</p>
+                        <label class="switch">
+                            <input id=auto_totem type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="dropdown">
+                        <label for="use_sundial_mode_when">Totem Trigger:</label>
+                        <select name="use_sundial_mode_when" id="use_sundial_mode_when">
+                        <option value="Day">Day</option>
+                        <option value="Night">Night</option>
+                        <option value="Disabled">Disabled</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Cycles</label>
+                        <input id=totem_cycles type="text" placeholder="3">
+                    </div>
+                    <div class="text">
+                        <label>Time (seconds)</label>
+                        <input id=totem_delay type="text" placeholder="60">
+                    </div>
+                    <div class="text">
+                        <label>Sundial Delay (seconds)</label>
+                        <input id=sundial_delay type="text" placeholder="15">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Auto Reconnect</h3>
+                    <div class="switch2">
+                        <p>Auto Reconnect</p>
+                        <label class="switch">
+                            <input id=auto_reconnect type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="text">
+                        <label>Threshold</label>
+                        <input id=reconnect_threshold type="text" placeholder="3">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Wait Time (Seconds)</label>
+                        <input id=reconnect_wait_time type="text" placeholder="60">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Mirror X (Ratio)</label>
+                        <input id=mirror_ratio type="text" placeholder="60">
+                    </div>
+                    <div class="text">
+                        <label>Mirror Y (Ratio)</label>
+                        <input id=mirror_ratio2 type="text" placeholder="60">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Appraisal/Enchantment (toggle in Basic tab)</h3>
+                    <div class="text">
+                        <label>Mutation/Enchant</label>
+                        <input id=mutation_enchant type="text" placeholder="Darkened">
+                    </div>
+                    <div class="text">
+                        <label>Click X (Ratio)</label>
+                        <input id=appraisal_enchant_x type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Click Y (Ratio)</label>
+                        <input id=appraisal_enchant_y type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Angler/Quests (toggle in Basic tab)</h3>
+                    <div class="text">
+                        <label>Click X (Ratio)</label>
+                        <input id=angler_click_x type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Click Y (Ratio)</label>
+                        <input id=angler_click_y type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Backpack X (Ratio)</label>
+                        <input id=backpack_x type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Backpack Y (Ratio)</label>
+                        <input id=backpack_y type="text" placeholder="0.5">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    <!-- Config Manager Modal -->
+    <div id="config-modal-overlay" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h2>Config Manager</h2>
+                <button
+                    class="modal-close"
+                    onclick="closeConfigManager()">
+                    ×
+                </button>
+            </div>
+            <div class="modal-content">
+                <div class="button-row">
+                    <button onclick="newConfig()">
+                        New Config
+                    </button>
+
+                    <button onclick="deleteConfig()">
+                        Delete Config
+                    </button>
+                </div>
+
+                <button onclick="openConfigsFolder()">
+                    Open PyWare Fishing Folder
+                </button>
+
+                <div class="button-row">
+                    <button onclick="importConfig()">
+                        Import Config
+                    </button>
+                    <button onclick="exportConfig()">
+                        Export Config
+                    </button>
+                </div>
+
+                <button onclick="refreshConfigs()">
+                    Refresh Configs
+                </button>
+
+                <div class="button-row">
+                    <button onclick="resetSettings()">
+                        Reset Settings
+                    </button>
+                    <button onclick="resetColors()">
+                        Reset Colors
+                    </button>
+                </div>
+
+                <button onclick="resetAreas()">
+                    Reset Areas
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- Support Modal -->
+    <div id="support-modal-overlay" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h2>Community Support</h2>
+                <button
+                    class="modal-close"
+                    onclick="closeSupportTab()">
+                    ×
+                </button>
+            </div>
+            <div class="modal-content">
+                <button onclick="openLink('https://www.youtube.com/@HexaTitanGaming')">
+                    YouTube Channel
+                </button>
+                <button onclick="openLink('https://discord.gg/aMZY8yrF8r')">
+                    Discord Community
+                </button>
+                <button onclick="openLink('https://sites.google.com/view/icf-automation-network/')">
+                    Official Website
+                </button>
+                <button onclick="openLink('https://docs.google.com/document/d/1WwWWMR-eN-R-GO42IioToHpWTgiXkLoiNE_4NeE-GsU/edit?tab=t.0')">
+                    Upcoming Features
+                </button>
+                <button onclick="openLink('https://docs.google.com/document/d/1PLYlNH6GKZ_A3XQTN8sVqUvJgx9mFxtpqKq43CocEls/edit?usp=drive_link')">
+                    Settings Guide
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- About Modal -->
+    <div id="about-modal-overlay" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <h2>About PyWare Fishing</h2>
+                <button
+                    class="modal-close"
+                    onclick="closeAboutTab()">
+                    ×
+                </button>
+            </div>
+            <p>
+                PyWare Fishing is developed and maintained by Catman2608.
+            </p>
+            <p>
+                Any person claiming to be part of this project or its development, other than Catman2608
+                is most likely lying. Be cautious of fake contributors or impersonators.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
