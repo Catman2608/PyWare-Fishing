@@ -53,7 +53,7 @@
     "disabled_1500": "-0.06",
     "disabled_1600": "-0.08",
     "disabled_1600_plus": "-0.1",
-    "delay_before_cating": "0.5",
+    "delay_before_casting": "0.5",
     "cast_duration": "0.5",
     "delay_after_casting": "1",
     "shake_scan_delay": "0.08",

@@ -695,11 +695,8 @@ class Eyedropper:
         self._win_origin_x = SCREEN_LEFT
         self._win_origin_y = SCREEN_TOP
         
-        # Capture desktop before overlay appears
-        if sys.platform == "darwin":
-            self._screen_capture = self.parent.capture_loop_quartz(False)
-        else:
-            self._screen_capture = self.parent.capture_loop_mss(False)
+        # Capture desktop before overlay appears (single frame, does not touch macro_running)
+        self._screen_capture = self.parent.capture_single_frame()
             
         # Create fullscreen transparent pywebview window
         self._win = webview.create_window(
@@ -939,7 +936,8 @@ class Api:
         self.scale_y_1440 = self.SCREEN_HEIGHT / 1440
         # Screen Capture
         self.capture_thread = None
-        self.mss_frame = None
+        self.capture_frame = None
+        self.capture_id = 0
         self.scan_delay = 0.1
         # Other classes
         self.fish_overlay = FishOverlay(self)
@@ -1398,6 +1396,8 @@ class Api:
 
     def set_status(self, message):
         """Push a status message to the main webview window's JS."""
+        if IS_COMPILED == False:
+            print("Debug: ", message)
         try:
             safe = message.replace("\\", "\\\\").replace("`", "\\`").replace("'", "\\'")
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
@@ -1478,10 +1478,7 @@ class Api:
         fish_l, fish_t, fish_r, fish_b, _, _ = self._get_areas("fish")
         friend_l, friend_t, friend_r, friend_b, _, _ = self._get_areas("friend")
         totem_l, totem_t, totem_r, totem_b, _, _ = self._get_areas("totem")
-        if sys.platform == "darwin":
-            full_img = self.capture_loop_quartz(False)
-        else:
-            full_img = self.capture_loop_mss(False)
+        full_img = self.capture_single_frame()
         if full_img is None:
             self.set_status("Full screen is empty")
             return
@@ -1557,6 +1554,9 @@ class Api:
                     return
 
                 else:
+                    # Set flag BEFORE starting threads to avoid race where
+                    # the capture thread starts, sees macro_running=False, and exits immediately.
+                    self.macro_running = True
                     # Save current settings to config before starting
                     self.save_config(self.current_config, self.vars)
                     if automation_mode == "fishing":
@@ -1781,29 +1781,12 @@ class Api:
 
         return None
 
-    def capture_loop_mss(self, macro_running2=True):
-        if macro_running2 == False:
-            self.macro_running = True
-        if self.macro_running == False:
-            return
-
-        scale = self._get_scale_factor()
-        with MSS() as sct:
-            monitor = {"top": 0, "left": 0, "width": (SCREEN_WIDTH * scale), "height": (SCREEN_HEIGHT * scale)}
-            while self.macro_running:
-                self.mss_frame = sct.grab(monitor)
-                if macro_running2 == False:
-                    self.macro_running = False
-                    return self.mss_frame
-
-                time.sleep(self.scan_delay)
-    def capture_loop_quartz(self, macro_running2=True):
-        if macro_running2 == False:
-            self.macro_running = True
-        if not self.macro_running:
-            return
-
-        while self.macro_running:
+    def capture_single_frame(self):
+        """
+        Capture a single full-screen frame without touching self.macro_running.
+        Used by debug screenshots, eyedropper freeze, and Discord screenshot logging.
+        """
+        if sys.platform == "darwin":
             image = Quartz.CGWindowListCreateImage(
                 Quartz.CGRectInfinite,
                 Quartz.kCGWindowListOptionOnScreenOnly,
@@ -1811,14 +1794,61 @@ class Api:
                 Quartz.kCGWindowImageDefault
             )
             if image is None:
+                return None
+            return cgimage_to_srgb_numpy(image)
+        else:
+            scale = self._get_scale_factor()
+            with MSS() as sct:
+                monitor = {
+                    "top": 0,
+                    "left": 0,
+                    "width": int(SCREEN_WIDTH * scale),
+                    "height": int(SCREEN_HEIGHT * scale),
+                }
+                return np.asarray(sct.grab(monitor))[:, :, :3]
+
+    def capture_loop_mss(self):
+        """Continuous capture loop for the macro. Assumes self.macro_running is already True."""
+        if not self.macro_running:
+            return
+
+        self.capture_id = 0
+        scale = self._get_scale_factor()
+        with MSS() as sct:
+            monitor = {
+                "top": 0,
+                "left": 0,
+                "width": int(SCREEN_WIDTH * scale),
+                "height": int(SCREEN_HEIGHT * scale),
+            }
+            while self.macro_running:
+                self.capture_frame = np.asarray(sct.grab(monitor))[:, :, :3]
+                self.capture_id += 1
+                time.sleep(self.scan_delay)
+
+    def capture_loop_quartz(self):
+        """Continuous capture loop for the macro (macOS). Assumes self.macro_running is already True."""
+        if not self.macro_running:
+            return
+
+        self.capture_id = 0
+        while self.macro_running:
+            if sys.platform == "darwin":
+                image = Quartz.CGWindowListCreateImage(
+                    Quartz.CGRectInfinite,
+                    Quartz.kCGWindowListOptionOnScreenOnly,
+                    Quartz.kCGNullWindowID,
+                    Quartz.kCGWindowImageDefault
+                )
+            else:
+                image = None
+            if image is None:
                 continue
 
-            self.quartz_frame = cgimage_to_srgb_numpy(image)
-            if macro_running2 == False:
-                self.macro_running = False
-                return self.quartz_frame
-
+            self.capture_frame = cgimage_to_srgb_numpy(image)
+            self.capture_id += 1
             time.sleep(self.scan_delay)
+
     def _pixel_search(self, frame, hex, tolerance, mode=0):
         """
         Searches for the first or last pixel based on mode.
@@ -1826,7 +1856,10 @@ class Api:
         """
         if frame is None or frame.size == 0:
             return None, None
-
+        try:
+            tolerance = int(tolerance)
+        except:
+            tolerance = 5
         tolerance = int(np.clip(tolerance, 0, 255))
         b, g, r = self._hex_to_bgr(hex)
         lower_bound = np.array([
@@ -1848,7 +1881,7 @@ class Api:
                 y, x = coords[-1]  # Get last pixel
             else:
                 raise RuntimeError("Invalid detection mode")
-
+            
             return int(x), int(y)
 
         return None, None
@@ -1932,112 +1965,94 @@ class Api:
     # Utility Functions
     def test_logging(self):
         logging_mode = self.vars["logging_mode"].capitalize()
-        self.send_logging(f"**{logging_mode} is working**", "Macro Stopped", show_status=True)
-    def send_logging(self, text, loop_count, catch_rate=-1, show_status=True):
+        self.send_logging(f"**{logging_mode} is working**", "Macro Stopped")
+
+    def send_logging(self, text, loop_count, catch_rate=-1):
         logging_mode = self.vars["logging_mode"].lower()
-        if logging_mode == "Disabled":
+        if logging_mode == "disabled":
             self.set_status("⚠ Logging is disabled.")
             return
 
-        if not logging_mode == "File":
-            # logging_url
+        webhook_url = None
+        if logging_mode != "file":
             webhook_url = self.vars["logging_url"].strip()
             if not webhook_url.startswith("https://discord.com/api/webhooks/"):
                 self.set_status("Error: Invalid webhook URL.")
                 return
 
-        if show_status == True:
-            self.set_status("Sending test webhook...")
+        self.set_status("Sending log...")
         if logging_mode == "screenshot":
             thread = threading.Thread(
                 target=self._discord_screenshot_worker,
-                args=(webhook_url, f"{text}\n", loop_count, show_status, catch_rate),
+                args=(webhook_url, f"{text}\n", loop_count, catch_rate),
                 daemon=True
             )
         elif logging_mode == "file":
             thread = threading.Thread(
                 target=self._debug_log_worker,
-                args=(text, loop_count, show_status, catch_rate),
+                args=(text, loop_count, catch_rate),
                 daemon=True
             )
         else:
             thread = threading.Thread(
                 target=self._discord_text_worker,
-                args=(webhook_url, f"{text}\n", loop_count, show_status, catch_rate),
+                args=(webhook_url, f"{text}\n", loop_count, catch_rate),
                 daemon=True
             )
         thread.start()
+        thread.join()  # Wait for Discord/file log to finish before continuing
 
-    def _discord_text_worker(self, webhook_url, message_prefix, loop_count, show_status, catch_rate):
+    def _discord_text_worker(self, webhook_url, message_prefix, loop_count, catch_rate):
         """Worker function to send text webhook."""
         logging_name = self.vars["logging_name"]
-        webhook_url2 = self.vars["logging_url"]
         try:
             if catch_rate == -1:
                 catch_rate = "N/A"
-            if show_status == True:
-                payload = {
-                    'content': f'{message_prefix}🎣 Cycle completed\n🔄 {loop_count}\nCatch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': logging_name,
-                    'embeds': [{
-                        'description': f'{loop_count}',
-                        'color': 0x5865F2,
-                        'timestamp': time.strftime("%Y-%m-%dT%H:%M:%S")
-                    }]
-                }
-                response = requests.post(webhook_url, json=payload, timeout=10)
-            else:
-                payload = {
-                    'content': f'{message_prefix}🎣 Cycle failed\n🔄 {loop_count}\nCatch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': logging_name,
-                    'embeds': [{
-                        'description': f'{loop_count}',
-                        'color': 0x5865F2,
-                        'timestamp': time.strftime("%Y-%m-%dT%H:%M:%S")
-                    }]
-                }
-                response = requests.post(webhook_url2, json=payload, timeout=10)
+            payload = {
+                'content': f'{message_prefix}🎣 Cycle completed\n🔄 {loop_count}\nCatch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                'username': logging_name,
+                'embeds': [{
+                    'description': f'{loop_count}',
+                    'color': 0x5865F2,
+                    'timestamp': time.strftime("%Y-%m-%dT%H:%M:%S")
+                }]
+            }
+            response = requests.post(webhook_url, json=payload, timeout=10)
             if response.status_code == 200 or response.status_code == 204:
-                if show_status == True:
-                    self.set_status(f"Discord text sent ({loop_count})")
+                self.set_status(f"Discord text sent ({loop_count})")
             else:
                 self.set_status(f"Error: Discord text failed: {response.status_code}")
         except Exception as e:
             self.set_status(f"Error sending Discord text: {e}")
-    def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, show_status, catch_rate):
+
+    def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, catch_rate):
         logging_name = self.vars["logging_name"]
-        webhook_url2 = self.vars["logging_url"]
         try:
-            if sys.platform == "darwin":
-                screenshot = self.parent.capture_loop_quartz(False)
-            else:
-                screenshot = self.parent.capture_loop_mss(False)
-            screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+            screenshot = self.capture_single_frame()
+            if screenshot is None:
+                self.set_status("Error: failed to capture screenshot for Discord")
+                return
+            # Ensure BGR for imencode (mss already BGR; quartz conversion is BGR)
+            if screenshot.shape[2] == 4:
+                screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
             _, buffer = cv2.imencode(".png", screenshot)
             img_byte_arr = io.BytesIO(buffer.tobytes())
             files = {'file': ('screenshot.png', img_byte_arr, 'image/png')}
             if catch_rate == -1:
                 catch_rate = "N/A"
-            if show_status == True:
-                payload = {
-                    'content': f'{message_prefix}🎣 **Cycle completed**\n🔄 {loop_count}\n🎯 Catch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': logging_name
-                }
-                response = requests.post(webhook_url, data=payload, files=files, timeout=10)
-            else:
-                payload = {
-                    'content': f'{message_prefix}🎣 **Cycle failed**\n🔄 {loop_count}\n🎯 Catch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
-                    'username': logging_name
-                }
-                response = requests.post(webhook_url2, data=payload, files=files, timeout=10)
+            payload = {
+                'content': f'{message_prefix}🎣 **Cycle completed**\n🔄 {loop_count}\n🎯 Catch rate: {catch_rate}\n🕐 {time.strftime("%Y-%m-%d %H:%M:%S")}',
+                'username': logging_name
+            }
+            response = requests.post(webhook_url, data=payload, files=files, timeout=10)
             if response.status_code in (200, 204):
-                if show_status == True:
-                    self.set_status(f"Discord screenshot sent ({loop_count})")
+                self.set_status(f"Discord screenshot sent ({loop_count})")
             else:
                 self.set_status(f"Error: Discord screenshot failed: {response.status_code}")
         except Exception as e:
-            self.set_status(f"Error: sending Discord screenshot: {e}")
-    def _debug_log_worker(self, text, loop_count, show_status, catch_rate):
+            self.set_status(f"Error sending Discord screenshot: {e}")
+
+    def _debug_log_worker(self, text, loop_count, catch_rate):
         """Write debug logs to a text file."""
         try:
             # Use base path for logs
@@ -2059,8 +2074,7 @@ class Api:
             )
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(log_entry)
-            if show_status:
-                self.set_status(f"Debug log saved ({loop_count})")
+            self.set_status(f"Debug log saved ({loop_count})")
         except Exception as e:
             self.set_status(f"Error writing debug log: {e}")
 
@@ -2070,32 +2084,38 @@ class Api:
         self.macro_running = True
         casting_mode = self.vars["casting_mode"].lower()
         shake_mode = self.vars["shake_mode"].lower()
+        # Restart
+        auto_refresh = self.vars["auto_refresh"]
+        select_rod_duration = float(self.vars["select_rod_duration"])
+        bag_slot = str(self.vars["bag_slot"])
+        rod_slot = str(self.vars["rod_slot"])
         # Misc
         shake_failsafe = int(self.vars["shake_failsafe"])
         friend_color = self.vars["friends_color"]
         friend_tolerance = int(self.vars["friends_tolerance"])
         friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self._get_areas("friend")
         delay_before_casting = float(self._get_var_number("delay_before_casting", 0.5, float))
-        cast_delay = float(self._get_var_number("cast_delay", 0.6, float))
+        delay_after_casting = float(self._get_var_number("cast_delay", 1, float))
         logging_mode = self.vars["logging_mode"].lower()
         self.scan_delay = 0.1
         self.current_cycle = 0
-        # Successful catch: 0 = success; 1 = failed; 2 = N/A
-        self.catch_success = 2
-        self.catch_rate = 1
+        # Successful catch: 0 = success (fish stayed in bar the whole time); 1 = failed (fish left the bar)
+        self.catch_success = 2  # N/A until first minigame
+        self.catch_rate = 0.0
         successful_catches = 0
         # Main Loop (With bug reports)
         try:
             while self.macro_running:
+                self.set_status("Resetting statistics")
+                self.capture_id = 0
+                if auto_refresh == "on":
+                    time.sleep(delay_before_casting)
+                    self._send_key(bag_slot)
+                    time.sleep(select_rod_duration)
+                    self._send_key(rod_slot)
+                    time.sleep(delay_after_casting / 2)
                 self.set_status("Using Utilities")
                 self.current_cycle = self.current_cycle + 1
-                # Discord Webhooks
-                successful_catches = successful_catches + 1 if self.catch_success == 0 else successful_catches
-                self.catch_rate = (successful_catches / self.current_cycle)
-                catch_rate_percentage = int(self.catch_rate * 100)
-                if not logging_mode == "disabled":
-                    self.send_logging("**Cycle Checkpoint**", f"Cycle #{self.current_cycle}", catch_rate_percentage, show_status=True)
-                self.catch_success = 2
                 # Cast
                 self.set_status("Casting")
                 time.sleep(delay_before_casting)
@@ -2103,17 +2123,17 @@ class Api:
                     self._execute_cast_perfect()
                 else:
                     self._execute_cast_normal()
-                time.sleep(cast_delay)
+                time.sleep(delay_after_casting)
                 # Shake
                 self.set_status("Shaking")
                 self.scan_delay = float(self.vars["shake_scan_delay"])
                 for attempts in range(shake_failsafe):
-                    if self.mss_frame == None:
+                    if self.capture_frame is None:
                         attempts = attempts - 1
                         continue
-                    friend_img = self.mss_frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
+                    friend_img = self.capture_frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
                     friend_x, friend_y = self._pixel_search(friend_img, friend_color, friend_tolerance)
-                    if friend_x is not None or friend_y is not None:
+                    if friend_x is None or friend_y is None:
                         break
 
                     if shake_mode == "navigation":
@@ -2121,9 +2141,16 @@ class Api:
                     else:
                         self._execute_shake_click(shake_mode)
                     time.sleep(self.scan_delay)
-                # Minigame
+                # Minigame — sets self.catch_success = 0 at start; flips to 1 if fish ever leaves the bar
                 self.set_status("Playing Bar Minigame")
                 self._enter_minigame()
+                # Update catch rate after the minigame finishes
+                if self.catch_success == 0:
+                    successful_catches += 1
+                self.catch_rate = successful_catches / self.current_cycle
+                catch_rate_percentage = int(self.catch_rate * 100)
+                if logging_mode != "disabled":
+                    self.send_logging("**Cycle Checkpoint**", f"Cycle #{self.current_cycle}", catch_rate_percentage)
             self.set_status("Macro Stopped")
         except Exception as e:
             time.sleep(0.2)
@@ -2210,7 +2237,7 @@ class Api:
         start_time = time.time()
         # Perfect Cast Loop
         while self.macro_running:
-            region = self.mss_frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
+            region = self.capture_frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
             if region.size == 0:
                 if time.time() - start_time > max_time:
                     break
@@ -2407,7 +2434,7 @@ class Api:
         shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, _ = self._get_areas("shake")
         shake_color = self.vars["shake_color"]
         shake_tolerance = self.vars["shake_tolerance"]
-        shake_img = self.mss_frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
+        shake_img = self.capture_frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
         if shake_mode == "pixel":
             shake_x, shake_y = self._pixel_search(shake_img, shake_color, shake_tolerance)
         else:
@@ -2419,6 +2446,7 @@ class Api:
             shake_x_screen = None
             shake_y_screen = None
         self._click_at(shake_x_screen, shake_y_screen)
+        return
     def _enter_minigame(self):
         # Helper Functions
         mouse_down = False
@@ -2461,6 +2489,7 @@ class Api:
             tracking_tolerance = 5
             friends_tolerance = 5
         # Minigame Settings
+        fishing_profile = self.vars["fishing_profile"].lower()
         bar_ratio_from_side = float(self.vars["bar_ratio_from_side"])
         restart_delay = float(self.vars["restart_delay"])
         self.scan_delay = float(self.vars["minigame_scan_delay"])
@@ -2473,6 +2502,9 @@ class Api:
         pinion_note_ratio = float(self.vars["pinion_note_ratio"])
         # Last values (failsafe)
         is_initial_run = True
+        bar_size = 0
+        bar_center = 0
+        last_capture_id = 0
         last_fish_x = 0
         last_left_x = 0
         last_right_x = 0
@@ -2485,10 +2517,17 @@ class Api:
         last_time = time.perf_counter()
         # Loop
         while self.macro_running:
-            # Get image from self.mss_frame
-            shake_img = self.mss_frame[shake_top:fish_bottom, fish_left:fish_right]
-            fish_img = self.mss_frame[fish_top:fish_bottom, fish_left:fish_right]
-            friend_img = self.mss_frame[friend_top:friend_bottom, friend_left:friend_right]
+            # Get image from self.capture_frame
+            if self.capture_id == last_capture_id:
+                time.sleep(self.scan_delay)
+                continue
+            if self.capture_frame is None:
+                time.sleep(self.scan_delay)
+                continue
+            else:
+                shake_img = self.capture_frame[shake_top:fish_bottom, fish_left:fish_right]
+                fish_img = self.capture_frame[fish_top:fish_bottom, fish_left:fish_right]
+                friend_img = self.capture_frame[friend_top:friend_bottom, friend_left:friend_right]
             # Friend detection
             friend_x, friend_y = self._pixel_search(friend_img, friends_color, friends_tolerance)
             if friend_x is not None and friend_y is not None:
@@ -2508,6 +2547,7 @@ class Api:
                 left_x, left_y = self._pixel_search(fish_img, right_color, right_tolerance)
             if right_x == None:
                 right_x, right_y = self._pixel_search(fish_img, left_color, left_tolerance, 1)
+            # print(f"Raw coordinates: {left_x}, {right_x}, {fish_x}")
             # Check if we should scan for arrows
             if left_x is not None and right_x is not None:
                 bar_detected = True
@@ -2539,17 +2579,28 @@ class Api:
             if fish_detected == False:
                 fish_x = last_fish_x
             # Note Detection
-            note_x, note_y = self._pixel_search(shake_img, tracking_color, tracking_tolerance)
-            note_y_ratio = float(note_y / shake_height)
-            if note_y_ratio > pinion_note_ratio:
-                fish_x = note_x
-            # Check if catch fails or not (Fish leaves bar = failed)
-            if not left_x <= fish_x <= right_x:
-                self.catch_success = 1
+            if fishing_profile == "notes":
+                note_x, note_y = self._pixel_search(shake_img, tracking_color, tracking_tolerance)
+                if note_x is not None and note_y is not None:
+                    note_y_ratio = float(note_y / shake_height)
+                    if note_y_ratio > pinion_note_ratio:
+                        fish_x = note_x
+            else:
+                note_y_ratio = 0.0
+            # Catch fails if the fish ever leaves the bar; stays success only if fish stays inside the whole time
+            if left_x is not None and right_x is not None and fish_x is not None:
+                if not (left_x <= fish_x <= right_x):
+                    self.catch_success = 1
             # Edge Boundary
-            boundary = bar_size * bar_ratio_from_side
-            left_boundary = fish_left + boundary
-            right_boundary = fish_right - boundary
+            if bar_size is not None:
+                boundary = bar_size * bar_ratio_from_side
+                left_boundary = boundary
+                right_boundary = fish_right - boundary - fish_left
+            else:
+                left_boundary = None
+                right_boundary = fish_width
+            # print("Boundary: ", left_boundary, right_boundary, " Fish: ", fish_x)
+            # print("Last Cache: ", bar_center - last_bar_center)
             # PD controller
             current_time = time.perf_counter()
             time_delta = current_time - last_time
@@ -2649,6 +2700,7 @@ class Api:
                             # Bar Moving Left Relative To Fish → Hold (Apply Right Thrust)
                             control_signal = 30
             # Mouse state
+            # print(f"Control Signal: {control_signal}")
             if control_signal > 0:
                 hold_mouse()
             else:
@@ -2663,6 +2715,7 @@ class Api:
                 last_fish_x = fish_x
             # Cleanup
             is_initial_run = False
+            last_capture_id = self.capture_id
             time.sleep(self.scan_delay)
         return
 
