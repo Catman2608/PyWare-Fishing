@@ -85,7 +85,7 @@
     "logging_cycle": "10",
     "logging_time": "150",
     "auto_totem_mode": "Time",
-    "use_sundial_mode_when": "Disabled",
+    "target_time": "Disabled",
     "totem_cycles": "3",
     "totem_delay": "60",
     "sundial_delay": "15",

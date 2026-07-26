@@ -2019,9 +2019,8 @@ class Api:
         # Hold Mouse
         self.hold_mouse(False)
         # Get Areas (Scale Factor Applied Inside _Get_Areas)
-        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, shake_height = self._get_areas("shake")
+        shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self._get_areas("shake")
         self._fish_overlay_cast_bounds = None
-        self._set_fish_overlay_mode("casting")
         # Config 
         white_color = self.vars.get("white_cast_color", self.vars.get("perfect_color2", "#d4d3ca"))
         green_color = self.vars.get("green_cast_color", self.vars.get("perfect_color", "#64a04c"))
@@ -2065,7 +2064,7 @@ class Api:
         start_time = time.time()
         # Perfect Cast Loop
         while self.macro_running:
-            region = self.mss_frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
+            region = self.mss_frame[shake_top:shake_bottom, shake_left:shake_right]
             if region.size == 0:
                 if time.time() - start_time > max_time:
                     break
@@ -2135,10 +2134,10 @@ class Api:
             if total_distance <= 0:
                 continue
 
-            cast_left = shake_left_s + green_left_x
-            cast_top = shake_top_s + green_y
-            cast_right = shake_left_s + green_right_x
-            cast_bottom = shake_top_s + white_y_bottom
+            cast_left = shake_left + green_left_x
+            cast_top = shake_top + green_y
+            cast_right = shake_left + green_right_x
+            cast_bottom = shake_top + white_y_bottom
             if self._fish_overlay_cast_bounds != (cast_left, cast_top, cast_right, cast_bottom):
                 self._fish_overlay_cast_bounds = (cast_left, cast_top, cast_right, cast_bottom)
                 self._apply_fish_overlay_state()
@@ -2247,7 +2246,6 @@ class Api:
         # Cleanup
         self.release_mouse(False)
         self._fish_overlay_cast_bounds = None
-        self._set_fish_overlay_mode("idle")
         return
 
     def _execute_cast_normal(self):
@@ -2259,17 +2257,17 @@ class Api:
 
     def _execute_shake_click(self, shake_mode):
         scale = self._get_scale_factor()
-        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, _ = self._get_areas("shake")
+        shake_left, shake_top, shake_right, shake_bottom, _, _ = self._get_areas("shake")
         shake_color = self.vars["shake_color"]
         shake_tolerance = self.vars["shake_tolerance"]
-        shake_img = self.mss_frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
+        shake_img = self.mss_frame[shake_top:shake_bottom, shake_left:shake_right]
         if shake_mode == "pixel":
             shake_x, shake_y = self._pixel_search(shake_img, shake_color, shake_tolerance)
         else:
             shake_x, shake_y = self._find_circles(shake_img)
         try:
-            shake_x_screen = int((shake_x / scale) + shake_left_s)
-            shake_y_screen = int((shake_y / scale) + shake_top_s)
+            shake_x_screen = int((shake_x / scale) + shake_left)
+            shake_y_screen = int((shake_y / scale) + shake_top)
         except:
             shake_x_screen = None
             shake_y_screen = None

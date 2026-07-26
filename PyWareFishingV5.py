@@ -121,6 +121,8 @@ with MSS() as _sct:
     SCREEN_HEIGHT = _m["height"]
     SCREEN_LEFT   = _m["left"]
     SCREEN_TOP    = _m["top"]
+HALF_WIDTH = int(SCREEN_WIDTH / 2)
+HALF_HEIGHT = int(SCREEN_HEIGHT / 2)
 # Windows (Transparency and Ctypes WinDLL)
 if sys.platform == "win32":
     windll = ctypes.windll.user32
@@ -813,22 +815,50 @@ class Eyedropper:
             self._close_window()
 
 class FishOverlay:
-    HTML_FILE = "overlay.html"  # Make sure this points to your UI asset path
+    HTML_FILE = os.path.join(UI_PATH, "fish_overlay.html")
     def __init__(self, parent_app):
         self.parent_app = parent_app
         self.overlay_window = None  # Replaces self._win for consistency
         self._open = False
         self._visible = False
-        # Track active viewport geometry
+        # Track active viewport geometry (logical points for pywebview)
         self.left = 0
         self.top = 0
         self.width = 0
         self.height = 0
+
+    def _to_window_coords(self, left, top, width, height):
+        """
+        Convert physical-pixel geometry (from _get_areas / capture) into the
+        logical points pywebview expects for window x/y/width/height.
+        On Windows scale is always 1; on macOS Retina it is typically 2.0.
+        """
+        scale = get_scale_factor()
+        if scale <= 0:
+            scale = 1.0
+        left = int(left / scale)
+        top = int(top / scale)
+        width = max(1, int(width / scale))
+        height = max(1, int(height / scale))
+        # Clamp so the window stays on-screen (logical screen size)
+        screen_w = max(1, int(SCREEN_WIDTH / scale))
+        screen_h = max(1, int(SCREEN_HEIGHT / scale))
+        left = max(0, min(left, max(0, screen_w - width)))
+        top = max(0, min(top, max(0, screen_h - height)))
+        return left, top, width, height
+
     def show(self, left, top, width, height):
-        """Creates and displays the transparent frameless overlay window."""
+        """Creates and displays the transparent frameless overlay window.
+
+        Arguments are physical-pixel screen coordinates (same space as
+        _get_areas / capture_frame). They are converted to logical points
+        for pywebview.
+        """
+        left, top, width, height = self._to_window_coords(left, top, width, height)
+
         if self._open and self.overlay_window:
             # If already open, shift/resize it instead of duplicating
-            self.resize(left, top, width, height)
+            self.resize(left, top, width, height, already_logical=True)
             return
 
         self.left = left
@@ -852,26 +882,44 @@ class FishOverlay:
         self._open = True
         self._visible = True
         self.overlay_window.events.closed += self._on_closed
+
     def hide(self):
         """Destroys the current window instance completely."""
         if self.overlay_window and self._open:
             self.overlay_window.destroy()
             self._on_closed()
-    def resize(self, left, top, width, height):
-        """Resizes and moves the window dynamically if it exists."""
+
+    def resize(self, left, top, width, height, already_logical=False):
+        """Resizes and moves the window dynamically if it exists.
+
+        By default arguments are physical pixels (same as show()).
+        Pass already_logical=True when the caller has already converted them.
+        """
+        if not already_logical:
+            left, top, width, height = self._to_window_coords(left, top, width, height)
         self.left = left
         self.top = top
         self.width = width
         self.height = height
         if self.overlay_window and self._open:
-            self.overlay_window.move(self.left, self.top)
-            self.overlay_window.resize(self.width, self.height)
+            try:
+                self.overlay_window.move(self.left, self.top)
+                self.overlay_window.resize(self.width, self.height)
+            except Exception:
+                pass
+
     def clear(self):
         """Clears rendering elements inside the web view context."""
         self._eval("window.fishOverlay && window.fishOverlay.clear()")
+
     def draw(self, bar_center, box_size, color, canvas_offset,
              show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
-        """Evaluates JS drawing contexts based on calculations inside the viewport."""
+        """Evaluates JS drawing contexts based on calculations inside the viewport.
+
+        bar_center / box_size / canvas_offset are in physical pixels relative to
+        the fish capture region; they are converted to logical CSS pixels for
+        the overlay canvas (which matches the logical window size).
+        """
         if bar_center is None:
             return
 
@@ -879,8 +927,9 @@ class FishOverlay:
         if not self._open or not self.overlay_window:
             return
 
-        # Replace this with your project's scaling multiplier function if required
-        scale = getattr(self.parent_app, 'get_scale_factor', lambda: 1.0)() 
+        scale = get_scale_factor()
+        if scale <= 0:
+            scale = 1.0
         bar_center = float(bar_center) / scale
         canvas_offset = float(canvas_offset) / scale
         half_size = float(box_size) / (2 * scale) if box_size else 0
@@ -895,6 +944,7 @@ class FishOverlay:
             "bar_y2": max(0.0, min(1.0, float(bar_y2))),
         }
         self._eval(f"window.fishOverlay && window.fishOverlay.draw({json.dumps(shape)})")
+
     def _eval(self, script):
         """Safely executes JavaScript strings within the running window environment."""
         if self.overlay_window and self._open:
@@ -1397,7 +1447,8 @@ class Api:
     def set_status(self, message):
         """Push a status message to the main webview window's JS."""
         if IS_COMPILED == False:
-            print("Debug: ", message)
+            # print("Debug: ", message)
+            pass
         try:
             safe = message.replace("\\", "\\\\").replace("`", "\\`").replace("'", "\\'")
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
@@ -1474,10 +1525,10 @@ class Api:
         Capture all relevant areas (shake, fish, friend, totem, full)
         and save debug images.
         """
-        shake_l, shake_t, shake_r, shake_b, _, _ = self._get_areas("shake")
-        fish_l, fish_t, fish_r, fish_b, _, _ = self._get_areas("fish")
-        friend_l, friend_t, friend_r, friend_b, _, _ = self._get_areas("friend")
-        totem_l, totem_t, totem_r, totem_b, _, _ = self._get_areas("totem")
+        shake_l, shake_t, shake_r, shake_b, _, _ = self.get_areas("shake")
+        fish_l, fish_t, fish_r, fish_b, _, _ = self.get_areas("fish")
+        friend_l, friend_t, friend_r, friend_b, _, _ = self.get_areas("friend")
+        totem_l, totem_t, totem_r, totem_b, _, _ = self.get_areas("totem")
         full_img = self.capture_single_frame()
         if full_img is None:
             self.set_status("Full screen is empty")
@@ -1694,8 +1745,19 @@ class Api:
                     keyboard_controller.release(key)
             except Exception as e:
                 print("Error sending keys:", e)
+    # Interruptible sleep
+    def interruptible_sleep(self, duration):
+        duration = max(0.01, duration)
+        end_time = time.perf_counter() + duration
+        while time.perf_counter() < end_time:
+            if not self.macro_running:
+                break  # Interrupted
+
+            remaining = end_time - time.perf_counter()
+            time.sleep(min(0.01, remaining))
+
     # Get values
-    def _get_areas(self, area_key):
+    def get_areas(self, area_key):
         # Apply Scale Factor
         scale = self._get_scale_factor()
         area_data = self.bar_areas.get(area_key)
@@ -1849,7 +1911,7 @@ class Api:
             self.capture_id += 1
             time.sleep(self.scan_delay)
 
-    def _pixel_search(self, frame, hex, tolerance, mode=0):
+    def pixel_search(self, frame, hex, tolerance, mode=0):
         """
         Searches for the first or last pixel based on mode.
         Mode 0: First pixel; Mode 1: Last pixel
@@ -1939,6 +2001,58 @@ class Api:
         except Exception as e:
             self.set_status(f"    Error in circle detection: {e}")
             return None, None
+
+    def auto_crop_template(self, template, lower_white=200):
+        """
+        Crop padding from template using the same thresholding logic
+        as your image_search function
+        """
+        # 1. Convert to grayscale
+        if len(template.shape) == 3:
+            gray_temp = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        else:
+            gray_temp = template
+        
+        # 2. Threshold to find ONLY white/bright pixels (same as image_search)
+        _, thresh_temp = cv2.threshold(gray_temp, lower_white, 255, cv2.THRESH_BINARY)
+        
+        # 3. Find all white pixels (the actual totem content)
+        coords = cv2.findNonZero(thresh_temp)
+        
+        # If no white pixels found, return original
+        if coords is None:
+            return template
+        
+        # 4. Get bounding box of white pixels
+        x, y, w, h = cv2.boundingRect(coords)
+        
+        # 5. Crop the ORIGINAL template (not the thresholded version)
+        #    to preserve color/quality
+        cropped = template[y:y+h, x:x+w]
+        
+        return cropped
+
+    def image_search(self, screenshot, template, lower_white=200, threshold=0.8):
+        # 1. Resize screenshot (assuming template is already resized)
+        screenshot_cropped = self.auto_crop_template(screenshot)
+        template_height, template_width, _ = template.shape # template_height
+        screenshot_resized = cv2.resize(screenshot_cropped, (template_width, template_height))
+        
+        # 2. Convert screenshot & template to grayscale
+        gray_screen = cv2.cvtColor(screenshot_resized, cv2.COLOR_BGR2GRAY)
+        gray_temp = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        
+        # 3. Threshold both images so ONLY white/bright pixels remain (255) and rest is black (0)
+        _, thresh_screen = cv2.threshold(gray_screen, lower_white, 255, cv2.THRESH_BINARY)
+        _, thresh_temp = cv2.threshold(gray_temp, lower_white, 255, cv2.THRESH_BINARY)
+        
+        # 4. Perform template matching on binary masks
+        result = cv2.matchTemplate(thresh_screen, thresh_temp, cv2.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        
+        if max_val >= threshold:
+            return True, max_loc, max_val
+        return False, None, max_val
 
     def _calculate_speed_and_predict(self, white_positions, timestamps):
         """
@@ -2079,30 +2193,78 @@ class Api:
             self.set_status(f"Error writing debug log: {e}")
 
     def start_fishing(self):
-        # Initialization
+        # 1. Core Config & Modes
         scale = self._get_scale_factor()
         self.macro_running = True
+        
         casting_mode = self.vars["casting_mode"].lower()
         shake_mode = self.vars["shake_mode"].lower()
-        # Restart
-        auto_refresh = self.vars["auto_refresh"]
-        select_rod_duration = float(self.vars["select_rod_duration"])
+        logging_mode = self.vars["logging_mode"].lower()
+        click_after_minigame = self.vars["click_after_minigame"].lower()
+        target_time = self.vars["target_time"].lower()
+        
+        # 2. Hotkey & Inventory Slots
         bag_slot = str(self.vars["bag_slot"])
         rod_slot = str(self.vars["rod_slot"])
-        # Misc
+        sundial_slot = str(self.vars["sundial_slot"])
+        target_slot = str(self.vars["target_slot"])
+        
+        # 3. Delays & Timings
+        select_rod_duration = float(self.vars["select_rod_duration"])
+        delay_before_casting = float(self._get_var_number("delay_before_casting", 0.5, float))
+        delay_after_casting = float(self._get_var_number("cast_delay", 1.0, float))
+        sundial_delay = float(self.vars["sundial_delay"])
+        totem_delay = float(self.vars["totem_delay"])
+        
+        # 4. Screen Regions & Coordinates
+        shake_left, shake_top, shake_right, shake_bottom, shake_w, shake_h = self.get_areas("shake")
+        fish_left, fish_top, fish_right, fish_bottom, _, fish_height = self.get_areas("fish")
+        friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self.get_areas("friend")
+        totem_left, totem_top, totem_right, totem_bottom, _, _ = self.get_areas("totem")
+        
+        shake_x = shake_left + (shake_w // 2)
+        shake_y = shake_top + (shake_h // 2)
+        
+        # 5. Features & Overlay Settings
         shake_failsafe = int(self.vars["shake_failsafe"])
         friend_color = self.vars["friends_color"]
         friend_tolerance = int(self.vars["friends_tolerance"])
-        friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self._get_areas("friend")
-        delay_before_casting = float(self._get_var_number("delay_before_casting", 0.5, float))
-        delay_after_casting = float(self._get_var_number("cast_delay", 1, float))
-        logging_mode = self.vars["logging_mode"].lower()
+        auto_refresh = self.vars["auto_refresh"]
+        auto_totem = self.vars["auto_totem"]
+        fish_overlay = self.vars["fish_overlay"]
+        
+        # 6. Optimized OpenCV Template Matching Setup
+        sun = cv2.imread(os.path.join(IMAGES_PATH, "sun.png"))
+        moon = cv2.imread(os.path.join(IMAGES_PATH, "moon.png"))
+        sun_resized = self.auto_crop_template(sun)
+        moon_resized = self.auto_crop_template(moon)
+        
+        # 7. Internal Tracking State
         self.scan_delay = 0.1
         self.current_cycle = 0
-        # Successful catch: 0 = success (fish stayed in bar the whole time); 1 = failed (fish left the bar)
-        self.catch_success = 2  # N/A until first minigame
+        current_time = None
+        
+        # Catch Metrics (0 = success, 1 = failed, 2 = N/A initial state)
+        self.catch_success = 2
         self.catch_rate = 0.0
         successful_catches = 0
+        if fish_overlay == "on":
+            # Position the overlay just above or below the fish bar so it does
+            # not cover the actual minigame.  show() expects (left, top, width,
+            # height) in physical pixels — NOT right/bottom.
+            fish_center = int((fish_top + fish_bottom) / 2)
+            if fish_center > HALF_HEIGHT:
+                fish_top_overlay = fish_top - fish_height - fish_height
+            else:
+                fish_top_overlay = fish_top + fish_height + fish_height
+            overlay_width = fish_right - fish_left
+            overlay_height = fish_height
+            self.fish_overlay.show(
+                fish_left,
+                fish_top_overlay,
+                overlay_width,
+                overlay_height,
+            )
         # Main Loop (With bug reports)
         try:
             while self.macro_running:
@@ -2115,6 +2277,33 @@ class Api:
                     self._send_key(rod_slot)
                     time.sleep(delay_after_casting / 2)
                 self.set_status("Using Utilities")
+                # Auto Totem
+                if auto_totem == "on":
+                    self.set_status("Auto Totem")
+                    if not target_time == "disabled":
+                        totem = self.capture_frame[totem_top:totem_bottom, totem_left:totem_right]
+                        sun_found, _, sun_confidence = self.image_search(totem, sun_resized)
+                        moon_found, _, moon_confidence = self.image_search(totem, moon_resized)
+                        if sun_found == False and moon_found == False:
+                            current_time = None
+                            self.send_logging("**Sundial Failed**", f"Cycle #{self.current_cycle}", "N/A")
+                        elif sun_found == True:
+                            current_time = "Day"
+                        elif moon_found == True:
+                            current_time = "Night"
+                        else:
+                            if sun_confidence > moon_confidence:
+                                current_time = "Day"
+                            else:
+                                current_time = "Night"
+                        if not target_time == current_time:
+                            self._send_key(sundial_slot)
+                            self.interruptible_sleep(sundial_delay)
+                            self.send_logging("**Sundial Success**", f"Cycle #{self.current_cycle}", "N/A")
+                    self._send_key(target_slot)
+                    self.interruptible_sleep(totem_delay)
+                    self._send_key(rod_slot)
+                    time.sleep(delay_after_casting / 4)
                 self.current_cycle = self.current_cycle + 1
                 # Cast
                 self.set_status("Casting")
@@ -2132,18 +2321,25 @@ class Api:
                         attempts = attempts - 1
                         continue
                     friend_img = self.capture_frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
-                    friend_x, friend_y = self._pixel_search(friend_img, friend_color, friend_tolerance)
+                    friend_x, friend_y = self.pixel_search(friend_img, friend_color, friend_tolerance)
                     if friend_x is None or friend_y is None:
                         break
 
-                    if shake_mode == "navigation":
-                        self._send_key("enter")
+                    if self.macro_running == False:
+                        break
+                    elif shake_mode == "navigation":
+                        keyboard_controller.press(Key.enter)
+                        time.sleep(0.01)
+                        keyboard_controller.release(Key.enter)
                     else:
                         self._execute_shake_click(shake_mode)
                     time.sleep(self.scan_delay)
                 # Minigame — sets self.catch_success = 0 at start; flips to 1 if fish ever leaves the bar
                 self.set_status("Playing Bar Minigame")
                 self._enter_minigame()
+                if click_after_minigame == "on":
+                    time.sleep(select_rod_duration)
+                    self._click_at(shake_x, shake_y)
                 # Update catch rate after the minigame finishes
                 if self.catch_success == 0:
                     successful_catches += 1
@@ -2190,17 +2386,16 @@ class Api:
         """
         # Hold Mouse
         self.hold_mouse(False)
-        # Get Areas (Scale Factor Applied Inside _Get_Areas)
-        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, shake_height = self._get_areas("shake")
+        # Get Areas (Scale Factor and Ratio Calculations Applied Inside get_areas)
+        shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self.get_areas("shake")
         self._fish_overlay_cast_bounds = None
-        self._set_fish_overlay_mode("casting")
         # Config 
-        white_color = self.vars.get("white_cast_color", self.vars.get("perfect_color2", "#d4d3ca"))
-        green_color = self.vars.get("green_cast_color", self.vars.get("perfect_color", "#64a04c"))
+        white_color = self.vars["white_cast_color"]
+        green_color = self.vars["green_cast_color"]
         white_tol = int(self._get_var_number("perfect_cast2_tolerance", 5, int))
         green_tol = int(self._get_var_number("perfect_cast_tolerance", 16, int))
         max_time = float(self._get_var_number("perfect_max_time", 5.5, float))
-        self.scan_delay = float(self._get_var_number("cast_scan_delay", 0.05, float))
+        self.scan_delay = float(self.vars["cast_scan_delay"])
         target_green = np.array(self._hex_to_bgr(green_color), dtype=np.int32)
         target_white = np.array(self._hex_to_bgr(white_color), dtype=np.int32)
         # Resolution scaling: velocity bands are tuned at 1440p height
@@ -2216,8 +2411,8 @@ class Api:
         MAX_VELOCITY_SAMPLES = 5
         last_time_to_impact = None
         if sys.platform == "darwin":
-            white_tol += 15
-            green_tol += 15
+            white_tol += 5
+            green_tol += 5
         def color_mask(img, target_bgr, tolerance):
             img_i = img.astype(np.int32)
             diff = img_i - target_bgr
@@ -2237,7 +2432,7 @@ class Api:
         start_time = time.time()
         # Perfect Cast Loop
         while self.macro_running:
-            region = self.capture_frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
+            region = self.capture_frame[shake_top:shake_bottom, shake_left:shake_right]
             if region.size == 0:
                 if time.time() - start_time > max_time:
                     break
@@ -2307,27 +2502,12 @@ class Api:
             if total_distance <= 0:
                 continue
 
-            cast_left = shake_left_s + green_left_x
-            cast_top = shake_top_s + green_y
-            cast_right = shake_left_s + green_right_x
-            cast_bottom = shake_top_s + white_y_bottom
-            if self._fish_overlay_cast_bounds != (cast_left, cast_top, cast_right, cast_bottom):
-                self._fish_overlay_cast_bounds = (cast_left, cast_top, cast_right, cast_bottom)
-                self._apply_fish_overlay_state()
-            if self._is_fish_overlay_enabled():
-                cast_height = max(1, white_y_bottom - green_y)
-                white_ratio = max(0.0, min(1.0, current_distance / cast_height))
-                draw_x = self.fish_overlay.width / 2
-                bar_height = 0.08
-                self.fish_overlay.draw(
-                    bar_center=draw_x, box_size=15, color="green", canvas_offset=0,
-                    bar_y1=0.0, bar_y2=min(1.0, bar_height / 2)
-                )
-                self.fish_overlay.draw(
-                    bar_center=draw_x, box_size=30, color="white", canvas_offset=0,
-                    bar_y1=max(0.0, white_ratio - bar_height / 2),
-                    bar_y2=min(1.0, white_ratio + bar_height / 2)
-                )
+            cast_left = shake_left + green_left_x
+            cast_top = shake_top + green_y
+            cast_right = shake_left + green_right_x
+            cast_bottom = shake_top + white_y_bottom
+
+            self.fish_overlay.resize(cast_left, cast_top, cast_right, cast_bottom)
             # --- Velocity tracking ---
             now_pc = time.perf_counter()
             white_positions.append((0, white_y_top))   # x is irrelevant; track Y only
@@ -2419,7 +2599,6 @@ class Api:
         # Cleanup
         self.release_mouse(False)
         self._fish_overlay_cast_bounds = None
-        self._set_fish_overlay_mode("idle")
         return
 
     def _execute_cast_normal(self):
@@ -2431,17 +2610,17 @@ class Api:
 
     def _execute_shake_click(self, shake_mode):
         scale = self._get_scale_factor()
-        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, _ = self._get_areas("shake")
+        shake_left, shake_top, shake_right, shake_bottom, _, _ = self.get_areas("shake")
         shake_color = self.vars["shake_color"]
         shake_tolerance = self.vars["shake_tolerance"]
-        shake_img = self.capture_frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
+        shake_img = self.capture_frame[shake_top:shake_bottom, shake_left:shake_right]
         if shake_mode == "pixel":
-            shake_x, shake_y = self._pixel_search(shake_img, shake_color, shake_tolerance)
+            shake_x, shake_y = self.pixel_search(shake_img, shake_color, shake_tolerance)
         else:
             shake_x, shake_y = self._find_circles(shake_img)
         try:
-            shake_x_screen = int((shake_x / scale) + shake_left_s)
-            shake_y_screen = int((shake_y / scale) + shake_top_s)
+            shake_x_screen = int((shake_x / scale) + shake_left)
+            shake_y_screen = int((shake_y / scale) + shake_top)
         except:
             shake_x_screen = None
             shake_y_screen = None
@@ -2463,9 +2642,29 @@ class Api:
                 self.release_mouse(mouse_state)
                 mouse_down = False
         # Areas
-        shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self._get_areas("shake")
-        fish_left, fish_top, fish_right, fish_bottom, fish_width, _ = self._get_areas("fish")
-        friend_left, friend_top, friend_right, friend_bottom, _, _ = self._get_areas("friend")
+        shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self.get_areas("shake")
+        fish_left, fish_top, fish_right, fish_bottom, fish_width, fish_height = self.get_areas("fish")
+        friend_left, friend_top, friend_right, friend_bottom, _, _ = self.get_areas("friend")
+        # Area Calculations
+        note_height = fish_bottom - shake_top
+        fish_overlay = self.vars["fish_overlay"]
+        if fish_overlay == "on":
+            # Position the overlay just above or below the fish bar so it does
+            # not cover the actual minigame.  show() expects (left, top, width,
+            # height) in physical pixels — NOT right/bottom.
+            fish_center = int((fish_top + fish_bottom) / 2)
+            if fish_center > HALF_HEIGHT:
+                fish_top_overlay = fish_top - fish_height - fish_height
+            else:
+                fish_top_overlay = fish_top + fish_height + fish_height
+            overlay_width = fish_right - fish_left
+            overlay_height = fish_height
+            self.fish_overlay.show(
+                fish_left,
+                fish_top_overlay,
+                overlay_width,
+                overlay_height,
+            )
         # Colors
         left_color = self.vars["left_color"]
         right_color = self.vars["right_color"]
@@ -2502,8 +2701,10 @@ class Api:
         pinion_note_ratio = float(self.vars["pinion_note_ratio"])
         # Last values (failsafe)
         is_initial_run = True
+        last_arrow_x = False
         bar_size = 0
         bar_center = 0
+        error = 0
         last_capture_id = 0
         last_fish_x = 0
         last_left_x = 0
@@ -2529,48 +2730,65 @@ class Api:
                 fish_img = self.capture_frame[fish_top:fish_bottom, fish_left:fish_right]
                 friend_img = self.capture_frame[friend_top:friend_bottom, friend_left:friend_right]
             # Friend detection
-            friend_x, friend_y = self._pixel_search(friend_img, friends_color, friends_tolerance)
+            friend_x, friend_y = self.pixel_search(friend_img, friends_color, friends_tolerance)
             if friend_x is not None and friend_y is not None:
                 time.sleep(restart_delay)
                 break
 
             # Fish detection
-            fish_x, fish_y = self._pixel_search(fish_img, fish_color, fish_tolerance)
+            fish_x, fish_y = self.pixel_search(fish_img, fish_color, fish_tolerance)
             if fish_x is not None:
                 fish_detected = True
             else:
                 fish_detected = False
             # Bar detection
-            left_x, left_y = self._pixel_search(fish_img, left_color, left_tolerance)
-            right_x, right_y = self._pixel_search(fish_img, right_color, right_tolerance, 1)
+            left_x, left_y = self.pixel_search(fish_img, left_color, left_tolerance)
+            right_x, right_y = self.pixel_search(fish_img, right_color, right_tolerance, 1)
             if left_x == None:
-                left_x, left_y = self._pixel_search(fish_img, right_color, right_tolerance)
+                left_x, left_y = self.pixel_search(fish_img, right_color, right_tolerance)
             if right_x == None:
-                right_x, right_y = self._pixel_search(fish_img, left_color, left_tolerance, 1)
+                right_x, right_y = self.pixel_search(fish_img, left_color, left_tolerance, 1)
             # print(f"Raw coordinates: {left_x}, {right_x}, {fish_x}")
             # Check if we should scan for arrows
             if left_x is not None and right_x is not None:
                 bar_detected = True
                 bar_center = int((left_x + right_x) / 2)
                 bar_size = right_x - left_x
+                # print(f"Detection Source: Bar | Left: {left_x} | Right: {right_x}")
             else:
                 # Try arrow
                 bar_detected = False
                 # Bars not found - scan for arrows
-                arrow_x, arrow_y = self._pixel_search(fish_img, arrow_color, arrow_tolerance)
+                arrow_x, arrow_y = self.pixel_search(fish_img, arrow_color, arrow_tolerance)
                 if arrow_x is not None:
                     bar_detected = True
-                    # Detect bar based on arrow
-                    if mouse_down == True:
+                    try:
+                        arrow_direction = arrow_x - last_arrow_x
+                    except:
+                        arrow_direction = -1
+                    # Detect bar based on arrow (use previous bar ends as reference)
+                    if arrow_direction > 0:
+                        left_x = last_left_x
                         right_x = arrow_x
-                        left_x = arrow_x - last_bar_size
                     else:
                         left_x = arrow_x
-                        right_x = arrow_x + last_bar_size
+                        right_x = last_right_x
+                    bar_center = int((left_x + right_x) / 2)
+                    bar_size = right_x - left_x
+                    try:
+                        last_half_bar_size = int(last_bar_size / 2)
+                    except:
+                        last_half_bar_size = int(bar_size / 2)
+                    if bar_size < last_half_bar_size:
+                        bar_size = last_bar_size
+                        right_x = left_x + bar_size
+                        bar_center = int((left_x + right_x) / 2)
+                    # print(f"Detection Source: Arrows | Left: {left_x} | Right: {right_x} | Arrow: {arrow_x}")
                 else:
                     # Use Cache
                     bar_detected = False
             # Restore from Cache
+            self.fish_overlay.clear()
             if bar_detected == False:
                 left_x = last_left_x
                 right_x = last_right_x
@@ -2579,18 +2797,30 @@ class Api:
             if fish_detected == False:
                 fish_x = last_fish_x
             # Note Detection
+            overlay_fish_color = "red"
             if fishing_profile == "notes":
-                note_x, note_y = self._pixel_search(shake_img, tracking_color, tracking_tolerance)
+                note_x, note_y = self.pixel_search(shake_img, tracking_color, tracking_tolerance)
                 if note_x is not None and note_y is not None:
-                    note_y_ratio = float(note_y / shake_height)
+                    note_y_ratio = float(note_y / note_height)
                     if note_y_ratio > pinion_note_ratio:
                         fish_x = note_x
+                        overlay_fish_color = "orange"
+                else:
+                    note_y_ratio = 0.0
+                # print("Note Ratio: ", note_y_ratio, " Pinion Ratio: ", pinion_note_ratio)
+                # print("Fish: ", fish_x, " Note: ", note_x)
             else:
+                # print("Note Tracking Disabled")
                 note_y_ratio = 0.0
-            # Catch fails if the fish ever leaves the bar; stays success only if fish stays inside the whole time
-            if left_x is not None and right_x is not None and fish_x is not None:
-                if not (left_x <= fish_x <= right_x):
+            if fishing_profile == "notes":
+                # Catch fails if the note ratio becomes 1 and the bar can't catch it; stays success only if note ratio is less than 0.9
+                if note_y_ratio > 0.9:
                     self.catch_success = 1
+            else:
+                # Catch fails if the fish ever leaves the bar; stays success only if fish stays inside the whole time
+                if left_x is not None and right_x is not None and fish_x is not None:
+                    if not (left_x <= fish_x <= right_x):
+                        self.catch_success = 1
             # Edge Boundary
             if bar_size is not None:
                 boundary = bar_size * bar_ratio_from_side
@@ -2601,6 +2831,32 @@ class Api:
                 right_boundary = fish_width
             # print("Boundary: ", left_boundary, right_boundary, " Fish: ", fish_x)
             # print("Last Cache: ", bar_center - last_bar_center)
+            # Fish Overlay
+            if fish_overlay == "on":
+                self.fish_overlay.draw(
+                    bar_center=bar_center, box_size=bar_size,
+                    color="green", canvas_offset=0,
+                    show_bar_center=True
+                )
+                if left_boundary is not None:
+                    self.fish_overlay.draw(
+                        bar_center=left_boundary, box_size=15,
+                        color="lightblue", canvas_offset=0
+                    )
+                if right_boundary is not None:
+                    self.fish_overlay.draw(
+                        bar_center=right_boundary, box_size=15,
+                        color="lightblue", canvas_offset=0
+                    )
+                if fish_x is not None:
+                    self.fish_overlay.draw(
+                        bar_center=fish_x, box_size=10,
+                        color=overlay_fish_color, canvas_offset=0
+                    )
+            # Controller Mode Selection
+            current_controller_mode = controller_mode
+            if (left_x <= fish_x <= right_x) and controller_mode == "predictive":
+                current_controller_mode = "normal"
             # PD controller
             current_time = time.perf_counter()
             time_delta = current_time - last_time
@@ -2611,7 +2867,7 @@ class Api:
             elif (fish_x > right_boundary):
                 control_signal = 30
             else:
-                if controller_mode == "normal":
+                if current_controller_mode == "normal":
                     # Normal: Traditional PD controller
                     if is_initial_run == True:
                         control_signal = 0
@@ -2623,7 +2879,7 @@ class Api:
                         d_term = ((error - last_error) / time_delta) * kd
                         control_signal = p_term + d_term
                         last_error = error
-                elif controller_mode == "steady":
+                elif current_controller_mode == "steady":
                     # Steady: Asymmetric PD controller with asymmetric damping
                     if is_initial_run == True:
                         control_signal = 0
@@ -2638,16 +2894,16 @@ class Api:
                             (bar_velocity > 0 and error > 0)
                             or (bar_velocity < 0 and error < 0)
                         )
-                        if error_magnitude_decreasing and bar_moving_toward_target:
+                        if note_y_ratio > pinion_note_ratio:
+                            steady_kd_multiplier = 0.5
+                        elif error_magnitude_decreasing and bar_moving_toward_target:
                             steady_kd_multiplier = 5.0
-                        elif note_y_ratio > pinion_note_ratio:
-                            steady_kd_multiplier = 1.0
                         else:
                             steady_kd_multiplier = 0.2
-                        d_term = (bar_velocity / time_delta) * kd * steady_kd_multiplier
+                        d_term = ((error - last_error) / time_delta) * kd * steady_kd_multiplier
                         control_signal = p_term + d_term
                         last_error = error
-                elif controller_mode == "predictive":
+                elif current_controller_mode == "predictive":
                     # Predictive: Predictive controller with linear stopping distance and counter-thrust
                     # Init Failsafe
                     if last_time == None:
@@ -2701,7 +2957,12 @@ class Api:
                             control_signal = 30
             # Mouse state
             # print(f"Control Signal: {control_signal}")
-            if control_signal > 0:
+            if abs(error < 3):
+                if self.capture_id % 2 == 0:
+                    hold_mouse()
+                else:
+                    release_mouse()
+            elif control_signal > 0:
                 hold_mouse()
             else:
                 release_mouse()
@@ -2713,6 +2974,10 @@ class Api:
                 last_bar_size = bar_size
             if fish_detected == True:
                 last_fish_x = fish_x
+            try:
+                last_arrow_x = arrow_x
+            except:
+                pass
             # Cleanup
             is_initial_run = False
             last_capture_id = self.capture_id
@@ -2721,6 +2986,7 @@ class Api:
 
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False
+        self.fish_overlay.hide()
 
         if (
             self.macro_thread

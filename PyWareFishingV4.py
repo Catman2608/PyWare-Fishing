@@ -3934,7 +3934,7 @@ class Api:
         target_slot  = str(self.vars["target_slot"])
         rod_slot  = str(self.vars["rod_slot"])
         sundial_delay  = int(self.vars["sundial_delay"])
-        desired_time = self.vars["use_sundial_mode_when"].lower()  # "day", "night", Or Maybe "disabled"
+        desired_time = self.vars["target_time"].lower()  # "day", "night", Or Maybe "disabled"
         totem_success = False
         confidence_threshold = 0.6
         # Detect Day / Night
@@ -3973,20 +3973,20 @@ class Api:
         mirror_ratio = float(self.vars["mirror_ratio"])
         mirror_ratio2 = float(self.vars["mirror_ratio2"])
         mirror_slot = str(self.vars["mirror_slot"])
-        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, shake_width, shake_height = self._get_areas("shake")
-        mirror_click_x = int(shake_width * mirror_ratio) + shake_left_s
+        shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self._get_areas("shake")
+        mirror_click_x = int(shake_width * mirror_ratio) + shake_left
         # 0.59
-        mirror_click_y = int(shake_height * mirror_ratio2) + shake_top_s
+        mirror_click_y = int(shake_height * mirror_ratio2) + shake_top
         # 1520
         reconnect_threshold = int((reconnect_threshold / 1500) * shake_width)
-        img = self._grab_screen_region(shake_left_s, shake_top_s, shake_right_s, shake_bottom_s)
+        img = self._grab_screen_region(shake_left, shake_top, shake_right, shake_bottom)
         disconnect_area, _, _ = self._find_color_cluster(img, "#393b3d", 5, reconnect_threshold)
         while self.macro_running:
             if not disconnect_area == None:
                 reconnect, _, _ = self._find_color_cluster(img, "#FFFFFF", 8, int(reconnect_threshold / 2))
                 time.sleep(1)
-                reconnect_x = reconnect[0] + shake_left_s if not reconnect == None else shake_left_s
-                reconnect_y = reconnect[1] + shake_top_s if not reconnect == None else shake_top_s
+                reconnect_x = reconnect[0] + shake_left if not reconnect == None else shake_left
+                reconnect_y = reconnect[1] + shake_top if not reconnect == None else shake_top
                 self._click_at(reconnect_x, reconnect_y)
                 time.sleep(reconnect_wait_time)
                 self._click_at(center_x, center_y)
@@ -4008,7 +4008,7 @@ class Api:
         # Hold Mouse
         self.hold_mouse(False)
         # Get Areas (Scale Factor Applied Inside _Get_Areas)
-        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, shake_height = self._get_areas("shake")
+        shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self._get_areas("shake")
         self._fish_overlay_cast_bounds = None
         self._set_fish_overlay_mode("casting")
         # Config 
@@ -4076,7 +4076,7 @@ class Api:
                     stop_event.set()
                     return
 
-            region = frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
+            region = frame[shake_top:shake_bottom, shake_left:shake_right]
             if region.size == 0:
                 if time.time() - start_time > max_time:
                     break
@@ -4148,10 +4148,10 @@ class Api:
             if total_distance <= 0:
                 continue
 
-            cast_left = shake_left_s + green_left_x
-            cast_top = shake_top_s + green_y
-            cast_right = shake_left_s + green_right_x
-            cast_bottom = shake_top_s + white_y_bottom
+            cast_left = shake_left + green_left_x
+            cast_top = shake_top + green_y
+            cast_right = shake_left + green_right_x
+            cast_bottom = shake_top + white_y_bottom
             if self._fish_overlay_cast_bounds != (cast_left, cast_top, cast_right, cast_bottom):
                 self._fish_overlay_cast_bounds = (cast_left, cast_top, cast_right, cast_bottom)
                 self._apply_fish_overlay_state()
@@ -4282,7 +4282,7 @@ class Api:
         THEN click on the circle
         """
         # Get areas (scale factor applied inside _get_areas)
-        shake_left_s, shake_top_s, shake_right_s, shake_bottom_s, _, _ = self._get_areas("shake")
+        shake_left, shake_top, shake_right, shake_bottom, _, _ = self._get_areas("shake")
         friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self._get_areas("friend")
         scale = get_scale_factor()
         # Misc variables
@@ -4321,7 +4321,7 @@ class Api:
                     stop_event.set()
                     return
 
-            shake_area = frame[shake_top_s:shake_bottom_s, shake_left_s:shake_right_s]
+            shake_area = frame[shake_top:shake_bottom, shake_left:shake_right]
             if shake_area is None or shake_area.size == 0:
                 time.sleep(scan_delay)
                 continue
@@ -4335,8 +4335,8 @@ class Api:
                 attempts += 1
             if shake_pixel:
                 x, y = shake_pixel
-                screen_x = int((shake_left_s + x) / scale)
-                screen_y = int((shake_top_s + y) / scale)
+                screen_x = int((shake_left + x) / scale)
+                screen_y = int((shake_top + y) / scale)
                 self._click_at(screen_x, screen_y, shake_clicks)
             # Step 2. Fish Detection
             detected = False

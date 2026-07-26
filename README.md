@@ -49,51 +49,16 @@ Expected output: `Python 3.8+`
 
 ---
 
-## 3️⃣ Create Virtual Environment (Recommended)
+## 3️⃣ Install Required Modules
 
-Never install packages directly into the system Python!
-
-```bash
-# Navigate to your project folder
-cd /path/to/your/project
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate it
-# Windows:
-.venv\Scripts\activate
-
-# macOS/Linux:
-source .venv/bin/activate
-```
-
-Verify activation by checking that the prompt shows `(venv)` before your project folder name.
-
----
-
-## 4️⃣ Install Required Modules
-
-### Method A: Using requirements.txt (Best Practice)
-
-If you have a `requirements.txt` file, simply run:
-```bash
-pip install -r requirements.txt
-```
-
-### Method B: Installing Individual Packages
-
-If building from scratch, install the dependencies manually:
+Run this command in order to download the required libraries:
 
 ```bash
-# Core packages
 pip install webview numpy mss pytesseract pynput requests opencv-python
-
-# macOS specific (for screen capture on Apple Silicon/M1):
-pip install opencv-python-headless  # Better compatibility for macOS
-
-# Alternative (if above fails with M1/Apple Silicon):
-pip install opencv-contrib-python-headless
+```
+If the command above fails, try using pip3 instead:
+```bash
+pip3 install webview numpy mss pytesseract pynput requests opencv-python
 ```
 
 ### Complete Package List Reference
@@ -104,15 +69,12 @@ pip install opencv-contrib-python-headless
 | `mss` | `pip install mss` | Screenshot capture (multi-screen support) |
 | `pytesseract` | `pip install pytesseract` | OCR engine wrapper for Tesseract |
 | `pynput` | `pip install pynput` | Keyboard/mouse automation & listening |
-| `requests` | `pip install requests` | HTTP/HTTPS API calls |
+| `requests` | `pip install requests` | Discord API calls |
 | `opencv-python` or `opencv-python-headless` | `pip install opencv-python` | Image processing (cv2) |
 
 ---
 
-## 5️⃣ Platform-Specific Setup
-
-### 🍎 macOS — Tesseract OCR Installation
-
+## 4️⃣ Install Tesseract (Recommended)
 Tesseract is not included with Python. Install it first:
 
 ```bash
@@ -131,7 +93,7 @@ Then in your code, the path is already configured to:
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 ```
 
-> **Note for Apple Silicon (M1/M2/M3)**: If you encounter issues with OpenCV on Mac, prefer `opencv-python-headless` or use Rosetta translation.
+## 5️⃣ Platform-Specific Setup
 
 ### 🐧 Linux — Experimental Support
 
@@ -144,6 +106,7 @@ Additional requirements may be needed:
 ```bash
 sudo apt update
 sudo apt install python3 python3-venv python3-tk tesseract-ocr
+```
 
 ### 🪟 Windows — Additional Requirements
 - Ensure Administrator privileges when running the script if it needs to capture system-level input/output

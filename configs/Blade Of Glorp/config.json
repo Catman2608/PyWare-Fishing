@@ -86,7 +86,7 @@
     "logging_cycle": "1",
     "logging_time": "60",
     "auto_totem_mode": "Time",
-    "use_sundial_mode_when": "Night",
+    "target_time": "Night",
     "totem_cycles": "900",
     "totem_delay": "1",
     "sundial_delay": "15",
