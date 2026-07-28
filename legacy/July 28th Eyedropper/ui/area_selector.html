@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; user-select: none; background: transparent; }
+    canvas { display: block; width: 100%; height: 100%; cursor: default; }
+</style>
+</head>
+<body>
+<canvas id="overlay"></canvas>
+<script>
+const canvas = document.getElementById("overlay");
+const ctx = canvas.getContext("2d");
+const names = ["shake", "fish", "friend", "totem"];
+const styles = {
+    shake:  ["#ff007a", "Shake Box"],
+    fish:   ["#00daff", "Fish Box"],
+    friend: ["#f7ff00", "Friend Box"],
+    totem:  ["#9cff94", "Totem Box"]
+};
+const HANDLE = 8;
+const MIN_SIZE = 20;
+let boxes = {};
+let drag = null;
+let lastIpc = 0;
+
+function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+}
+
+function draw() {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    ctx.fillStyle = "rgba(29, 29, 29, 0.85)";
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    for (const name of names) {
+        const b = boxes[name];
+        if (!b) continue;
+        const [color, label] = styles[name];
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = color;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(b.x + 1.5, b.y + 1.5, Math.max(0, b.w - 3), Math.max(0, b.h - 3));
+        ctx.font = "bold 13px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillStyle = color;
+        ctx.fillText(label, b.x + b.w / 2, b.y - 5);
+        const points = [[b.x,b.y], [b.x+b.w/2,b.y], [b.x+b.w,b.y],
+                        [b.x,b.y+b.h/2], [b.x+b.w,b.y+b.h/2],
+                        [b.x,b.y+b.h], [b.x+b.w/2,b.y+b.h], [b.x+b.w,b.y+b.h]];
+        ctx.fillStyle = "white";
+        ctx.strokeStyle = "rgba(0,0,0,.6)";
+        ctx.lineWidth = 1;
+        for (const [x, y] of points) ctx.fillRect(x - HANDLE/2, y - HANDLE/2, HANDLE, HANDLE);
+    }
+}
+
+function handleAt(x, y, b) {
+    const points = { nw:[b.x,b.y], n:[b.x+b.w/2,b.y], ne:[b.x+b.w,b.y],
+        w:[b.x,b.y+b.h/2], e:[b.x+b.w,b.y+b.h/2], sw:[b.x,b.y+b.h],
+        s:[b.x+b.w/2,b.y+b.h], se:[b.x+b.w,b.y+b.h] };
+    for (const [name, [hx, hy]] of Object.entries(points))
+        if (Math.abs(x-hx) <= HANDLE + 3 && Math.abs(y-hy) <= HANDLE + 3) return name;
+    return null;
+}
+
+function boxAt(x, y) {
+    for (let i = names.length - 1; i >= 0; i--) {
+        const b = boxes[names[i]];
+        if (b && x >= b.x && x <= b.x+b.w && y >= b.y && y <= b.y+b.h) return names[i];
+    }
+    return null;
+}
+
+function cursorFor(handle) {
+    return {nw:"nw-resize", n:"n-resize", ne:"ne-resize", w:"w-resize", e:"e-resize",
+            sw:"sw-resize", s:"s-resize", se:"se-resize"}[handle] || "default";
+}
+
+function sendUpdate(x, y) {
+    const now = Date.now();
+    if (now - lastIpc < 40) return;
+    lastIpc = now;
+    if (window.pywebview && pywebview.api && pywebview.api.on_mouse_move)
+        pywebview.api.on_mouse_move(x, y, JSON.parse(JSON.stringify(boxes)));
+}
+
+canvas.addEventListener("mousemove", e => {
+    const x = e.clientX, y = e.clientY;
+    if (drag) {
+        const b = boxes[drag.name], o = drag.original;
+        const dx = x - drag.x, dy = y - drag.y, h = drag.handle;
+        if (h === "move") { b.x = o.x + dx; b.y = o.y + dy; }
+        else {
+            if (h.includes("w")) { b.x = o.x + dx; b.w = o.w - dx; }
+            if (h.includes("e")) b.w = o.w + dx;
+            if (h.includes("n")) { b.y = o.y + dy; b.h = o.h - dy; }
+            if (h.includes("s")) b.h = o.h + dy;
+            if (b.w < MIN_SIZE) { if (h.includes("w")) b.x = o.x + o.w - MIN_SIZE; b.w = MIN_SIZE; }
+            if (b.h < MIN_SIZE) { if (h.includes("n")) b.y = o.y + o.h - MIN_SIZE; b.h = MIN_SIZE; }
+        }
+        draw();
+        sendUpdate(x, y);
+        return;
+    }
+    const name = boxAt(x, y), b = name && boxes[name], h = b && handleAt(x, y, b);
+    canvas.style.cursor = h ? cursorFor(h) : (name ? "move" : "default");
+    sendUpdate(x, y);
+});
+
+canvas.addEventListener("mousedown", e => {
+    if (e.button !== 0) return;
+    const name = boxAt(e.clientX, e.clientY);
+    if (!name) return;
+    const b = boxes[name];
+    drag = { name, handle: handleAt(e.clientX, e.clientY, b) || "move",
+             x: e.clientX, y: e.clientY, original: {...b} };
+});
+window.addEventListener("mouseup", () => { drag = null; });
+window.addEventListener("blur", () => { drag = null; });
+
+function saveAndClose() {
+    const out = {};
+    for (const name of names) {
+        const b = boxes[name];
+        if (b) out[name] = { x: b.x, y: b.y, width: b.w, height: b.h };
+    }
+    if (window.pywebview && pywebview.api && pywebview.api.save_areas)
+        pywebview.api.save_areas(out);
+}
+
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape" || e.key === "F6") { e.preventDefault(); saveAndClose(); }
+});
+
+// Also persist the latest geometry when the window is closed by the OS.
+window.addEventListener("beforeunload", saveAndClose);
+
+function ready() {
+    if (!(window.pywebview && pywebview.api)) return;
+    if (pywebview.api.window_ready) pywebview.api.window_ready(window.screenX, window.screenY);
+    if (pywebview.api.get_areas) pywebview.api.get_areas().then(data => {
+        boxes = data || {};
+        for (const name of names) if (boxes[name]) {
+            boxes[name].w = boxes[name].width;
+            boxes[name].h = boxes[name].height;
+            delete boxes[name].width; delete boxes[name].height;
+        }
+        draw();
+    });
+}
+
+window.addEventListener("resize", resizeCanvas);
+window.addEventListener("pywebviewready", ready);
+resizeCanvas();
+</script>
+</body>
+</html>

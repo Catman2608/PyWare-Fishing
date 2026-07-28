@@ -12,6 +12,7 @@ import threading
 import subprocess
 import requests
 import io
+import base64
 import time
 import sys
 import webbrowser
@@ -39,7 +40,7 @@ if sys.platform == "win32":
     from ctypes import wintypes
 elif sys.platform == "darwin":
     import Quartz
-    from AppKit import NSScreen
+    import AppKit
 elif sys.platform == "linux":
     from Xlib import X, XK, display as Xdisplay
     from Xlib.ext import xtest
@@ -62,7 +63,7 @@ def get_macos_menu_offset():
         return 0
 
     try:
-        screen = NSScreen.mainScreen()
+        screen = AppKit.NSScreen.mainScreen()
         full_frame = screen.frame()
         visible_frame = screen.visibleFrame()
         return int(full_frame.size.height - visible_frame.size.height)
@@ -202,24 +203,6 @@ if sys.platform == "win32":
 
         return None
 
-    def make_window_translucent(window, transparency):
-        """Make a pywebview Windows window translucent once its HWND exists."""
-        hwnd = None
-        for _ in range(10):
-            hwnd = _get_hwnd(window)
-            if hwnd:
-                break
-
-            time.sleep(0.05)
-        if not hwnd:
-            return False
-
-        current_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, current_style | WS_EX_LAYERED)
-        # Range is 0 (fully transparent) to 255 (fully opaque).
-        opacity_alpha = int(255 * transparency)
-        return bool(user32.SetLayeredWindowAttributes(hwnd, 0, opacity_alpha, LWA_ALPHA))
-
 # macOS (Keyboard, scale factor, mouse button)
 elif sys.platform == "darwin":
     _scale_cache = None
@@ -236,7 +219,7 @@ elif sys.platform == "darwin":
             return _scale_cache
 
         try:
-            _scale_cache = float(NSScreen.mainScreen().backingScaleFactor())
+            _scale_cache = float(AppKit.NSScreen.mainScreen().backingScaleFactor())
         except Exception:
             _scale_cache = 1.0
         return _scale_cache
@@ -322,8 +305,6 @@ elif sys.platform == "darwin":
                 Quartz.kCGHIDEventTap,
                 Quartz.CGEventCreateKeyboardEvent(None, keycode, False)
             )
-    def make_window_translucent(window, transparency):
-        pass
 
 # Linux (Mouse positions and Xdisplay)
 elif sys.platform.startswith("linux"):
@@ -390,8 +371,6 @@ elif sys.platform.startswith("linux"):
         time.sleep(delay)
         xtest.fake_input(d, X.KeyRelease, keycode)
         d.sync()
-    def make_window_translucent(window, transparency):
-        pass
 
 # Config management
 def get_base_path():
@@ -443,265 +422,197 @@ class AreaSelector:
       - receiving live mouse status  (on_mouse_move)
       - receiving final saved areas  (save_areas)
     """
-    def __init__(self, parent, shake_area, fish_area, friend_area, totem_area, callback):
-        self.area_selector_file = os.path.join(UI_PATH, "area_selector.html")
-        if not os.path.isfile(self.area_selector_file):
-            return
+    HTML_FILE = os.path.join(UI_PATH, "area_selector.html")
+    def __init__(self, parent_app):
+        self.parent_app = parent_app
+        self.area_window = None
+        self._open = False
+        self._areas = {}
 
-        self.parent   = parent
-        self.callback = callback
-        self._open    = True
-        # Actual window origin reported by JS after the window is placed.
-        # Defaults to SCREEN_LEFT/TOP; overwritten by window_ready() once JS fires.
-        # This corrects for macOS menu-bar push-down and any other OS chrome offset.
-        self._win_origin_x = SCREEN_LEFT
-        self._win_origin_y = SCREEN_TOP
-        # Store areas as RATIOS (0-1 range) consistently
-        self._areas = {
-            "shake":  self._to_ratios(shake_area),
-            "fish":   self._to_ratios(fish_area),
-            "friend": self._to_ratios(friend_area),
-            "totem":  self._to_ratios(totem_area),
-        }
-        # Create a second, frameless, transparent, fullscreen pywebview window.
-        # js_api=self exposes get_areas / on_mouse_move / save_areas to JS.
-        # NOTE: x/y must be the primary monitor's actual top-left offset (SCREEN_LEFT/TOP).
-        # On single-monitor setups this is always 0,0.  On multi-monitor setups where the
-        # primary display isn't the leftmost one, SCREEN_LEFT/TOP will be non-zero and the
-        # window must be placed there to sit over the correct screen.
+    def show(self):
+        if self._open and self.area_window:
+            return
+        menu_offset = get_macos_menu_offset()
+        self.area_window = webview.create_window(
+            "Area Selector", self.HTML_FILE, js_api=self,
+            transparent=True, frameless=True, easy_drag=False, on_top=True,
+            resizable=False, width=SCREEN_WIDTH, height=SCREEN_HEIGHT - menu_offset,
+            x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000",
+        )
+        self._open = True
+        self.area_window.events.closed += self._on_closed
         if sys.platform == "win32":
-            self._win = webview.create_window("Area Selector", self.area_selector_file, js_api=self, 
-                                              transparent=False, frameless=True, easy_drag=False, 
-                                              on_top=True, resizable=False, width=SCREEN_WIDTH, height=SCREEN_HEIGHT,
-                                               x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000")
             # Maximize on Windows after the window is created
             def maximize_area_selector():
                 try:
-                    hwnd = _get_hwnd(self._win)
+                    hwnd = _get_hwnd(self.area_window)
                     if hwnd:
                         user32.ShowWindow(wintypes.HWND(hwnd), SW_MAXIMIZE)
                 except Exception as e:
-                    print("Failed to maximize area selector:", e)
-            self._win.events.shown += maximize_area_selector
-        else:
-            self._win = webview.create_window("Area Selector", self.area_selector_file, js_api=self, 
-                                            # Window Style 
-                                            transparent=True, frameless=True, easy_drag=False, 
-                                            # Keep Above Everything 
-                                            on_top=True, 
-                                            # Prevent Resizing / Moving 
-                                            resizable=False, 
-                                            # Fullscreen Size — matches the primary monitor exactly 
-                                            width=SCREEN_WIDTH, height=SCREEN_HEIGHT, 
-                                            # Position at the primary monitor's actual origin (handles non-zero offsets) 
-                                            x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000")
-        self._win.events.closed += self._on_closed
-        time.sleep(0.05)
-        make_window_translucent(self._win, 0.35)
+                    self.parent.set_status("Failed to maximize area selector:", e)
+            self.area_window.events.shown += maximize_area_selector
     def _to_ratios(self, area):
-        """Convert any area dict to ratios (0-1 range)"""
-        return {
+        """Accept normalized areas and legacy pixel areas, store normalized values."""
+        if not isinstance(area, dict):
+            return {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+        values = {"x": float(area.get("x", 0)), "y": float(area.get("y", 0)),
+                  "width": float(area.get("width", area.get("w", 0))),
+                  "height": float(area.get("height", area.get("h", 0)))}
+        if any(abs(values[key]) > 1 for key in values):
+            values["x"] /= SCREEN_WIDTH
+            values["y"] /= SCREEN_HEIGHT
+            values["width"] /= SCREEN_WIDTH
+            values["height"] /= SCREEN_HEIGHT
+        return values
 
-            "x": area.get("x", 0),
-            "y": area.get("y", 0),
-            "width": area.get("width", area.get("w", 0)),
-            "height": area.get("height", area.get("h", 0)),
-        }
-    def _ratios_to_pixels(self, ratios, add_offset=True):
-        """Convert ratio dict to pixel coordinates relative to canvas or screen"""
-        x_pixels = ratios["x"] * SCREEN_WIDTH
-        y_pixels = ratios["y"] * SCREEN_HEIGHT
-        w_pixels = ratios["width"] * SCREEN_WIDTH
-        h_pixels = ratios["height"] * SCREEN_HEIGHT
-        if add_offset:
-            x_pixels += self._win_origin_x
-            y_pixels += self._win_origin_y
-        return {
+    def update(self, shake_area, fish_area, friend_area, totem_area):
+        self._areas = {"shake": self._to_ratios(shake_area), "fish": self._to_ratios(fish_area),
+                       "friend": self._to_ratios(friend_area), "totem": self._to_ratios(totem_area)}
 
-            "x": x_pixels,
-            "y": y_pixels,
-            "width": w_pixels,
-            "height": h_pixels,
-        }
-    def _pixels_to_ratios(self, pixels, subtract_offset=True):
-        """Convert pixel dict to ratios (0-1 range)"""
-        x_pixels = pixels.get("x", 0)
-        y_pixels = pixels.get("y", 0)
-        if subtract_offset:
-            x_pixels -= self._win_origin_x
-            y_pixels -= self._win_origin_y
-        return {
-
-            "x": x_pixels / SCREEN_WIDTH,
-            "y": y_pixels / SCREEN_HEIGHT,
-            "width": pixels.get("w", pixels.get("width", 0)) / SCREEN_WIDTH,
-            "height": pixels.get("h", pixels.get("height", 0)) / SCREEN_HEIGHT,
-        }
-    # ── JS API methods (called from area_selector.html) ──
-    def on_hover_ratio(self, area_name, x_ratio, y_ratio):
-        self.parent.set_status(
-            f"{area_name.upper()} → X Ratio: {x_ratio:.3f} | Y Ratio: {y_ratio:.3f}"
-        )
-    def window_ready(self, win_x, win_y):
-        """
-        Called by JS immediately after pywebviewready fires, passing
-        window.screenX / window.screenY so Python knows the actual pixel
-        offset of the overlay window's top-left corner.
-        On macOS, a frameless pywebview window placed at y=0 is still pushed
-        below the menu bar by the window server (~25-28 px).  Without this
-        correction every saved y-coordinate is shifted down by the menu bar
-        height, causing a visible bottom-offset when the saved box is used to
-        crop the screen capture.
-        """
-        if sys.platform == "darwin":
-            self._win_origin_x = 0
-            self._win_origin_y = 0
-        else:
-            self._win_origin_x = int(win_x)
-            self._win_origin_y = int(win_y)
     def get_areas(self):
-        """
-        Called by JS on startup to get initial box positions.
-        Returns pixel coordinates relative to the canvas (window-relative, not screen-absolute).
-        """
-        out = {}
         menu_offset = get_macos_menu_offset()
-        for name, ratios in self._areas.items():
-            # Convert ratios to canvas-relative pixels (no screen offset added)
-            pixels = self._ratios_to_pixels(ratios, add_offset=False)
-            out[name] = {
-                "x": pixels["x"],
-                "y": pixels["y"] - menu_offset,# macOS adjustment
-                "width": pixels["width"],
-                "height": pixels["height"],
-            }
-        return out
+        result = {}
+        for name, area in self._areas.items():
+            result[name] = {"x": area["x"] * SCREEN_WIDTH,
+                            "y": area["y"] * SCREEN_HEIGHT - menu_offset,
+                            "width": area["width"] * SCREEN_WIDTH,
+                            "height": area["height"] * SCREEN_HEIGHT}
+        return result
 
     def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
-        """
-        Called by JS on every mousemove so the main window status bar
-        can show live position ratios.
-        mouse_x / mouse_y are CSS-pixel coordinates relative to the overlay
-        window's top-left corner (i.e. relative to SCREEN_LEFT, SCREEN_TOP).
-        """
         if not self._open:
             return
-
-        # Update cached areas with latest from JS (JS sends canvas-relative pixels)
         menu_offset = get_macos_menu_offset()
         for name in ("shake", "fish", "friend", "totem"):
-            b = current_boxes.get(name, {})
-            if b:
-                # Canvas y has menu_offset subtracted (same as get_areas); add it back
-                # so the stored ratio always reflects true screen-relative position.
-                adjusted = dict(b)
-                adjusted["y"] = b.get("y", 0) + menu_offset
-                self._areas[name] = self._pixels_to_ratios(adjusted, subtract_offset=False)
-        # Convert mouse canvas-relative to screen-absolute for hit testing
-        abs_x = mouse_x + self._win_origin_x
-        abs_y = mouse_y + self._win_origin_y
-        # Define last_xr and last_yr
-        last_xr = 0
-        last_yr = 0
-        for name in ("shake", "fish", "friend", "totem"):
-            ratios = self._areas.get(name, {})
-            if not ratios:
-                continue
+            box = current_boxes.get(name, {})
+            if box:
+                self._areas[name] = self._pixels_to_ratios(box, menu_offset)
 
-            # Hit test using ratios (multiply by screen dimensions)
-            bx = ratios["x"] * SCREEN_WIDTH
-            by = ratios["y"] * SCREEN_HEIGHT
-            bw = (ratios["width"] * SCREEN_WIDTH) or 1
-            bh = (ratios["height"] * SCREEN_HEIGHT) or 1
-            if bx <= abs_x <= bx + bw and by <= abs_y <= by + bh:
-                xr = round((abs_x - bx) / bw, 2)
-                yr = round((abs_y - by) / bh, 2)
-                if not last_xr == xr or last_yr == yr:
-                    self.parent.set_status(f"Coords: {xr}, {yr}")
-                last_xr = xr
-                last_yr = yr
-                return
+    def _pixels_to_ratios(self, box, menu_offset=0):
+        return {"x": float(box.get("x", 0)) / SCREEN_WIDTH,
+                "y": (float(box.get("y", 0)) + menu_offset) / SCREEN_HEIGHT,
+                "width": float(box.get("width", box.get("w", 0))) / SCREEN_WIDTH,
+                "height": float(box.get("height", box.get("h", 0))) / SCREEN_HEIGHT}
+
+    def window_ready(self, win_x, win_y):
+        # Kept as part of the JS API for compatibility; area coordinates are
+        # intentionally relative to the captured primary monitor.
+        return None
 
     def save_areas(self, areas):
-        """
-        Called by JS when the user presses Escape/F6 to confirm and close.
-        JS sends canvas-relative {x,y,w,h} pixels; we convert to ratios and fire callback.
-        """
         if not self._open:
             return
-
-        self._open = False
         menu_offset = get_macos_menu_offset()
-        out = {}
-        for name, b in areas.items():
-            # Canvas pixels from JS have menu_offset already subtracted (get_areas
-            # sends y = ratio*H - menu_offset), so add it back before converting to
-            # ratios, otherwise y drifts up by menu_offset/SCREEN_HEIGHT each cycle.
-            adjusted = dict(b)
-            adjusted["y"] = b.get("y", 0) + menu_offset
-            out[name] = self._pixels_to_ratios(adjusted, subtract_offset=False)
-        self.callback(out["shake"], out["fish"], out["friend"], out["totem"])
-        if hasattr(self.parent, "_keys_held"):
-            self.parent._keys_held.discard("f6")
-        self.parent.set_status("Area selector closed")
-        try:
-            self._win.destroy()
-        except Exception:
-            pass
+        for name in ("shake", "fish", "friend", "totem"):
+            if name in areas:
+                self._areas[name] = self._pixels_to_ratios(areas[name], menu_offset)
+        self.parent_app.bar_areas.update(self._areas)
+        self.parent_app.save_misc_settings()
+        self._open = False
+        self.parent_app.set_status("Area selector closed")
+        if self.area_window:
+            try:
+                self.area_window.destroy()
+            except Exception:
+                pass
 
-    # ── Internal 
     def _on_closed(self):
-        """Fires when the webview window is destroyed for any reason."""
         if self._open:
-            # Window closed without save_areas (e.g. OS close); still fire callback
-            self._open = False
-            self.callback(
-                self._areas["shake"], self._areas["fish"],
-                self._areas["friend"], self._areas["totem"],
-            )
-            self.parent.set_status("Area selector closed")
+            self.parent_app.bar_areas.update(self._areas)
+            self.parent_app.save_misc_settings()
+            self.parent_app.set_status("Area selector closed")
+        self.area_window = None
+        self._open = False
+
     def is_open(self):
-        return self._open
+        return self._open and self.area_window is not None
+
+    def hide(self):
+        if self.is_open():
+            self.close()
 
     def close(self):
-        """Force-close from Python (e.g. hotkey toggle)."""
-        if self._open:
-            # Build canvas-relative pixels that mirror what JS sends via save_areas:
-            # get_areas sends y = ratio*H - menu_offset, so we must do the same here.
-            menu_offset = get_macos_menu_offset()
-            canvas_pixels = {}
-            for name, ratios in self._areas.items():
-                pixels = self._ratios_to_pixels(ratios, add_offset=False)
-                canvas_pixels[name] = {
-                    "x": pixels["x"],
-                    "y": pixels["y"] - menu_offset,
-                    "w": pixels["width"],
-                    "h": pixels["height"],
-                }
-            self.save_areas(canvas_pixels)
+        if self.is_open():
+            self.save_areas(self.get_areas())
 # Eyedropper class
 class Eyedropper:
     """
     Fullscreen transparent overlay for color picking using pywebview.
-    The HTML canvas handles UI rendering and mouse interaction.
-    Python handles pixel capture and color conversion.
+    Captures a frozen screenshot (menu bar cropped so it matches the
+    frameless window), renders it in the canvas, and returns the picked color.
     """
     HTML_FILE = os.path.join(UI_PATH, "eyedropper.html")
-    
-    def __init__(self, parent):
-        # Initialization
-        self.parent = parent
+
+    def __init__(self, parent_app):
+        self.parent = parent_app
+        self.eyedropper_window = None
+        self._open = False
+        self._visible = False
         self.last_picked_color = None
         self._cancelled = False
-        self._scale = self.parent._get_scale_factor()
-        self._win_origin_x = SCREEN_LEFT
-        self._win_origin_y = SCREEN_TOP
-        
-        # Capture desktop before overlay appears (single frame, does not touch macro_running)
-        self._screen_capture = self.parent.capture_single_frame()
-            
-        # Create fullscreen transparent pywebview window
-        self._win = webview.create_window(
+        self._color_key = None
+        self._scale = 1.0
+        self._screen_capture = None
+        self._screenshot_b64 = None
+        self.left = 0
+        self.top = 0
+        self.width = 0
+        self.height = 0
+
+    def _capture_and_crop(self):
+        """Capture full screen and remove the macOS menu bar strip so the
+        image matches the frameless window geometry (no menu bar)."""
+        frame = self.parent.capture_single_frame()
+        if frame is None:
+            return None
+        if frame.ndim == 3 and frame.shape[2] == 4:
+            frame = frame[:, :, :3].copy()
+        menu_offset = get_macos_menu_offset()
+        scale = get_scale_factor()
+        if scale <= 0:
+            scale = 1.0
+        self._scale = scale
+        if menu_offset > 0:
+            crop = int(round(menu_offset * scale))
+            if 0 < crop < frame.shape[0]:
+                frame = frame[crop:, :, :].copy()
+        return frame
+
+    def _encode_screenshot(self, frame):
+        """Encode BGR numpy frame as a JPEG data-URL for the canvas."""
+        if frame is None:
+            return None
+        try:
+            # JPEG keeps the payload small enough for evaluate_js
+            ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            if not ok:
+                return None
+            b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+            return "data:image/jpeg;base64," + b64
+        except Exception:
+            return None
+
+    def show(self, color_key=None):
+        """Open the eyedropper overlay. Optional color_key is the settings
+        field that should receive the picked color (e.g. 'fish_color')."""
+        if self._open and self.eyedropper_window:
+            return
+
+        self.last_picked_color = None
+        self._cancelled = False
+        self._color_key = color_key
+
+        self._screen_capture = self._capture_and_crop()
+        self._screenshot_b64 = self._encode_screenshot(self._screen_capture)
+
+        menu_offset = get_macos_menu_offset()
+        win_h = max(1, SCREEN_HEIGHT - menu_offset)
+        self.left = SCREEN_LEFT
+        self.top = SCREEN_TOP
+        self.width = SCREEN_WIDTH
+        self.height = win_h
+
+        self.eyedropper_window = webview.create_window(
             "Eyedropper",
             self.HTML_FILE,
             js_api=self,
@@ -710,19 +621,71 @@ class Eyedropper:
             easy_drag=False,
             on_top=True,
             resizable=False,
-            width=SCREEN_WIDTH,
-            height=SCREEN_HEIGHT,
-            x=0,
-            y=0,
+            width=self.width,
+            height=self.height,
+            x=self.left,
+            y=self.top,
             background_color="#000000",
         )
-        self._win.events.closed += self._on_closed
-        time.sleep(0.05)
-        make_window_translucent(self._win, 0.05)
-    
+        self._open = True
+        self._visible = True
+        self.eyedropper_window.events.closed += self._on_closed
+        if sys.platform == "win32":
+            # Maximize on Windows after the window is created
+            def maximize_area_selector():
+                try:
+                    hwnd = _get_hwnd(self.eyedropper_window)
+                    if hwnd:
+                        user32.ShowWindow(wintypes.HWND(hwnd), SW_MAXIMIZE)
+                except Exception as e:
+                    self.parent.set_status("Failed to maximize area selector:", e)
+            self.eyedropper_window.events.shown += maximize_area_selector
+        try:
+            self.parent.set_status(
+                "Eyedropper opened • Hover to preview • Click to pick • Esc to cancel"
+            )
+        except Exception:
+            pass
+
+    def is_open(self):
+        return self._open and self.eyedropper_window is not None
+
+    def hide(self):
+        """Destroys the current window instance completely."""
+        if self.eyedropper_window and self._open:
+            try:
+                self.eyedropper_window.destroy()
+            except Exception:
+                pass
+            self._on_closed()
+
+    def close(self):
+        """Alias used by shutdown / toggle paths."""
+        self.hide()
+
     # ── JS API methods (called from eyedropper.html) ──
+
+    def window_ready(self, win_x, win_y):
+        """JS signals the page is ready — push the frozen screenshot."""
+        if self._screenshot_b64 and self.eyedropper_window and self._open:
+            # Inject via a short data reference; JS stores it and draws.
+            try:
+                # Pass as return value of a dedicated getter instead of
+                # embedding a huge string in evaluate_js when possible.
+                self.eyedropper_window.evaluate_js(
+                    "window.__applyScreenshot && window.__applyScreenshot()"
+                )
+            except Exception:
+                pass
+        return None
+
+    def get_screenshot_data(self):
+        """Return the data-URL of the frozen (menu-bar-cropped) screenshot."""
+        return self._screenshot_b64 or ""
+
     def get_pixel_at(self, x, y):
-        """Gets the pixel from the full-screen capture with screen freeze (memory-based)"""
+        """Sample the frozen capture at logical canvas coordinates (x, y).
+        Menu bar was already cropped out, so no y-offset is needed."""
         if not self.is_open():
             return "#000000"
 
@@ -730,25 +693,18 @@ class Eyedropper:
         if frame is None:
             return "#000000"
 
-        menu_offset = get_macos_menu_offset()
-        screen_x = x + self._win_origin_x
-        screen_y = y + self._win_origin_y + menu_offset
-        x = int(screen_x * self._scale)
-        y = int(screen_y * self._scale)
-        
-        if (
-            x < 0 or
-            y < 0 or
-            y >= frame.shape[0] or
-            x >= frame.shape[1]
-        ):
+        scale = self._scale if self._scale > 0 else 1.0
+        px = int(x * scale)
+        py = int(y * scale)
+
+        if px < 0 or py < 0 or py >= frame.shape[0] or px >= frame.shape[1]:
             return "#000000"
 
-        b = int(frame[y, x, 0])
-        g = int(frame[y, x, 1])
-        r = int(frame[y, x, 2])
+        b = int(frame[py, px, 0])
+        g = int(frame[py, px, 1])
+        r = int(frame[py, px, 2])
         hex_color = f"#{r:02X}{g:02X}{b:02X}"
-        
+
         try:
             self.parent.set_status(f"{hex_color} • Click to pick • Esc to cancel")
         except Exception:
@@ -756,69 +712,91 @@ class Eyedropper:
 
         return hex_color
 
-    def window_ready(self, win_x, win_y):
-        if sys.platform == "darwin":
-            self._win_origin_x = 0
-            self._win_origin_y = 0
-        else:
-            self._win_origin_x = int(win_x)
-            self._win_origin_y = int(win_y)
-    
     def pick_color(self, hex_color):
-        """Called by JS when user clicks to pick a color."""
+        """Called by JS when user clicks to pick a color.
+        Stores the color, pushes it to the main UI, and closes the overlay."""
         if not self.is_open():
-            return
+            return None
+
+        if not hex_color or not isinstance(hex_color, str):
+            return None
+
+        hex_color = hex_color.strip()
+        if not hex_color.startswith("#"):
+            hex_color = "#" + hex_color
 
         self.last_picked_color = hex_color
         self._cancelled = False
-        self.parent.set_status(f"Picked color: {hex_color}")
-        self._close_window()
 
-    def close_eyedropper(self):
-        """Called by JS when user presses Escape."""
-        if not self.is_open():
-            return
+        # Write into settings vars when a target key was provided
+        color_key = self._color_key
+        if color_key:
+            try:
+                self.parent.vars[color_key] = hex_color
+            except Exception:
+                pass
 
-        self._cancelled = True
-        self.parent.set_status("Eyedropper cancelled")
-        self._close_window()
+        # Notify the main webview so the color input updates
+        self._notify_main_ui(hex_color, color_key)
 
-    def _on_closed(self, window=None):
-        """Event handler for when the pywebview window is closed."""
-        self._close_cleanup()
-    
-    def _close_window(self):
-        """Internal method to close the window safely."""
         try:
-            self._win.destroy()
+            self.parent.set_status(f"Picked color: {hex_color}")
         except Exception:
             pass
-    
-    def _close_cleanup(self):
-        """Internal cleanup method called when window is closed."""
-        # Set status message based on what happened
-        if self.last_picked_color:
-            self.parent.set_status(f"Picked color: {self.last_picked_color}")
-        elif self._cancelled:
+
+        self.hide()
+        return hex_color
+
+    def close_eyedropper(self):
+        """Called by JS on Escape — cancel without picking."""
+        if not self.is_open():
+            return
+        self._cancelled = True
+        self.last_picked_color = None
+        try:
             self.parent.set_status("Eyedropper cancelled")
-        else:
-            self.parent.set_status("Eyedropper closed")
+        except Exception:
+            pass
+        self.hide()
 
-    def is_open(self):
-        """Check if the eyedropper is still open."""
-        return hasattr(self, '_win') and self._win is not None
+    def _notify_main_ui(self, hex_color, color_key=None):
+        """Push the picked color into the main pywebview window."""
+        try:
+            safe = hex_color.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
+            key_js = "null"
+            if color_key:
+                key_js = "'" + str(color_key).replace("\\", "\\\\").replace("'", "\\'") + "'"
+            script = (
+                f"(function(){{"
+                f"var c='{safe}',k={key_js};"
+                f"if(window.onColorPicked)window.onColorPicked(c,k);"
+                f"if(window.setPickedColor)window.setPickedColor(c,k);"
+                f"if(k){{var el=document.getElementById(k)||document.querySelector('[data-color-key=\"'+k+'\"]')"
+                f"||document.querySelector('input[name=\"'+k+'\"]');"
+                f"if(el){{el.value=c;el.dispatchEvent(new Event('input',{{bubbles:true}}));"
+                f"el.dispatchEvent(new Event('change',{{bubbles:true}}));}}"
+                f"}}"
+                f"}})()"
+            )
+            # Main window is the first created window
+            if webview.windows:
+                webview.windows[0].evaluate_js(script)
+        except Exception:
+            pass
 
-    def close(self):
-        """Force-close from Python during application shutdown."""
-        if self.is_open():
-            self._cancelled = False  # Don't show cancellation message
-            self._close_window()
+    def _on_closed(self, *args):
+        """Lifecycle cleanup when the overlay is destroyed."""
+        self.eyedropper_window = None
+        self._open = False
+        self._visible = False
+        self._screenshot_b64 = None
+        # Keep last_picked_color so the main UI can still poll it
 
 class FishOverlay:
     HTML_FILE = os.path.join(UI_PATH, "fish_overlay.html")
     def __init__(self, parent_app):
         self.parent_app = parent_app
-        self.overlay_window = None  # Replaces self._win for consistency
+        self.overlay_window = None  
         self._open = False
         self._visible = False
         # Track active viewport geometry (logical points for pywebview)
@@ -841,8 +819,8 @@ class FishOverlay:
         width = max(1, int(width / scale))
         height = max(1, int(height / scale))
         # Clamp so the window stays on-screen (logical screen size)
-        screen_w = max(1, int(SCREEN_WIDTH / scale))
-        screen_h = max(1, int(SCREEN_HEIGHT / scale))
+        screen_w = max(1, SCREEN_WIDTH)
+        screen_h = max(1, SCREEN_HEIGHT)
         left = max(0, min(left, max(0, screen_w - width)))
         top = max(0, min(top, max(0, screen_h - height)))
         return left, top, width, height
@@ -990,6 +968,8 @@ class Api:
         self.capture_id = 0
         self.scan_delay = 0.1
         # Other classes
+        self.area_selector = AreaSelector(self)
+        self.eyedropper = Eyedropper(self)
         self.fish_overlay = FishOverlay(self)
         # Load Settings
         self.load_misc_settings()
@@ -1199,7 +1179,7 @@ class Api:
     def load_misc_settings(self):
         """Load miscellaneous settings from last_config.json."""
         # Defaults
-        self.current_rod_name = "Basic Rod"
+        self.current_rod_name = "Default"
         self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
         # Default Hotkeys
         start_key  = "F5"
@@ -1212,8 +1192,6 @@ class Api:
 
             with open(path, "r") as f:
                 data = json.load(f)
-            # Rod
-            self.current_rod_name = data.get("last_rod", "Basic Rod")
             # Bar Areas
             loaded_areas = data.get("bar_areas", {})
             for key in ["shake", "fish", "friend", "totem"]:
@@ -1261,12 +1239,11 @@ class Api:
             else:
                 clean_bar_areas[key] = None
         # Save
-        data["last_rod"] = self.current_rod_name
         data["bar_areas"] = clean_bar_areas
-        # Optional Hotkeys
-        # data["start_key"] = ...
-        # data["change_bar_areas_key"] = ...
-        # data["stop_key"] = ...
+        # Hotkeys
+        # data["start_key"] = self.vars["start_key"]
+        # data["change_bar_areas_key"] = self.vars["change_bar_areas_key"]
+        # data["stop_key"] = self.vars["stop_key"]
         with open(path, "w") as f:
             json.dump(data, f, indent=4)
     def open_base_folder(self):
@@ -1460,65 +1437,29 @@ class Api:
 
     # Area Selector
     def open_area_selector(self):
-        # Toggle Off If Already Open
-        if hasattr(self, "area_selector") and self.area_selector and self.area_selector.is_open():
-            self.area_selector.close()
-            return
-
-        # Default Fallback Areas
+        scale = get_scale_factor()
         def default_shake_area():
-            left = 0.1041
-            top = 0.0925
-            right = 0.8958
-            bottom = 0.7888
-            return {"x": left, "y": top,
-
-                    "width": right - left, "height": bottom - top}
+            return {"x": 0.1041, "y": 0.0925, "width": 0.8958 - 0.1041, "height": 0.7888 - 0.0925}
         def default_fish_area():
-            left = 0.2844
-            top = 0.7981
-            right = 0.7141
-            bottom = 0.8370
-            return {"x": left, "y": top,
-
-                    "width": right - left, "height": bottom - top}
+            return {"x": 0.2844, "y": 0.7981, "width": 0.7141 - 0.2844, "height": 0.8370 - 0.7981}
         def default_friend_area():
-            left = 0.0046
-            top = 0.8583
-            right = 0.0401
-            bottom = 0.94
-            return {"x": left, "y": top,
-
-                    "width": right - left, "height": bottom - top}
+            return {"x": 0.0046, "y": 0.8583, "width": 0.0401 - 0.0046, "height": 0.94 - 0.8583}
         def default_totem_area():
-            left = 0.9531
-            top = 0.8333
-            right = 0.9739
-            bottom = 0.8796
-            return {"x": left, "y": top,
-
-                    "width": right - left, "height": bottom - top}
+            return {"x": 0.9531, "y": 0.8333, "width": 0.9739 - 0.9531, "height": 0.8796 - 0.8333}
         # Load Saved Areas Or Fallback
-        shake_area  = self.bar_areas.get("shake")  if isinstance(self.bar_areas.get("shake"),dict) else default_shake_area()
-        fish_area   = self.bar_areas.get("fish")   if isinstance(self.bar_areas.get("fish"), dict) else default_fish_area()
-        friend_area = self.bar_areas.get("friend") if isinstance(self.bar_areas.get("friend"), dict) else default_friend_area()
-        totem_area  = self.bar_areas.get("totem")  if isinstance(self.bar_areas.get("totem"),dict) else default_totem_area()
-        # Callback when the selector window saves and closes
-        def on_done(shake, fish, friend, totem):
-            self.bar_areas["shake"]  = shake
-            self.bar_areas["fish"]   = fish
-            self.bar_areas["friend"] = friend
-            self.bar_areas["totem"]  = totem
-            self.save_misc_settings()
-            self.area_selector = None
-        # Open the pywebview overlay — no tkinter needed, no thread restrictions
-        self.area_selector = AreaSelector(
-            parent=self,
-            shake_area=shake_area, fish_area=fish_area,
-            friend_area=friend_area, totem_area=totem_area,
-            callback=on_done,
-        )
-        self.set_status("Area selector opened")
+        shake_area = (self.bar_areas.get("shake") 
+                    if isinstance(self.bar_areas.get("shake"), dict) else default_shake_area())
+        fish_area = (self.bar_areas.get("fish") 
+                    if isinstance(self.bar_areas.get("fish"), dict) else default_fish_area())
+        friend_area = (self.bar_areas.get("friend") 
+                    if isinstance(self.bar_areas.get("friend"), dict) else default_friend_area())
+        totem_area = (self.bar_areas.get("totem") 
+                    if isinstance(self.bar_areas.get("totem"), dict) else default_totem_area())
+        if hasattr(self, "area_selector") and self.area_selector and self.area_selector.is_open():
+            self.area_selector.hide()
+        else:
+            self.area_selector.show()
+            self.area_selector.update(shake_area=shake_area, fish_area=fish_area, friend_area=friend_area, totem_area=totem_area,)
     # Debug Screenshots
     def take_debug_screenshot(self):
         """
@@ -1565,15 +1506,34 @@ class Api:
 
         self.set_status("Saved debug screenshots (fish, shake, friend, totem, full)")
     # Eyedropper
-    def start_eyedropper(self):
-        # Toggle Off If Already Open
-        if hasattr(self, "eyedropper") and self.eyedropper and self.eyedropper.is_open():
-            self.eyedropper.close()
-            return
+    def start_eyedropper(self, color_key=None):
+        """Open the color picker overlay.
 
-        # Create and show eyedropper
-        self.eyedropper = Eyedropper(parent=self)
-        self.set_status("Eyedropper opened • Hover to preview • Click to pick • Esc to cancel")
+        color_key (optional): settings field name to write the result into
+        (e.g. 'fish_color', 'shake_color'). The main UI is also notified via
+        onColorPicked / setPickedColor and by updating matching input elements.
+        """
+        if not hasattr(self, "eyedropper") or self.eyedropper is None:
+            self.eyedropper = Eyedropper(self)
+
+        # Toggle off if already open
+        if self.eyedropper.is_open():
+            self.eyedropper.hide()
+            return None
+
+        self.eyedropper.show(color_key=color_key)
+        return None
+
+    def get_last_picked_color(self):
+        """Return (and clear) the most recently picked eyedropper color.
+        The main UI can poll this after start_eyedropper if it does not
+        implement onColorPicked / setPickedColor callbacks."""
+        if not hasattr(self, "eyedropper") or self.eyedropper is None:
+            return None
+        color = self.eyedropper.last_picked_color
+        self.eyedropper.last_picked_color = None
+        return color
+
     # Hotkeys
     def _get_hotkeys(self):
         try:
@@ -1923,7 +1883,10 @@ class Api:
         except:
             tolerance = 5
         tolerance = int(np.clip(tolerance, 0, 255))
-        b, g, r = self._hex_to_bgr(hex)
+        try:
+            b, g, r = self._hex_to_bgr(hex)
+        except:
+            return None, None
         lower_bound = np.array([
             max(0, b - tolerance),
             max(0, g - tolerance),
@@ -1947,6 +1910,58 @@ class Api:
             return int(x), int(y)
 
         return None, None
+
+    def find_color_cluster(self, frame, target_color_hex, tolerance=8, min_area=10):
+        """
+        Find the largest color cluster and return its center.
+
+        Args:
+            frame: BGR image
+            target_color_hex: hex color string
+            tolerance: color tolerance
+            min_area: minimum cluster size to be valid
+
+        Returns:
+            (center_x, center_y) or None
+        """
+        # required_fish_pixels
+        if frame is None:
+            return None
+
+        # Color Mask (Vectorized Like Your Fast Version)
+        target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int16)
+        frame_int = frame.astype(np.int16)
+        tol = int(np.clip(tolerance, 0, 255))
+
+        mask = np.all(np.abs(frame_int - target_bgr) <= tol, axis=2).astype(np.uint8)
+
+        if not np.any(mask):
+            return None
+
+        # Connected Components (Cluster Detection) 
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+
+        if num_labels <= 1:
+            return None  # Only Background
+
+        # Skip Label 0 (Background)
+        largest_label = None
+        largest_area = 0
+
+        for label in range(1, num_labels):
+            area = stats[label, cv2.CC_STAT_AREA]
+
+            if area > largest_area and area >= min_area:
+                largest_area = area
+                largest_label = label
+
+        if largest_label is None:
+            return None
+
+        # Centroid 
+        center_x, center_y = centroids[largest_label]
+
+        return int(center_x), int(center_y)
 
     def _find_circles(self, frame):
         """
@@ -2001,6 +2016,113 @@ class Api:
         except Exception as e:
             self.set_status(f"    Error in circle detection: {e}")
             return None, None
+
+    def _detect_lines_in_frame(self, frame, original_width=None):
+        """
+        Detect vertical lines in frame using Laplacian edge detection.
+        Based on b.py line detection pipeline with brightness and density filtering.
+        NLM denoising removed for 10x speedup (30 FPS -> 300 FPS).
+        Frame is normalized to reference fish box dimensions (1035x43 at 2560x1440)
+        for consistent detection across all resolutions. line coordinates are scaled
+        back to match the original frame dimensions.
+        Returns list of x-coordinates of detected vertical lines.
+        Args:
+            frame: BGR image from dxcam/mss
+            original_width: Original frame width before normalization (for coordinate scaling back)
+        """
+        try:
+            # Get minimum line density from settings (configurable via GUI)
+            MIN_LINE_DENSITY = float(self.vars.get("fish_line_min_density", 0.1))
+            BRIGHTNESS_THRESHOLD = 10  # Minimum brightness for edge pixels
+            # Reference fish box dimensions at 1280x720 (lower detail for better edge detection)
+            # At 1280x720: fish box is 762*(1280/2560) to 1797*(1280/2560) = 381 to 898 (width=517)
+            # Height: 1215*(720/1440) to 1258*(720/1440) = 607 to 629 (height=22)
+            REFERENCE_FISH_WIDTH = 517   # Fish box width at 720p
+            REFERENCE_FISH_HEIGHT = 22   # Fish box height at 720p
+            # Store original dimensions for coordinate scaling
+            original_height, original_frame_width = frame.shape[:2]
+            if original_width is None:
+                original_width = original_frame_width
+            # Normalize frame to reference dimensions for consistent detection
+            if original_frame_width != REFERENCE_FISH_WIDTH or original_height != REFERENCE_FISH_HEIGHT:
+                frame = cv2.resize(frame, (REFERENCE_FISH_WIDTH, REFERENCE_FISH_HEIGHT), interpolation=cv2.INTER_LINEAR)
+                width_scale = original_width / REFERENCE_FISH_WIDTH
+            else:
+                width_scale = 1.0
+            # Step 1: Convert to grayscale
+            grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Step 2: Laplacian edge detection (NLM removed for 10x speedup)
+            laplacian = cv2.Laplacian(grayscale, cv2.CV_8U)
+            # Step 3: Filter vertical lines by brightness threshold and density
+            height, width = laplacian.shape
+            # Vectorized column density calculation (10x faster than Python loop)
+            column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
+            line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
+            # Merge adjacent lines (consecutive x-coordinates) into single lines
+            # Takes the middle position of each group of adjacent pixels
+            # lines must be within 2 pixels to be considered part of the same group
+            if line_coordinates:
+                merged_lines = []
+                group_start = line_coordinates[0]
+                group_end = line_coordinates[0]
+                for i in range(1, len(line_coordinates)):
+                    if line_coordinates[i] <= group_end + 2:
+                        # Within 2 pixels, extend current group
+                        group_end = line_coordinates[i]
+                    else:
+                        # Gap > 2 pixels detected, save current group's middle position
+                        middle = (group_start + group_end) // 2
+                        merged_lines.append(middle)
+                        # Start new group
+                        group_start = line_coordinates[i]
+                        group_end = line_coordinates[i]
+                # Don't forget the last group
+                middle = (group_start + group_end) // 2
+                merged_lines.append(middle)
+                line_coordinates = merged_lines
+            # Scale line coordinates back to original frame dimensions
+            if width_scale != 1.0:
+                line_coordinates = [int(x * width_scale) for x in line_coordinates]
+            # Sort coordinates for consistent processing
+            line_coordinates.sort()
+            return line_coordinates
+
+        except Exception as e:
+            # print(f"    Error in line detection: {e}")
+            return []
+
+    def get_colors_at_lines(self, frame, line_coordinates):
+        """
+        Get the color at each vertical line position.
+        
+        Args:
+            frame: BGR image
+            line_coordinates: List of x-coordinates from _detect_lines_in_frame
+        
+        Returns:
+            List of colors for each line position [B, G, R]
+        """
+        colors = []
+        
+        for x in line_coordinates:
+            # Make sure x is within image bounds
+            if 0 <= x < frame.shape[1]:
+                # For vertical lines, you might want to sample multiple y positions
+                # and average them to get the line's color
+                height = frame.shape[0]
+                
+                # Option 1: Get color at center of the frame
+                y_center = height // 2
+                color = frame[y_center, x]
+                
+                # Option 2: Average color along the entire vertical line
+                # color = np.mean(frame[:, x], axis=0).astype(int)
+                
+                colors.append(color.tolist())
+            else:
+                colors.append(None)  # Out of bounds
+        
+        return colors
 
     def auto_crop_template(self, template, lower_white=200):
         """
@@ -2273,9 +2395,9 @@ class Api:
                 if auto_refresh == "on":
                     time.sleep(delay_before_casting)
                     self._send_key(bag_slot)
-                    time.sleep(select_rod_duration)
+                    self.interruptible_sleep(select_rod_duration)
                     self._send_key(rod_slot)
-                    time.sleep(delay_after_casting / 2)
+                    self.interruptible_sleep(delay_after_casting / 2)
                 self.set_status("Using Utilities")
                 # Auto Totem
                 if auto_totem == "on":
@@ -2347,7 +2469,7 @@ class Api:
                 catch_rate_percentage = int(self.catch_rate * 100)
                 if logging_mode != "disabled":
                     self.send_logging("**Cycle Checkpoint**", f"Cycle #{self.current_cycle}", catch_rate_percentage)
-            self.set_status("Macro Stopped")
+            return
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
@@ -2602,9 +2724,11 @@ class Api:
         return
 
     def _execute_cast_normal(self):
+        if self.macro_running == False:
+            return
         cast_duration = float(self._get_var_number("cast_duration", 0.5, float))
         self.hold_mouse(False)
-        time.sleep(cast_duration)
+        self.interruptible_sleep(cast_duration)
         self.release_mouse(False)
         return
 
@@ -2647,6 +2771,8 @@ class Api:
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self.get_areas("friend")
         # Area Calculations
         note_height = fish_bottom - shake_top
+        shake_x = int((shake_left + shake_right) / 2)
+        shake_y = int((shake_top + shake_bottom) / 2)
         fish_overlay = self.vars["fish_overlay"]
         if fish_overlay == "on":
             # Position the overlay just above or below the fish bar so it does
@@ -2688,6 +2814,10 @@ class Api:
             tracking_tolerance = 5
             friends_tolerance = 5
         # Minigame Settings
+        bag_slot = str(self.vars["bag_slot"])
+        bag_spam = self.vars["bag_spam"]
+        lock_cursor = self.vars["lock_cursor"]
+        fishing_mode = self.vars["fishing_mode"].lower()
         fishing_profile = self.vars["fishing_profile"].lower()
         bar_ratio_from_side = float(self.vars["bar_ratio_from_side"])
         restart_delay = float(self.vars["restart_delay"])
@@ -2702,6 +2832,11 @@ class Api:
         # Last values (failsafe)
         is_initial_run = True
         last_arrow_x = False
+        bag_spam_cycle = 0
+        fish_size = 10
+        note_x = 0
+        note_y_ratio = 0
+        line_coordinates = []
         bar_size = 0
         bar_center = 0
         error = 0
@@ -2733,7 +2868,7 @@ class Api:
             friend_x, friend_y = self.pixel_search(friend_img, friends_color, friends_tolerance)
             if friend_x is not None and friend_y is not None:
                 time.sleep(restart_delay)
-                break
+                return
 
             # Fish detection
             fish_x, fish_y = self.pixel_search(fish_img, fish_color, fish_tolerance)
@@ -2741,52 +2876,64 @@ class Api:
                 fish_detected = True
             else:
                 fish_detected = False
-            # Bar detection
-            left_x, left_y = self.pixel_search(fish_img, left_color, left_tolerance)
-            right_x, right_y = self.pixel_search(fish_img, right_color, right_tolerance, 1)
-            if left_x == None:
-                left_x, left_y = self.pixel_search(fish_img, right_color, right_tolerance)
-            if right_x == None:
-                right_x, right_y = self.pixel_search(fish_img, left_color, left_tolerance, 1)
-            # print(f"Raw coordinates: {left_x}, {right_x}, {fish_x}")
-            # Check if we should scan for arrows
-            if left_x is not None and right_x is not None:
-                bar_detected = True
-                bar_center = int((left_x + right_x) / 2)
-                bar_size = right_x - left_x
-                # print(f"Detection Source: Bar | Left: {left_x} | Right: {right_x}")
-            else:
-                # Try arrow
-                bar_detected = False
-                # Bars not found - scan for arrows
-                arrow_x, arrow_y = self.pixel_search(fish_img, arrow_color, arrow_tolerance)
-                if arrow_x is not None:
+            # Bar detection (Color or Line)
+            if fishing_mode == "color":
+                left_x, left_y = self.pixel_search(fish_img, left_color, left_tolerance)
+                right_x, right_y = self.pixel_search(fish_img, right_color, right_tolerance, 1)
+                if left_x == None:
+                    left_x, left_y = self.pixel_search(fish_img, right_color, right_tolerance)
+                if right_x == None:
+                    right_x, right_y = self.pixel_search(fish_img, left_color, left_tolerance, 1)
+                # print(f"Raw coordinates: {left_x}, {right_x}, {fish_x}")
+                # Check if we should scan for arrows
+                if left_x is not None and right_x is not None:
                     bar_detected = True
-                    try:
-                        arrow_direction = arrow_x - last_arrow_x
-                    except:
-                        arrow_direction = -1
-                    # Detect bar based on arrow (use previous bar ends as reference)
-                    if arrow_direction > 0:
-                        left_x = last_left_x
-                        right_x = arrow_x
-                    else:
-                        left_x = arrow_x
-                        right_x = last_right_x
                     bar_center = int((left_x + right_x) / 2)
                     bar_size = right_x - left_x
-                    try:
-                        last_half_bar_size = int(last_bar_size / 2)
-                    except:
-                        last_half_bar_size = int(bar_size / 2)
-                    if bar_size < last_half_bar_size:
-                        bar_size = last_bar_size
-                        right_x = left_x + bar_size
-                        bar_center = int((left_x + right_x) / 2)
-                    # print(f"Detection Source: Arrows | Left: {left_x} | Right: {right_x} | Arrow: {arrow_x}")
+                    # print(f"Detection Source: Bar | Left: {left_x} | Right: {right_x}")
                 else:
-                    # Use Cache
+                    # Try arrow
                     bar_detected = False
+                    # Bars not found - scan for arrows
+                    arrow_x, arrow_y = self.pixel_search(fish_img, arrow_color, arrow_tolerance)
+                    if arrow_x is not None:
+                        bar_detected = True
+                        try:
+                            arrow_direction = arrow_x - last_arrow_x
+                        except:
+                            arrow_direction = -1
+                        # Detect bar based on arrow (use previous bar ends as reference)
+                        if arrow_direction > 0:
+                            left_x = last_left_x
+                            right_x = arrow_x
+                        else:
+                            left_x = arrow_x
+                            right_x = last_right_x
+                        bar_center = int((left_x + right_x) / 2)
+                        bar_size = right_x - left_x
+                        try:
+                            last_half_bar_size = int(last_bar_size / 2)
+                        except:
+                            last_half_bar_size = int(bar_size / 2)
+                        if bar_size < last_half_bar_size:
+                            bar_size = last_bar_size
+                            right_x = left_x + bar_size
+                            bar_center = int((left_x + right_x) / 2)
+                        # print(f"Detection Source: Arrows | Left: {left_x} | Right: {right_x} | Arrow: {arrow_x}")
+                    else:
+                        # Use Cache
+                        bar_detected = False
+            else:
+                line_coordinates = self._detect_lines_in_frame(fish_img)
+                line_colors = self.get_colors_at_lines(fish_img, line_coordinates)
+            # Bag Spam & Lock Cursor
+            bag_spam_cycle += 1
+            if bag_spam_cycle == 5:
+                bag_spam_cycle = 0
+                if bag_spam == "on":
+                    self._send_key(bag_slot)
+                if lock_cursor == "on":
+                    mouse_controller.position = (shake_x, shake_y)
             # Restore from Cache
             self.fish_overlay.clear()
             if bar_detected == False:
@@ -2797,14 +2944,12 @@ class Api:
             if fish_detected == False:
                 fish_x = last_fish_x
             # Note Detection
-            overlay_fish_color = "red"
             if fishing_profile == "notes":
                 note_x, note_y = self.pixel_search(shake_img, tracking_color, tracking_tolerance)
                 if note_x is not None and note_y is not None:
                     note_y_ratio = float(note_y / note_height)
                     if note_y_ratio > pinion_note_ratio:
                         fish_x = note_x
-                        overlay_fish_color = "orange"
                 else:
                     note_y_ratio = 0.0
                 # print("Note Ratio: ", note_y_ratio, " Pinion Ratio: ", pinion_note_ratio)
@@ -2850,8 +2995,13 @@ class Api:
                     )
                 if fish_x is not None:
                     self.fish_overlay.draw(
-                        bar_center=fish_x, box_size=10,
-                        color=overlay_fish_color, canvas_offset=0
+                        bar_center=fish_x, box_size=fish_size,
+                        color="red", canvas_offset=0
+                    )
+                if fish_x == note_x:
+                    self.fish_overlay.draw(
+                        bar_center=last_fish_x, box_size=fish_size,
+                        color="orange", canvas_offset=0
                     )
             # Controller Mode Selection
             current_controller_mode = controller_mode
@@ -2957,12 +3107,7 @@ class Api:
                             control_signal = 30
             # Mouse state
             # print(f"Control Signal: {control_signal}")
-            if abs(error < 3):
-                if self.capture_id % 2 == 0:
-                    hold_mouse()
-                else:
-                    release_mouse()
-            elif control_signal > 0:
+            if control_signal > 0:
                 hold_mouse()
             else:
                 release_mouse()
@@ -2973,7 +3118,8 @@ class Api:
                 last_bar_center = bar_center
                 last_bar_size = bar_size
             if fish_detected == True:
-                last_fish_x = fish_x
+                if not fish_x == note_x:
+                    last_fish_x = fish_x
             try:
                 last_arrow_x = arrow_x
             except:

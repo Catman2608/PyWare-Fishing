@@ -831,7 +831,7 @@ class FishOverlay:
     HTML_FILE = "overlay.html"  # Make sure this points to your UI asset path
     def __init__(self, parent_app):
         self.parent_app = parent_app
-        self.overlay_window = None  # Replaces self._win for consistency
+        self.overlay_window = None  
         self._open = False
         self._visible = False
         # Track active viewport geometry

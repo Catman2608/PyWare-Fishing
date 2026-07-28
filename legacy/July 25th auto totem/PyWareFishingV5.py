@@ -818,7 +818,7 @@ class FishOverlay:
     HTML_FILE = os.path.join(UI_PATH, "fish_overlay.html")
     def __init__(self, parent_app):
         self.parent_app = parent_app
-        self.overlay_window = None  # Replaces self._win for consistency
+        self.overlay_window = None  
         self._open = False
         self._visible = False
         # Track active viewport geometry (logical points for pywebview)
