@@ -1,4 +1,4 @@
-name: Build macOS DMG (Apple Silicon Only)
+name: Build macOS DMG
 
 on:
     workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
             - name: Set up Python
               uses: actions/setup-python@main
               with:
-                  python-version: "3.12"
+                  python-version: "3.14"
 
             - name: Install dependencies
               run: |
@@ -25,14 +25,14 @@ jobs:
 
             - name: Build with PyInstaller
               run: |
-                  pyinstaller --onedir --windowed PyWareFishingV4.py --name PyWareFishingV4 --icon="icon.icns"
+                  pyinstaller --onedir --windowed --icon="icon.icns" --strip "PyWareFishingV5.py"
 
             - name: Check dist contents
               run: |
                   ls -lh dist
                   echo "Contents of dist:"
                   ls -la dist/
-                  ls -la dist/PyWareFishingV4
+                  ls -la dist/PyWareFishingV5
 
             - name: Create DMG from .app bundle
               run: |
@@ -40,17 +40,17 @@ jobs:
                   echo "Found app at: $APP_PATH"
                   
                   hdiutil create \
-                    -volname "PyWareFishingV4" \
+                    -volname "PyWareFishingV5" \
                     -srcfolder "$APP_PATH" \
                     -ov \
                     -format UDZO \
-                    PyWareFishingV4.dmg
+                    PyWareFishingV5.dmg
                   
                   echo "DMG created:"
-                  ls -lh PyWareFishingV4.dmg
+                  ls -lh PyWareFishingV5.dmg
 
             - name: Upload DMG artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: PyWareFishingV4-macOS
-                  path: PyWareFishingV4.dmg
+                  name: PyWareFishingV5-macOS
+                  path: PyWareFishingV5.dmg

@@ -1,6 +1,6 @@
 {
-    "automation_mode": "fishing",
-    "fishing_profile": "notes",
+    "automation_mode": "appraisal",
+    "fishing_profile": "normal",
     "start_stop": "F5",
     "change_areas": "F6",
     "force_stop": "F7",

@@ -2859,7 +2859,7 @@ class Api:
 
     def _do_line_search(self, frame, fish_area_center):
         # Initialization
-        line_coordinates = self._detect_lines_in_frame(frame)
+        line_coords = self._detect_lines_in_frame(frame)
         current_time = time.time()
         target_left_x = None
         target_right_x = None
@@ -2873,19 +2873,19 @@ class Api:
             self.potential_teleport_right_bar = None
             self.teleport_first_detected_time = None
         # Process lines - need at least 2 lines to continue tracking
-        if len(line_coordinates) >= 2:
+        if len(line_coords) >= 2:
             # Reset fish lost timer
             self.fish_lost_timer = 0.0
             if self.is_initial_run or self.initial_target_gap is None:
                 # INITIAL RUN: Find 2 closest lines to center as target lines
-                distance_coords = sorted([(abs(coord - fish_area_center), coord) for coord in line_coordinates], key=lambda x: x[0])
+                distance_coords = sorted([(abs(coord - fish_area_center), coord) for coord in line_coords], key=lambda x: x[0])
                 target_pair = sorted([distance_coords[0][1], distance_coords[1][1]])
                 target_left_x = target_pair[0]
                 target_right_x = target_pair[1]
                 self.initial_target_gap = target_right_x - target_left_x
                 # Find bars - closest to left of left target, closest to right of right target
-                left_candidates = [x for x in line_coordinates if x < target_left_x]
-                right_candidates = [x for x in line_coordinates if x > target_right_x]
+                left_candidates = [x for x in line_coords if x < target_left_x]
+                right_candidates = [x for x in line_coords if x > target_right_x]
                 left_bar_x = max(left_candidates) if left_candidates else target_left_x
                 right_bar_x = min(right_candidates) if right_candidates else target_right_x
                 # Store for next run
@@ -2900,9 +2900,9 @@ class Api:
                 # Rule 1: Find pair with gap matching self.initial_target_gap
                 best_gap_diff = float('inf')
                 best_pair = None
-                for i in range(len(line_coordinates) - 1):
-                    curr_left = line_coordinates[i]
-                    curr_right = line_coordinates[i + 1]
+                for i in range(len(line_coords) - 1):
+                    curr_left = line_coords[i]
+                    curr_right = line_coords[i + 1]
                     curr_gap = curr_right - curr_left
                     gap_diff = abs(curr_gap - self.initial_target_gap)
                     if gap_diff < best_gap_diff:
@@ -2917,7 +2917,7 @@ class Api:
                     target_right_x = self.last_fish_right
                 # Rule 2: Find bars - exclude target lines
                 # Get all lines that are NOT the target lines
-                other_lines = [x for x in line_coordinates if x not in (target_left_x, target_right_x)]
+                other_lines = [x for x in line_coords if x not in (target_left_x, target_right_x)]
                 # Sort other lines by position relative to targets
                 left_candidates = [x for x in other_lines if x < target_left_x]
                 right_candidates = [x for x in other_lines if x > target_right_x]
@@ -3019,35 +3019,35 @@ class Api:
             height, width = laplacian.shape
             # Vectorized column density calculation (10x faster than Python loop)
             column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
-            line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
+            line_coords = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
             # Merge adjacent lines (consecutive x-coordinates) into single lines
             # Takes the middle position of each group of adjacent pixels
             # lines must be within 2 pixels to be considered part of the same group
-            if line_coordinates:
+            if line_coords:
                 merged_lines = []
-                group_start = line_coordinates[0]
-                group_end = line_coordinates[0]
-                for i in range(1, len(line_coordinates)):
-                    if line_coordinates[i] <= group_end + 2:
+                group_start = line_coords[0]
+                group_end = line_coords[0]
+                for i in range(1, len(line_coords)):
+                    if line_coords[i] <= group_end + 2:
                         # Within 2 pixels, extend current group
-                        group_end = line_coordinates[i]
+                        group_end = line_coords[i]
                     else:
                         # Gap > 2 pixels detected, save current group's middle position
                         middle = (group_start + group_end) // 2
                         merged_lines.append(middle)
                         # Start new group
-                        group_start = line_coordinates[i]
-                        group_end = line_coordinates[i]
+                        group_start = line_coords[i]
+                        group_end = line_coords[i]
                 # Don't forget the last group
                 middle = (group_start + group_end) // 2
                 merged_lines.append(middle)
-                line_coordinates = merged_lines
+                line_coords = merged_lines
             # Scale line coordinates back to original frame dimensions
             if width_scale != 1.0:
-                line_coordinates = [int(x * width_scale) for x in line_coordinates]
+                line_coords = [int(x * width_scale) for x in line_coords]
             # Sort coordinates for consistent processing
-            line_coordinates.sort()
-            return line_coordinates
+            line_coords.sort()
+            return line_coords
 
         except Exception as e:
             # print(f"    Error in line detection: {e}")

@@ -1926,54 +1926,54 @@ class Api:
             height, width = laplacian.shape
             # Vectorized column density calculation (10x faster than Python loop)
             column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
-            line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
+            line_coords = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
             # Merge adjacent lines (consecutive x-coordinates) into single lines
             # Takes the middle position of each group of adjacent pixels
             # lines must be within 2 pixels to be considered part of the same group
-            if line_coordinates:
+            if line_coords:
                 merged_lines = []
-                group_start = line_coordinates[0]
-                group_end = line_coordinates[0]
-                for i in range(1, len(line_coordinates)):
-                    if line_coordinates[i] <= group_end + 2:
+                group_start = line_coords[0]
+                group_end = line_coords[0]
+                for i in range(1, len(line_coords)):
+                    if line_coords[i] <= group_end + 2:
                         # Within 2 pixels, extend current group
-                        group_end = line_coordinates[i]
+                        group_end = line_coords[i]
                     else:
                         # Gap > 2 pixels detected, save current group's middle position
                         middle = (group_start + group_end) // 2
                         merged_lines.append(middle)
                         # Start new group
-                        group_start = line_coordinates[i]
-                        group_end = line_coordinates[i]
+                        group_start = line_coords[i]
+                        group_end = line_coords[i]
                 # Don't forget the last group
                 middle = (group_start + group_end) // 2
                 merged_lines.append(middle)
-                line_coordinates = merged_lines
+                line_coords = merged_lines
             # Scale line coordinates back to original frame dimensions
             if width_scale != 1.0:
-                line_coordinates = [int(x * width_scale) for x in line_coordinates]
+                line_coords = [int(x * width_scale) for x in line_coords]
             # Sort coordinates for consistent processing
-            line_coordinates.sort()
-            return line_coordinates
+            line_coords.sort()
+            return line_coords
 
         except Exception as e:
             # print(f"    Error in line detection: {e}")
             return []
 
-    def get_colors_at_lines(self, frame, line_coordinates):
+    def get_colors_at_lines(self, frame, line_coords):
         """
         Get the color at each vertical line position.
         
         Args:
             frame: BGR image
-            line_coordinates: List of x-coordinates from _detect_lines_in_frame
+            line_coords: List of x-coordinates from _detect_lines_in_frame
         
         Returns:
             List of colors for each line position [B, G, R]
         """
         colors = []
         
-        for x in line_coordinates:
+        for x in line_coords:
             # Make sure x is within image bounds
             if 0 <= x < frame.shape[1]:
                 # For vertical lines, you might want to sample multiple y positions
@@ -2705,7 +2705,7 @@ class Api:
         fish_size = 10
         note_x = 0
         note_y_ratio = 0
-        line_coordinates = []
+        line_coords = []
         bar_size = 0
         bar_center = 0
         error = 0
@@ -2793,8 +2793,8 @@ class Api:
                         # Use Cache
                         bar_detected = False
             else:
-                line_coordinates = self._detect_lines_in_frame(fish_img)
-                line_colors = self.get_colors_at_lines(fish_img, line_coordinates)
+                line_coords = self._detect_lines_in_frame(fish_img)
+                line_colors = self.get_colors_at_lines(fish_img, line_coords)
             # Bag Spam & Lock Cursor
             bag_spam_cycle += 1
             if bag_spam_cycle == 5:

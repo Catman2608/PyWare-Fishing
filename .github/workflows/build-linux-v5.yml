@@ -47,16 +47,16 @@ jobs:
 
             - name: Build Linux executable with PyInstaller
               run: |
-                  pyinstaller --onefile --windowed PyWareFishingV4.py --name PyWareFishingV4 --icon="icon.ico"
+                  pyinstaller --onefile --windowed PyWareFishingV5.py --name PyWareFishingV5 --icon="icon.ico"
 
             - name: List dist contents
               run: |
                   ls -la dist/
-                  ls -la dist/PyWareFishingV4
+                  ls -la dist/PyWareFishingV5
 
             - name: Upload Linux executable artifact
               uses: actions/upload-artifact@v4
               with:
                   name: Linux-Executable
-                  path: dist/PyWareFishingV4
+                  path: dist/PyWareFishingV5
                   if-no-files-found: error

@@ -6,6 +6,10 @@ from tkinter import messagebox
 # Text parsing
 import json
 import re
+# Computer vision
+import cv2
+import numpy as np
+import mss
 # Misc
 import traceback
 import threading
@@ -18,17 +22,7 @@ import sys
 import webbrowser
 import os
 import shutil
-# OCR (with fallback if user didn't install Tesseract)
-try:
-    import pytesseract
-    if sys.platform == "win32":
-        possible = shutil.which("tesseract")
-        if possible:
-            pytesseract.pytesseract.tesseract_cmd = possible
-    else:
-        pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
-except:
-    pytesseract = None
+from pathlib import Path
 # Keyboard and Mouse clicks (platform-specific)
 from pynput.keyboard import Listener as KeyListener, Key
 from pynput import keyboard, mouse
@@ -44,11 +38,17 @@ elif sys.platform == "darwin":
 elif sys.platform == "linux":
     from Xlib import X, XK, display as Xdisplay
     from Xlib.ext import xtest
-# Mathematics and Detection
-import cv2
-import numpy as np
-import mss
-from pathlib import Path
+# OCR (with fallback if user didn't install Tesseract)
+try:
+    import pytesseract
+    if sys.platform == "win32":
+        possible = shutil.which("tesseract")
+        if possible:
+            pytesseract.pytesseract.tesseract_cmd = possible
+    else:
+        pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+except:
+    pytesseract = None
 # Define platform-specific constants
 # All platforms
 keyboard_controller = KeyboardController()
@@ -56,7 +56,7 @@ mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
 APP_VERSION = 5.0
-BETA_VERSION = 2
+BETA_VERSION = 3
 DEVELOPER = "Catman2608"
 def get_macos_menu_offset():
     if sys.platform != "darwin":
@@ -133,9 +133,6 @@ if sys.platform == "win32":
     MOUSEEVENTF_RIGHTDOWN = 0x0008
     MOUSEEVENTF_RIGHTUP = 0x0010
     # Ctypes GUI constants
-    GWL_EXSTYLE = -20
-    WS_EX_LAYERED = 0x00080000
-    LWA_ALPHA = 0x00000002
     SW_MAXIMIZE = 3
     user32 = ctypes.windll.user32
     user32.GetWindowLongW.restype = wintypes.LONG
@@ -413,25 +410,101 @@ def open_base_folder():
         subprocess.run(["open", folder])
     else:  # Linux
         subprocess.run(["xdg-open", folder])
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Central area definitions.  To add a new selectable area:
+#   1. Add an entry below (key, color, label, default ratios 0–1).
+#   2. That's it — selector UI, save/load, defaults, and the show/hide menu
+#      all pick it up automatically.  Use get_areas("your_key") later if needed.
+# ─────────────────────────────────────────────────────────────────────────────
+AREA_CONFIG = {
+    "shake": {
+        "color": "#ff007a",
+        "label": "Shake Box",
+        "default": {"x": 0.1041, "y": 0.0925, "width": 0.7917, "height": 0.6963},
+    },
+    "fish": {
+        "color": "#00daff",
+        "label": "Fish Box",
+        "default": {"x": 0.2844, "y": 0.7981, "width": 0.4297, "height": 0.0389},
+    },
+    "friend": {
+        "color": "#f7ff00",
+        "label": "Friend Box (Fish End)",
+        "default": {"x": 0.0046, "y": 0.8583, "width": 0.0355, "height": 0.0817},
+    },
+    "totem": {
+        "color": "#9cff94",
+        "label": "Totem Box (Day/Night)",
+        "default": {"x": 0.9531, "y": 0.8333, "width": 0.0208, "height": 0.0463},
+    },
+    "appraisal": {
+        "color": "#a36700",
+        "label": "Appraisal Box (Dialogue)",
+        "default": {"x": 0.3364, "y": 0.4453, "width": 0.3385, "height": 0.1629},
+    },
+}
+# Display / iteration order (also used for number-key toggles 1–9 in the selector)
+AREA_ORDER = list(AREA_CONFIG.keys())
+
 class AreaSelector:
     """
     Fullscreen transparent overlay implemented as a second pywebview window.
-    The HTML canvas handles all drawing and drag/resize interaction.
-    Python is only needed for:
-      - supplying initial area data  (get_areas)
-      - receiving live mouse status  (on_mouse_move)
-      - receiving final saved areas  (save_areas)
+    Long-lived instance: call show() / hide() / update() as needed.
+
+    Areas are fully data-driven via the module-level AREA_CONFIG / AREA_ORDER.
+    Adding a new area requires only a new entry in AREA_CONFIG.
     """
     HTML_FILE = os.path.join(UI_PATH, "area_selector.html")
+
     def __init__(self, parent_app):
         self.parent_app = parent_app
         self.area_window = None
         self._open = False
         self._areas = {}
+        self._visible = {name: True for name in AREA_ORDER}
+        self._screen_capture = None
+        self._screenshot_b64 = None
+
+    def _capture_and_crop(self):
+        """Capture full screen and remove the macOS menu bar strip so the
+        image matches the frameless window geometry (no menu bar)."""
+        frame = self.parent_app.capture_single_frame()
+        if frame is None:
+            return None
+        if frame.ndim == 3 and frame.shape[2] == 4:
+            frame = frame[:, :, :3].copy()
+        menu_offset = get_macos_menu_offset()
+        scale = get_scale_factor()
+        if scale <= 0:
+            scale = 1.0
+        self._scale = scale
+        if menu_offset > 0:
+            crop = int(round(menu_offset * scale))
+            if 0 < crop < frame.shape[0]:
+                frame = frame[crop:, :, :].copy()
+        frame = np.clip(frame.astype(np.int16) - 15, 0, 255).astype(np.uint8)
+        return frame
+
+    def _encode_screenshot(self, frame):
+        """Encode BGR numpy frame as a JPEG data-URL for the canvas."""
+        if frame is None:
+            return None
+        try:
+            # JPEG keeps the payload small enough for evaluate_js
+            ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            if not ok:
+                return None
+            b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+            return "data:image/jpeg;base64," + b64
+        except Exception:
+            return None
 
     def show(self):
         if self._open and self.area_window:
             return
+        self._screen_capture = self._capture_and_crop()
+        self._screenshot_b64 = self._encode_screenshot(self._screen_capture)
         menu_offset = get_macos_menu_offset()
         self.area_window = webview.create_window(
             "Area Selector", self.HTML_FILE, js_api=self,
@@ -442,22 +515,28 @@ class AreaSelector:
         self._open = True
         self.area_window.events.closed += self._on_closed
         if sys.platform == "win32":
-            # Maximize on Windows after the window is created
             def maximize_area_selector():
                 try:
                     hwnd = _get_hwnd(self.area_window)
                     if hwnd:
                         user32.ShowWindow(wintypes.HWND(hwnd), SW_MAXIMIZE)
                 except Exception as e:
-                    self.parent.set_status("Failed to maximize area selector:", e)
+                    try:
+                        self.parent_app.set_status(f"Failed to maximize area selector: {e}")
+                    except Exception:
+                        print("Failed to maximize area selector:", e)
             self.area_window.events.shown += maximize_area_selector
+
     def _to_ratios(self, area):
         """Accept normalized areas and legacy pixel areas, store normalized values."""
         if not isinstance(area, dict):
             return {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
-        values = {"x": float(area.get("x", 0)), "y": float(area.get("y", 0)),
-                  "width": float(area.get("width", area.get("w", 0))),
-                  "height": float(area.get("height", area.get("h", 0)))}
+        values = {
+            "x": float(area.get("x", 0)),
+            "y": float(area.get("y", 0)),
+            "width": float(area.get("width", area.get("w", 0))),
+            "height": float(area.get("height", area.get("h", 0))),
+        }
         if any(abs(values[key]) > 1 for key in values):
             values["x"] /= SCREEN_WIDTH
             values["y"] /= SCREEN_HEIGHT
@@ -465,45 +544,99 @@ class AreaSelector:
             values["height"] /= SCREEN_HEIGHT
         return values
 
-    def update(self, shake_area, fish_area, friend_area, totem_area):
-        self._areas = {"shake": self._to_ratios(shake_area), "fish": self._to_ratios(fish_area),
-                       "friend": self._to_ratios(friend_area), "totem": self._to_ratios(totem_area)}
+    def update(self, area_name, area_dict):
+        """Set one area by name (ratios or legacy pixels)."""
+        self._areas[area_name] = self._to_ratios(area_dict)
+
+    def update_all(self, areas_dict):
+        """Bulk-load every known area from a {name: dict} mapping."""
+        for name in AREA_ORDER:
+            src = (areas_dict or {}).get(name)
+            if not isinstance(src, dict):
+                src = AREA_CONFIG[name]["default"]
+            self._areas[name] = self._to_ratios(src)
+
+    def get_area_config(self):
+        """Return colours, labels, order and visibility so JS stays data-driven."""
+        return {
+            "order": list(AREA_ORDER),
+            "areas": {
+                name: {"color": cfg["color"], "label": cfg["label"]}
+                for name, cfg in AREA_CONFIG.items()
+            },
+            "visible": dict(self._visible),
+        }
+
+    def set_visibility(self, visible_dict):
+        """Keep Python in sync when the overlay panel toggles boxes."""
+        if isinstance(visible_dict, dict):
+            for name, val in visible_dict.items():
+                if name in self._visible:
+                    self._visible[name] = bool(val)
 
     def get_areas(self):
+        """Return canvas-relative pixel boxes for JS (menu-bar offset subtracted)."""
         menu_offset = get_macos_menu_offset()
         result = {}
         for name, area in self._areas.items():
-            result[name] = {"x": area["x"] * SCREEN_WIDTH,
-                            "y": area["y"] * SCREEN_HEIGHT - menu_offset,
-                            "width": area["width"] * SCREEN_WIDTH,
-                            "height": area["height"] * SCREEN_HEIGHT}
+            result[name] = {
+                "x": area["x"] * SCREEN_WIDTH,
+                "y": area["y"] * SCREEN_HEIGHT - menu_offset,
+                "width": area["width"] * SCREEN_WIDTH,
+                "height": area["height"] * SCREEN_HEIGHT,
+            }
         return result
 
     def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
         if not self._open:
             return
         menu_offset = get_macos_menu_offset()
-        for name in ("shake", "fish", "friend", "totem"):
+        for name in AREA_ORDER:
             box = current_boxes.get(name, {})
             if box:
                 self._areas[name] = self._pixels_to_ratios(box, menu_offset)
+            b = current_boxes.get(name)
+            if b and self._visible.get(name, True):
+                bx, by = float(b.get("x", 0)), float(b.get("y", 0))
+                bw = float(b.get("width", b.get("w", 0)) or 1)
+                bh = float(b.get("height", b.get("h", 0)) or 1)
+                mx, my = float(mouse_x or 0), float(mouse_y or 0)
+                if bx <= mx <= bx + bw and by <= my <= by + bh:
+                    xr = round((mx - bx) / bw, 2)
+                    yr = round((my - by) / bh, 2)
+                    try:
+                        self.parent_app.set_status(f"{name.upper()} → X: {xr:.2f}  Y: {yr:.2f}")
+                    except Exception:
+                        pass
+                    break
 
     def _pixels_to_ratios(self, box, menu_offset=0):
-        return {"x": float(box.get("x", 0)) / SCREEN_WIDTH,
-                "y": (float(box.get("y", 0)) + menu_offset) / SCREEN_HEIGHT,
-                "width": float(box.get("width", box.get("w", 0))) / SCREEN_WIDTH,
-                "height": float(box.get("height", box.get("h", 0))) / SCREEN_HEIGHT}
+        return {
+            "x": float(box.get("x", 0)) / SCREEN_WIDTH,
+            "y": (float(box.get("y", 0)) + menu_offset) / SCREEN_HEIGHT,
+            "width": float(box.get("width", box.get("w", 0))) / SCREEN_WIDTH,
+            "height": float(box.get("height", box.get("h", 0))) / SCREEN_HEIGHT,
+        }
 
     def window_ready(self, win_x, win_y):
-        # Kept as part of the JS API for compatibility; area coordinates are
-        # intentionally relative to the captured primary monitor.
+        """JS signals the page is ready — push the frozen screenshot."""
+        if self._screenshot_b64 and self.area_window and self._open:
+            # Inject via a short data reference; JS stores it and draws.
+            try:
+                # Pass as return value of a dedicated getter instead of
+                # embedding a huge string in evaluate_js when possible.
+                self.area_window.evaluate_js(
+                    "window.__applyScreenshot && window.__applyScreenshot()"
+                )
+            except Exception:
+                pass
         return None
 
     def save_areas(self, areas):
         if not self._open:
             return
         menu_offset = get_macos_menu_offset()
-        for name in ("shake", "fish", "friend", "totem"):
+        for name in AREA_ORDER:
             if name in areas:
                 self._areas[name] = self._pixels_to_ratios(areas[name], menu_offset)
         self.parent_app.bar_areas.update(self._areas)
@@ -515,6 +648,10 @@ class AreaSelector:
                 self.area_window.destroy()
             except Exception:
                 pass
+
+    def get_screenshot_data(self):
+        """Return the data-URL of the frozen (menu-bar-cropped) screenshot."""
+        return self._screenshot_b64 or ""
 
     def _on_closed(self):
         if self._open:
@@ -890,7 +1027,7 @@ class FishOverlay:
         """Clears rendering elements inside the web view context."""
         self._eval("window.fishOverlay && window.fishOverlay.clear()")
 
-    def draw(self, bar_center, box_size, color, canvas_offset,
+    def draw_box(self, bar_center, box_size, color, canvas_offset,
              show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
         """Evaluates JS drawing contexts based on calculations inside the viewport.
 
@@ -958,7 +1095,7 @@ class Api:
         self.macro_running = False
         self.macro_thread = None
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
-        self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
+        self.bar_areas = {name: None for name in AREA_ORDER}
         self.current_rod_name = "Basic Rod"
         self.scale_x_1440 = self.SCREEN_WIDTH / 2560
         self.scale_y_1440 = self.SCREEN_HEIGHT / 1440
@@ -1180,7 +1317,7 @@ class Api:
         """Load miscellaneous settings from last_config.json."""
         # Defaults
         self.current_rod_name = "Default"
-        self.bar_areas = {"shake": None, "fish": None, "friend": None, "totem": None}
+        self.bar_areas = {name: None for name in AREA_ORDER}
         # Default Hotkeys
         start_key  = "F5"
         change_key = "F6"
@@ -1194,7 +1331,7 @@ class Api:
                 data = json.load(f)
             # Bar Areas
             loaded_areas = data.get("bar_areas", {})
-            for key in ["shake", "fish", "friend", "totem"]:
+            for key in AREA_ORDER:
                 area = loaded_areas.get(key)
                 if isinstance(area, dict):
                     self.bar_areas[key] = {
@@ -1227,7 +1364,7 @@ class Api:
 
         # Clean Areas
         clean_bar_areas = {}
-        for key in ["shake", "fish", "friend", "totem"]:
+        for key in AREA_ORDER:
             area = self.bar_areas.get(key)
             if isinstance(area, dict):
                 clean_bar_areas[key] = {
@@ -1437,74 +1574,54 @@ class Api:
 
     # Area Selector
     def open_area_selector(self):
-        scale = get_scale_factor()
-        def default_shake_area():
-            return {"x": 0.1041, "y": 0.0925, "width": 0.8958 - 0.1041, "height": 0.7888 - 0.0925}
-        def default_fish_area():
-            return {"x": 0.2844, "y": 0.7981, "width": 0.7141 - 0.2844, "height": 0.8370 - 0.7981}
-        def default_friend_area():
-            return {"x": 0.0046, "y": 0.8583, "width": 0.0401 - 0.0046, "height": 0.94 - 0.8583}
-        def default_totem_area():
-            return {"x": 0.9531, "y": 0.8333, "width": 0.9739 - 0.9531, "height": 0.8796 - 0.8333}
-        # Load Saved Areas Or Fallback
-        shake_area = (self.bar_areas.get("shake") 
-                    if isinstance(self.bar_areas.get("shake"), dict) else default_shake_area())
-        fish_area = (self.bar_areas.get("fish") 
-                    if isinstance(self.bar_areas.get("fish"), dict) else default_fish_area())
-        friend_area = (self.bar_areas.get("friend") 
-                    if isinstance(self.bar_areas.get("friend"), dict) else default_friend_area())
-        totem_area = (self.bar_areas.get("totem") 
-                    if isinstance(self.bar_areas.get("totem"), dict) else default_totem_area())
+        # Build current areas from bar_areas or AREA_CONFIG defaults (all keys, including appraisal)
+        areas = {}
+        for name in AREA_ORDER:
+            a = self.bar_areas.get(name)
+            areas[name] = a if isinstance(a, dict) else dict(AREA_CONFIG[name]["default"])
+
         if hasattr(self, "area_selector") and self.area_selector and self.area_selector.is_open():
             self.area_selector.hide()
         else:
             self.area_selector.show()
-            self.area_selector.update(shake_area=shake_area, fish_area=fish_area, friend_area=friend_area, totem_area=totem_area,)
+            self.area_selector.update_all(areas)
     # Debug Screenshots
     def take_debug_screenshot(self):
         """
-        Capture all relevant areas (shake, fish, friend, totem, full)
-        and save debug images.
+        Capture every area in AREA_ORDER plus a full-screen shot, and save
+        debug images as debug_<name>.png / debug_full.png.
         """
-        shake_l, shake_t, shake_r, shake_b, _, _ = self.get_areas("shake")
-        fish_l, fish_t, fish_r, fish_b, _, _ = self.get_areas("fish")
-        friend_l, friend_t, friend_r, friend_b, _, _ = self.get_areas("friend")
-        totem_l, totem_t, totem_r, totem_b, _, _ = self.get_areas("totem")
         full_img = self.capture_single_frame()
         if full_img is None:
             self.set_status("Full screen is empty")
             return
 
-        # Save full screenshot for debugging
         try:
             cv2.imwrite(os.path.join(BASE_PATH, "debug_full.png"), full_img)
         except Exception as e:
             self.set_status(f"Error saving full screenshot: {e}")
             return
 
-        # Save Individual Regions
+        saved = ["full"]
         try:
-            cv2.imwrite(
-                os.path.join(BASE_PATH, "debug_fish.png"),
-                full_img[fish_t:fish_b, fish_l:fish_r]
-            )
-            cv2.imwrite(
-                os.path.join(BASE_PATH, "debug_shake.png"),
-                full_img[shake_t:shake_b, shake_l:shake_r]
-            )
-            cv2.imwrite(
-                os.path.join(BASE_PATH, "debug_friend.png"),
-                full_img[friend_t:friend_b, friend_l:friend_r]
-            )
-            cv2.imwrite(
-                os.path.join(BASE_PATH, "debug_totem.png"),
-                full_img[totem_t:totem_b, totem_l:totem_r]
-            )
+            for name in AREA_ORDER:
+                left, top, right, bottom, _, _ = self.get_areas(name)
+                # Clamp to image bounds
+                h, w = full_img.shape[:2]
+                top = max(0, min(top, h - 1))
+                bottom = max(top + 1, min(bottom, h))
+                left = max(0, min(left, w - 1))
+                right = max(left + 1, min(right, w))
+                crop = full_img[top:bottom, left:right]
+                if crop.size == 0:
+                    continue
+                cv2.imwrite(os.path.join(BASE_PATH, f"debug_{name}.png"), crop)
+                saved.append(name)
         except Exception as e:
             self.set_status(f"Error saving region screenshots: {e}")
             return
 
-        self.set_status("Saved debug screenshots (fish, shake, friend, totem, full)")
+        self.set_status(f"Saved debug screenshots ({', '.join(saved)})")
     # Eyedropper
     def start_eyedropper(self, color_key=None):
         """Open the color picker overlay.
@@ -1741,26 +1858,16 @@ class Api:
         return left2, top2, right2, bottom2, width2, height2
 
     def _get_default_areas(self, area):
-        if area == "shake":
-            left = int(self.SCREEN_WIDTH * 0.1041)
-            top = int(self.SCREEN_HEIGHT * 0.0925)
-            right = int(self.SCREEN_WIDTH * 0.8958)
-            bottom = int(self.SCREEN_HEIGHT * 0.7888)
-        elif area == "fish":
-            left   = int(self.SCREEN_WIDTH  * 0.2844)
-            top    = int(self.SCREEN_HEIGHT * 0.7981)
-            right  = int(self.SCREEN_WIDTH  * 0.7141)
-            bottom = int(self.SCREEN_HEIGHT * 0.8370)
-        elif area == "friend":
-            left = int(self.SCREEN_WIDTH * 0.0046)
-            top = int(self.SCREEN_HEIGHT * 0.8583)
-            right = int(self.SCREEN_WIDTH * 0.0401)
-            bottom = int(self.SCREEN_HEIGHT * 0.94)
+        """Return (left, top, right, bottom) in physical pixels using AREA_CONFIG defaults."""
+        cfg = AREA_CONFIG.get(area)
+        if cfg:
+            d = cfg["default"]
+            left   = int(self.SCREEN_WIDTH  * d["x"])
+            top    = int(self.SCREEN_HEIGHT * d["y"])
+            right  = int(self.SCREEN_WIDTH  * (d["x"] + d["width"]))
+            bottom = int(self.SCREEN_HEIGHT * (d["y"] + d["height"]))
         else:
-            left = int(self.SCREEN_WIDTH * 0.9531)
-            top = int(self.SCREEN_HEIGHT * 0.8333)
-            right = int(self.SCREEN_WIDTH * 0.9739)
-            bottom = int(self.SCREEN_HEIGHT * 0.8796)
+            left, top, right, bottom = 0, 0, self.SCREEN_WIDTH, self.SCREEN_HEIGHT
         return left, top, right, bottom
 
     def _get_var_number(self, key, default, cast=float):
@@ -2057,71 +2164,65 @@ class Api:
             height, width = laplacian.shape
             # Vectorized column density calculation (10x faster than Python loop)
             column_densities = np.sum(laplacian > BRIGHTNESS_THRESHOLD, axis=0) / height
-            line_coordinates = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
+            line_coords = np.where(column_densities >= MIN_LINE_DENSITY)[0].tolist()
             # Merge adjacent lines (consecutive x-coordinates) into single lines
             # Takes the middle position of each group of adjacent pixels
             # lines must be within 2 pixels to be considered part of the same group
-            if line_coordinates:
+            if line_coords:
                 merged_lines = []
-                group_start = line_coordinates[0]
-                group_end = line_coordinates[0]
-                for i in range(1, len(line_coordinates)):
-                    if line_coordinates[i] <= group_end + 2:
+                group_start = line_coords[0]
+                group_end = line_coords[0]
+                for i in range(1, len(line_coords)):
+                    if line_coords[i] <= group_end + 2:
                         # Within 2 pixels, extend current group
-                        group_end = line_coordinates[i]
+                        group_end = line_coords[i]
                     else:
                         # Gap > 2 pixels detected, save current group's middle position
                         middle = (group_start + group_end) // 2
                         merged_lines.append(middle)
                         # Start new group
-                        group_start = line_coordinates[i]
-                        group_end = line_coordinates[i]
+                        group_start = line_coords[i]
+                        group_end = line_coords[i]
                 # Don't forget the last group
                 middle = (group_start + group_end) // 2
                 merged_lines.append(middle)
-                line_coordinates = merged_lines
+                line_coords = merged_lines
             # Scale line coordinates back to original frame dimensions
             if width_scale != 1.0:
-                line_coordinates = [int(x * width_scale) for x in line_coordinates]
+                line_coords = [int(x * width_scale) for x in line_coords]
             # Sort coordinates for consistent processing
-            line_coordinates.sort()
-            return line_coordinates
+            line_coords.sort()
+            return line_coords
 
         except Exception as e:
             # print(f"    Error in line detection: {e}")
             return []
-
-    def get_colors_at_lines(self, frame, line_coordinates):
+        
+    def get_colors_at_lines(self, frame, line_coords):
         """
-        Get the color at each vertical line position.
+        Get the color at each vertical line position as #RRGGBB hex strings.
         
         Args:
             frame: BGR image
-            line_coordinates: List of x-coordinates from _detect_lines_in_frame
+            line_coords: List of x-coordinates from _detect_lines_in_frame
         
         Returns:
-            List of colors for each line position [B, G, R]
+            List of '#RRGGBB' color strings for each line position, or None if out of bounds
         """
         colors = []
-        
-        for x in line_coordinates:
+
+        for x in line_coords:
             # Make sure x is within image bounds
             if 0 <= x < frame.shape[1]:
-                # For vertical lines, you might want to sample multiple y positions
-                # and average them to get the line's color
                 height = frame.shape[0]
-                
-                # Option 1: Get color at center of the frame
+
                 y_center = height // 2
-                color = frame[y_center, x]
-                
-                # Option 2: Average color along the entire vertical line
-                # color = np.mean(frame[:, x], axis=0).astype(int)
-                
-                colors.append(color.tolist())
+                # BGR tuple → convert to RRGGBB hex string
+                b, g, r = frame[y_center, x].tolist()
+                colors.append(f"#{r:02x}{g:02x}{b:02x}")
             else:
-                colors.append(None)  # Out of bounds
-        
+                colors.append(None)
+
         return colors
 
     def auto_crop_template(self, template, lower_white=200):
@@ -2313,6 +2414,17 @@ class Api:
             self.set_status(f"Debug log saved ({loop_count})")
         except Exception as e:
             self.set_status(f"Error writing debug log: {e}")
+
+    def start_appraisal(self):
+        time.sleep(0.05)
+        self.stop_macro("Appraisal is not implemented yet")
+    def start_enchantment(self):
+        time.sleep(0.05)
+        self.stop_macro("Enchantment is not implemented yet")
+
+    def start_angler(self):
+        time.sleep(0.05)
+        self.stop_macro("Angler is not implemented yet")
 
     def start_fishing(self):
         # 1. Core Config & Modes
@@ -2832,11 +2944,12 @@ class Api:
         # Last values (failsafe)
         is_initial_run = True
         last_arrow_x = False
+        bar_detected = False
         bag_spam_cycle = 0
         fish_size = 10
         note_x = 0
         note_y_ratio = 0
-        line_coordinates = []
+        line_coords = []
         bar_size = 0
         bar_center = 0
         error = 0
@@ -2924,8 +3037,13 @@ class Api:
                         # Use Cache
                         bar_detected = False
             else:
-                line_coordinates = self._detect_lines_in_frame(fish_img)
-                line_colors = self.get_colors_at_lines(fish_img, line_coordinates)
+                line_coords = self._detect_lines_in_frame(fish_img)
+                colors = self.get_colors_at_lines(fish_img, line_coords)
+                if is_initial_run == True:
+                    fish_x = np.mean(line_coords)
+                    line_mean = int(round(len(line_coords) / 2))
+                    left_x = line_coords[line_mean - 1]
+                    right_x = line_coords[line_mean + 1]
             # Bag Spam & Lock Cursor
             bag_spam_cycle += 1
             if bag_spam_cycle == 5:
@@ -2957,15 +3075,15 @@ class Api:
             else:
                 # print("Note Tracking Disabled")
                 note_y_ratio = 0.0
-            if fishing_profile == "notes":
-                # Catch fails if the note ratio becomes 1 and the bar can't catch it; stays success only if note ratio is less than 0.9
-                if note_y_ratio > 0.9:
-                    self.catch_success = 1
-            else:
-                # Catch fails if the fish ever leaves the bar; stays success only if fish stays inside the whole time
-                if left_x is not None and right_x is not None and fish_x is not None:
-                    if not (left_x <= fish_x <= right_x):
+                if fishing_profile == "notes":
+                    # Catch fails if the note ratio becomes 1 and the bar can't catch it; stays success only if note ratio is less than 0.9
+                    if note_y_ratio > 0.9:
                         self.catch_success = 1
+                else:
+                    # Catch fails if the fish ever leaves the bar; stays success only if fish stays inside the whole time
+                    if left_x is not None and right_x is not None and fish_x is not None:
+                        if not (left_x <= fish_x <= right_x):
+                            self.catch_success = 1
             # Edge Boundary
             if bar_size is not None:
                 boundary = bar_size * bar_ratio_from_side
@@ -2978,40 +3096,49 @@ class Api:
             # print("Last Cache: ", bar_center - last_bar_center)
             # Fish Overlay
             if fish_overlay == "on":
-                self.fish_overlay.draw(
-                    bar_center=bar_center, box_size=bar_size,
-                    color="green", canvas_offset=0,
-                    show_bar_center=True
-                )
-                if left_boundary is not None:
-                    self.fish_overlay.draw(
-                        bar_center=left_boundary, box_size=15,
-                        color="lightblue", canvas_offset=0
+                if fishing_mode == "color":
+                    self.fish_overlay.draw_box(
+                        bar_center=bar_center, box_size=bar_size,
+                        color="green", canvas_offset=0,
+                        show_bar_center=True
                     )
-                if right_boundary is not None:
-                    self.fish_overlay.draw(
-                        bar_center=right_boundary, box_size=15,
-                        color="lightblue", canvas_offset=0
+                    if left_boundary is not None:
+                        self.fish_overlay.draw_box(
+                            bar_center=left_boundary, box_size=15,
+                            color="lightblue", canvas_offset=0
+                        )
+                    if right_boundary is not None:
+                        self.fish_overlay.draw_box(
+                            bar_center=right_boundary, box_size=15,
+                            color="lightblue", canvas_offset=0
+                        )
+                    if fish_x is not None:
+                        self.fish_overlay.draw_box(
+                            bar_center=fish_x, box_size=fish_size,
+                            color="red", canvas_offset=0
+                        )
+                else:
+                    self.fish_overlay.draw_box(
+                        bar_center=bar_center, box_size=bar_size,
+                        color="cyan", canvas_offset=0,
+                        show_bar_center=True, bar_y1=0.2, bar_y2=0.8
                     )
-                if fish_x is not None:
-                    self.fish_overlay.draw(
-                        bar_center=fish_x, box_size=fish_size,
-                        color="red", canvas_offset=0
-                    )
-                if fish_x == note_x:
-                    self.fish_overlay.draw(
-                        bar_center=last_fish_x, box_size=fish_size,
-                        color="orange", canvas_offset=0
-                    )
+                    for pos in range(len(line_coords)):
+                        self.fish_overlay.draw_box(bar_center=line_coords[pos], box_size=0, color=colors[pos], canvas_offset=0)
             # Controller Mode Selection
             current_controller_mode = controller_mode
-            if (left_x <= fish_x <= right_x) and controller_mode == "predictive":
-                current_controller_mode = "normal"
+            if left_x is not None and right_x is not None and fish_x is not None:
+                if (left_x <= fish_x <= right_x) and controller_mode == "predictive":
+                    current_controller_mode = "normal"
             # PD controller
             current_time = time.perf_counter()
             time_delta = current_time - last_time
             last_time = current_time
-            error = fish_x - bar_center
+            if fish_x is not None:
+                error = fish_x - bar_center
+            else:
+                error = 0
+                fish_x = 0
             if (fish_x < left_boundary):
                 control_signal = -30
             elif (fish_x > right_boundary):
