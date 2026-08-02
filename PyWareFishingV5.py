@@ -419,29 +419,34 @@ def open_base_folder():
 # ─────────────────────────────────────────────────────────────────────────────
 AREA_CONFIG = {
     "shake": {
-        "color": "#ff007a",
+        "color": "#df0000",
         "label": "Shake Box",
         "default": {"x": 0.1041, "y": 0.0925, "width": 0.7917, "height": 0.6963},
     },
     "fish": {
-        "color": "#00daff",
+        "color": "#00beff",
         "label": "Fish Box",
         "default": {"x": 0.2844, "y": 0.7981, "width": 0.4297, "height": 0.0389},
     },
     "friend": {
-        "color": "#f7ff00",
+        "color": "#ffed00",
         "label": "Friend Box (Fish End)",
         "default": {"x": 0.0046, "y": 0.8583, "width": 0.0355, "height": 0.0817},
     },
     "totem": {
-        "color": "#9cff94",
+        "color": "#00de07",
         "label": "Totem Box (Day/Night)",
         "default": {"x": 0.9531, "y": 0.8333, "width": 0.0208, "height": 0.0463},
     },
-    "appraisal": {
-        "color": "#a36700",
-        "label": "Appraisal Box (Dialogue)",
-        "default": {"x": 0.3364, "y": 0.4453, "width": 0.3385, "height": 0.1629},
+    "appraisal_dialogue": {
+        "color": "#000fff",
+        "label": "Dialogue Box (Appraisal)",
+        "default": {"x": 0.3343, "y": 0.4156, "width": 0.3385, "height": 0.1629},
+    },
+    "appraisal_hotbar": {
+        "color": "#e78300",
+        "label": "Hotbar Box (Appraisal)",
+        "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
     },
 }
 # Display / iteration order (also used for number-key toggles 1–9 in the selector)
@@ -1506,7 +1511,6 @@ class Api:
             )
             if not os.path.exists(config_path):
                 return {
-
                     "success": True
                 }
             with open(config_path, "r") as f:
@@ -1514,12 +1518,16 @@ class Api:
             # Remove saved custom areas
             config_data.pop("bar_areas", None)
             with open(config_path, "w") as f:
-                json.dump(config_data,f,indent=4)
+                json.dump(config_data, f, indent=4)
+
+            # Also reset the in-memory areas so they take effect immediately
+            if hasattr(self, "bar_areas"):
+                self.bar_areas = {}
+
             return {"success": True}
 
         except Exception as e:
             return {
-
                 "success": False,
                 "error": str(e)
             }
@@ -1568,6 +1576,27 @@ class Api:
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
         except Exception:
             pass
+
+    def message_box_javascript(self, message, clipboard_content):
+        try:
+            # Clean the error string so it doesn't break JavaScript execution syntax
+            # We escape backslashes, single quotes, and newlines
+            escaped_error = clipboard_content.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+            # Construct the self-invoking JS code block
+            js_code = f"""
+            (function() {{
+                let confirmed = confirm("{message}");
+                if (confirmed) {{
+                    navigator.clipboard.writeText('{escaped_error}')
+                        .then(() => alert("Error log copied to clipboard!"))
+                        .catch(err => alert("Failed to copy error: " + err));
+                }}
+            }})();
+            """
+            # Evaluate using the same 'window' reference your set_status uses
+            window.evaluate_js(js_code)
+        except Exception:
+            pass # Keep it safe just like set_status
 
     def _get_scale_factor(self):
         return get_scale_factor()
@@ -1669,7 +1698,7 @@ class Api:
             return key.char.lower()  # Letter Keys
 
         except AttributeError:
-            return str(key).replace("Key.", "").lower()
+            return str(key).replace("Key.", "").replace(" ", "").lower()
 
     def on_key_press(self, key):
         key = self.normalize_key(key)
@@ -1977,6 +2006,15 @@ class Api:
             self.capture_frame = cgimage_to_srgb_numpy(image)
             self.capture_id += 1
             time.sleep(self.scan_delay)
+
+    def process_image_for_ocr(self, img):
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # Upscale image
+        gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        # Sharpen contrast
+        gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
+        cv2.imwrite("fish.png", gray)
+        return gray
 
     def pixel_search(self, frame, hex, tolerance, mode=0):
         """
@@ -2416,8 +2454,58 @@ class Api:
             self.set_status(f"Error writing debug log: {e}")
 
     def start_appraisal(self):
-        time.sleep(0.05)
-        self.stop_macro("Appraisal is not implemented yet")
+        # Validate Tesseract
+        try:
+            tesseract_path = self.vars["tesseract_path"]
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            self.macro_running = True
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            self.message_box_javascript(f"An error occured during appraisal. Please copy the error and report the bug:\\n{e}\\nWould you like to copy the full crash log to your clipboard?", full_error)
+            self.macro_running = False
+            self.stop_macro(f"Appraisal error: {e}")
+        # Get areas
+        dialogue_left, dialogue_top, _, _, dialogue_width, dialogue_height = self.get_areas("appraisal_dialogue")
+        hotbar_left, hotbar_top, hotbar_right, hotbar_bottom, _, _ = self.get_areas("appraisal_hotbar")
+        # Split mutations (Sometimes it contains , at the end)
+        appraisal_mutations = self.vars["appraisal_mutations"]
+        appraisal_mutations_list = appraisal_mutations.split(",")
+        # Positions
+        appraisal_x_ratio = float(self.vars["appraisal_click_x"])
+        appraisal_y_ratio = float(self.vars["appraisal_click_y"])
+        appraisal_x = int(dialogue_width * appraisal_x_ratio) + dialogue_left
+        appraisal_y = int(dialogue_height * appraisal_y_ratio) + dialogue_top
+        click_delay = float(self.vars["click_delay"])
+        # Other calculations
+        logging_cycle = int(self.vars["logging_cycle"])
+        logging_mode = self.vars["logging_mode"].lower()
+        attempts = 0.0
+        # Main loop
+        time.sleep(0.1)
+        self._send_key("e", 0.05)
+        while self.macro_running:
+            attempts = attempts + 1
+            # Click
+            time.sleep(click_delay)
+            self._click_at(appraisal_x, appraisal_y)
+            # Detection
+            fish = self.capture_frame[hotbar_top:hotbar_bottom, hotbar_left:hotbar_right]
+            gray = self.process_image_for_ocr(fish)
+            text = pytesseract.image_to_string(gray, config="--psm 7")
+            for match in range(len(appraisal_mutations_list)):
+                # print("Requirements:", appraisal_mutations_list[match].lower().rstrip(",").replace(" ", ""))
+                # print("Text:", text.lower().rstrip(",").replace(" ", ""))
+                if appraisal_mutations_list[match].lower().rstrip(",").replace(" ", "") in text.lower().rstrip(",").replace(" ", ""):
+                    self.stop_macro("Appraisal finished")
+            if self.macro_running == False:
+                self.stop_macro("")
+            if round(attempts) == attempts and logging_mode != "disabled":
+                if attempts == logging_cycle:
+                    self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}", -1)
+                logging_cycle = logging_cycle + attempts
+        self.set_status("Macro Stopped")
+
     def start_enchantment(self):
         time.sleep(0.05)
         self.stop_macro("Enchantment is not implemented yet")
@@ -2436,6 +2524,7 @@ class Api:
         logging_mode = self.vars["logging_mode"].lower()
         click_after_minigame = self.vars["click_after_minigame"].lower()
         target_time = self.vars["target_time"].lower()
+        logging_cycle = int(self.vars["logging_cycle"])
         
         # 2. Hotkey & Inventory Slots
         bag_slot = str(self.vars["bag_slot"])
@@ -2580,7 +2669,9 @@ class Api:
                 self.catch_rate = successful_catches / self.current_cycle
                 catch_rate_percentage = int(self.catch_rate * 100)
                 if logging_mode != "disabled":
-                    self.send_logging("**Cycle Checkpoint**", f"Cycle #{self.current_cycle}", catch_rate_percentage)
+                    if self.current_cycle == logging_cycle:
+                        self.send_logging("**Cycle Checkpoint**", f"Cycle #{self.current_cycle}", catch_rate_percentage)
+                    logging_cycle = logging_cycle + self.current_cycle
             return
         except Exception as e:
             time.sleep(0.2)
@@ -2589,26 +2680,7 @@ class Api:
             error_line = error_lines[1].split("line ")
             error_line = error_line[1].split(",")
             error_line = error_line[0]
-            try:
-                # Clean the error string so it doesn't break JavaScript execution syntax
-                # We escape backslashes, single quotes, and newlines
-                escaped_error = full_error.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
-                # Construct the self-invoking JS code block
-                js_code = f"""
-                (function() {{
-                    let confirmed = confirm("An error at line {error_line} occured. Please copy the error and report the bug:\\n{e}\\nWould you like to copy the full crash log to your clipboard?");
-                    if (confirmed) {{
-                        navigator.clipboard.writeText('{escaped_error}')
-                            .then(() => alert("Error log copied to clipboard!"))
-                            .catch(err => alert("Failed to copy error: " + err));
-                    }}
-                }})();
-                """
-                # Evaluate using the same 'window' reference your set_status uses
-                window.evaluate_js(js_code)
-            except Exception:
-                pass # Keep it safe just like set_status
-
+            self.message_box_javascript(f"An error at line {error_line} occured. Please copy the error and report the bug:\\n{e}\\nWould you like to copy the full crash log to your clipboard?", full_error)
             if IS_COMPILED == False:
                 print(full_error)
             self.macro_running = False
@@ -3009,30 +3081,38 @@ class Api:
                     bar_detected = False
                     # Bars not found - scan for arrows
                     arrow_x, arrow_y = self.pixel_search(fish_img, arrow_color, arrow_tolerance)
-                    if arrow_x is not None:
-                        bar_detected = True
-                        try:
-                            arrow_direction = arrow_x - last_arrow_x
-                        except:
-                            arrow_direction = -1
-                        # Detect bar based on arrow (use previous bar ends as reference)
-                        if arrow_direction > 0:
-                            left_x = last_left_x
-                            right_x = arrow_x
+                    if last_left_x is None or last_right_x is None:
+                        last_left_x = 0
+                        last_right_x = 0
+                    if last_left_x == 0 or last_right_x == 0:
+                        if mouse_down == True:
+                            last_left_x = arrow_x
                         else:
+                            last_right_x = arrow_x
+                    if arrow_x is not None:
+                        arrow_on_left_side = arrow_x - last_bar_center
+                        dist_to_left = (arrow_x - last_left_x) if last_left_x is not None else fish_width
+                        dist_to_right = (arrow_x - last_right_x) if last_right_x is not None else fish_width
+                        proximity_threshold = int(last_bar_size / 4)
+                        # Flip decision if wrong
+                        if arrow_on_left_side:
+                            if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
+                                # Arrow is actually closer to RIGHT bar - we were wrong!
+                                arrow_on_left_side = False  # Flip the decision
+                        else:
+                            if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
+                                # Arrow is actually closer to LEFT bar - we were wrong!
+                                arrow_on_left_side = True  # Flip the decision
+                        if arrow_on_left_side:
                             left_x = arrow_x
                             right_x = last_right_x
-                        bar_center = int((left_x + right_x) / 2)
-                        bar_size = right_x - left_x
-                        try:
-                            last_half_bar_size = int(last_bar_size / 2)
-                        except:
-                            last_half_bar_size = int(bar_size / 2)
-                        if bar_size < last_half_bar_size:
-                            bar_size = last_bar_size
-                            right_x = left_x + bar_size
-                            bar_center = int((left_x + right_x) / 2)
-                        # print(f"Detection Source: Arrows | Left: {left_x} | Right: {right_x} | Arrow: {arrow_x}")
+                            if right_x is None or right_x == 0:
+                                right_x = left_x + bar_size
+                        else:
+                            right_x = arrow_x
+                            left_x = last_left_x
+                            if left_x is None or left_x == 0:
+                                left_x = right_x - bar_size
                     else:
                         # Use Cache
                         bar_detected = False
@@ -3127,9 +3207,6 @@ class Api:
                         self.fish_overlay.draw_box(bar_center=line_coords[pos], box_size=0, color=colors[pos], canvas_offset=0)
             # Controller Mode Selection
             current_controller_mode = controller_mode
-            if left_x is not None and right_x is not None and fish_x is not None:
-                if (left_x <= fish_x <= right_x) and controller_mode == "predictive":
-                    current_controller_mode = "normal"
             # PD controller
             current_time = time.perf_counter()
             time_delta = current_time - last_time
@@ -3155,6 +3232,10 @@ class Api:
                         p_term = error * kp
                         d_term = ((error - last_error) / time_delta) * kd
                         control_signal = p_term + d_term
+                        # print("error - last_error: ", error - last_error)
+                        # print("time_delta: ", time_delta)
+                        # print("p_term: ", p_term)
+                        # print("d_term: ", d_term)
                         last_error = error
                 elif current_controller_mode == "steady":
                     # Steady: Asymmetric PD controller with asymmetric damping
@@ -3193,9 +3274,7 @@ class Api:
                     if fish_x is None or bar_center is None:
                         control_signal = -30
                     # Calculate Velocities
-                    current_time = time.perf_counter()
                     if last_bar_center is not None and last_fish_x is not None:
-                        time_delta = current_time - last_time
                         if time_delta > 0:
                             raw_bar_velocity = (bar_center - last_bar_center) / time_delta
                             raw_target_velocity = (fish_x - last_fish_x) / time_delta
@@ -3203,8 +3282,6 @@ class Api:
                                                         (1 - velocity_smoothing) * color_check_bar_velocity)
                             color_check_target_velocity = (velocity_smoothing * raw_target_velocity + 
                                                             (1 - velocity_smoothing) * color_check_target_velocity)
-                    # Update Previous Values
-                    last_time = current_time
                     # Calculate error and relative velocity FIRST
                     try:
                         relative_velocity = float(color_check_bar_velocity - color_check_target_velocity)
@@ -3216,12 +3293,12 @@ class Api:
                     if not np.isfinite(relative_velocity):
                         control_signal = -30
                     # Calculate stopping distance based on relative velocity
-                    stopping_distance = abs(relative_velocity) * stopping_distance
+                    stopping_distance2 = abs(relative_velocity) * stopping_distance
                     # On-Bar: Use Stopping-Distance / Counter-Thrust Logic
-                    if error < -stopping_distance:
+                    if error < -stopping_distance2:
                         # Bar Is Left Of Fish Beyond Stopping Distance → Hold To Move Right
                         control_signal = 30
-                    elif error > stopping_distance:
+                    elif error > stopping_distance2:
                         # Bar Is Right Of Fish Beyond Stopping Distance → Release To Move Left
                         control_signal = -30
                     else:
@@ -3233,7 +3310,8 @@ class Api:
                             # Bar Moving Left Relative To Fish → Hold (Apply Right Thrust)
                             control_signal = 30
             # Mouse state
-            # print(f"Control Signal: {control_signal}")
+            # print(f"error: {error}")
+            # print(f"control_signal: {control_signal}")
             if control_signal > 0:
                 hold_mouse()
             else:

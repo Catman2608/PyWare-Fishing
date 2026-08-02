@@ -4,7 +4,7 @@ Step 2: Convert to application
 
 macOS command:
 pyinstaller --onedir --windowed \
---icon="icon.icns" --target-arch=universal2 --strip \
+--icon="icon.icns" --target-arch=arm64 --strip \
 "PyWareFishingV5.py"
 
 Windows command:
