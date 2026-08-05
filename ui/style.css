@@ -20,6 +20,7 @@
     --text-muted: #b9a8e8;
     --text-subtle: #9a88d0;
     --text-label: #c8b8f0;
+    --text-label2: #aaaaaa;
 }
 
 body {
@@ -454,6 +455,12 @@ button {
 .text label {
     color: var(--text-label);
     font-size: 15px;
+    min-width: 160px;
+}
+
+.description p {
+    color: var(--text-label2);
+    font-size: 12px;
     min-width: 160px;
 }
 

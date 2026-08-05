@@ -22,6 +22,7 @@ import sys
 import webbrowser
 import os
 import shutil
+import math
 from pathlib import Path
 # Keyboard and Mouse clicks (platform-specific)
 from pynput.keyboard import Listener as KeyListener, Key
@@ -438,6 +439,21 @@ AREA_CONFIG = {
         "label": "Totem Box (Day/Night)",
         "default": {"x": 0.9531, "y": 0.8333, "width": 0.0208, "height": 0.0463},
     },
+    "sovereign": {
+        "color": "#4200ff",
+        "label": "Sovereign Box (Bar)",
+        "default": {"x": 0.2844, "y": 0.7981, "width": 0.4297, "height": 0.0389},
+    },
+    "chat": {
+        "color": "#004383",
+        "label": "Chat Box",
+        "default": {"x": 0.3343, "y": 0.4156, "width": 0.3385, "height": 0.1629},
+    },
+    "angler_backpack": {
+        "color": "#ffe195",
+        "label": "Backpack Box",
+        "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
+    },
     "appraisal_dialogue": {
         "color": "#000fff",
         "label": "Dialogue Box (Appraisal)",
@@ -446,6 +462,16 @@ AREA_CONFIG = {
     "appraisal_hotbar": {
         "color": "#e78300",
         "label": "Hotbar Box (Appraisal)",
+        "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
+    },
+    "enchantment": {
+        "color": "#008363",
+        "label": "Enchantment Box (Text)",
+        "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
+    },
+    "angler_dialogue": {
+        "color": "#99ff95",
+        "label": "Backpack Box",
         "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
     },
 }
@@ -506,13 +532,41 @@ class AreaSelector:
             return None
 
     def show(self):
+        """Thin js_api object — only exposes the methods the HTML page calls.
+        Do NOT pass `self` (or any object that holds a reference to the
+        pywebview Window): on macOS Cocoa that triggers infinite recursion
+        via AccessibilityObject.Bounds."""
+        outer = self
+
+        class _AreaApi:
+            def get_area_config(self):
+                return outer.get_area_config()
+
+            def set_visibility(self, visible_dict):
+                return outer.set_visibility(visible_dict)
+
+            def get_areas(self):
+                return outer.get_areas()
+
+            def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
+                return outer.on_mouse_move(mouse_x, mouse_y, current_boxes)
+
+            def save_areas(self, areas):
+                return outer.save_areas(areas)
+
+            def get_screenshot_data(self):
+                return outer.get_screenshot_data()
+
+            def window_ready(self, win_x, win_y):
+                return outer.window_ready(win_x, win_y)
+
         if self._open and self.area_window:
             return
         self._screen_capture = self._capture_and_crop()
         self._screenshot_b64 = self._encode_screenshot(self._screen_capture)
         menu_offset = get_macos_menu_offset()
         self.area_window = webview.create_window(
-            "Area Selector", self.HTML_FILE, js_api=self,
+            "Area Selector", self.HTML_FILE, js_api=_AreaApi(),
             transparent=True, frameless=True, easy_drag=False, on_top=True,
             resizable=False, width=SCREEN_WIDTH, height=SCREEN_HEIGHT - menu_offset,
             x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000",
@@ -2462,7 +2516,9 @@ class Api:
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
-            self.message_box_javascript(f"An error occured during appraisal. Please copy the error and report the bug:\\n{e}\\nWould you like to copy the full crash log to your clipboard?", full_error)
+            self.message_box_javascript(f"""An error occured during appraisal. 
+            Please copy the error and report the bug:\\n{e}\\n
+            Would you like to copy the full crash log to your clipboard?""", full_error)
             self.macro_running = False
             self.stop_macro(f"Appraisal error: {e}")
         # Get areas
@@ -2507,8 +2563,61 @@ class Api:
         self.set_status("Macro Stopped")
 
     def start_enchantment(self):
-        time.sleep(0.05)
-        self.stop_macro("Enchantment is not implemented yet")
+        # Validate Tesseract
+        try:
+            tesseract_path = self.vars["tesseract_path"]
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            self.macro_running = True
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            self.message_box_javascript(f"""An error occured during enchantment. 
+            Please copy the error and report the bug:\\n{e}\\n
+            Would you like to copy the full crash log to your clipboard?""", full_error)
+            self.macro_running = False
+            self.stop_macro(f"Enchantment error: {e}")
+        # Get Areas
+        enchantment_left, enchantment_top, enchantment_right, enchantment_bottom, enchantment_width, enchantment_height = self.get_areas("enchantment")
+        # Split Enchantments
+        enchant_enchants = self.vars["enchant_enchants"]
+        enchant_enchants_list = enchant_enchants.split(",")
+        # Positions
+        enchantment_x_ratio = float(self.vars["enchant_click_x"])
+        enchantment_y_ratio = float(self.vars["enchant_click_y"])
+        enchantment_x = int(enchantment_width * enchantment_x_ratio) + enchantment_left
+        enchantment_y = int(enchantment_height * enchantment_y_ratio) + enchantment_top
+        # Delays
+        e_delay = float(self.vars["e_delay"])
+        click_delay = float(self.vars["click_delay"])
+        click_delay2 = float(self.vars["click_delay2"])
+        # Other calculations
+        logging_cycle = int(self.vars["logging_cycle"])
+        logging_mode = self.vars["logging_mode"].lower()
+        attempts = 0.0
+        # Main Loop
+        while self.macro_running == True:
+            time.sleep(0.1)
+            self._send_key("e")
+            time.sleep(e_delay)
+            self._click_at(enchantment_x, enchantment_y)
+            time.sleep(click_delay)
+            # Detection
+            text = self.capture_frame[enchantment_top:enchantment_bottom, enchantment_left:enchantment_right]
+            gray = self.process_image_for_ocr(text)
+            text = pytesseract.image_to_string(gray, config="--psm 7")
+            for match in range(len(enchant_enchants_list)):
+                # print("Requirements:", appraisal_mutations_list[match].lower().rstrip(",").replace(" ", ""))
+                # print("Text:", text.lower().rstrip(",").replace(" ", ""))
+                if enchant_enchants_list[match].lower().rstrip(",").replace(" ", "") in text.lower().rstrip(",").replace(" ", ""):
+                    self.stop_macro("Enchantment finished")
+            time.sleep(click_delay2)
+            if self.macro_running == False:
+                self.stop_macro("")
+            if round(attempts) == attempts and logging_mode != "disabled":
+                if attempts == logging_cycle:
+                    self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}", -1)
+                logging_cycle = logging_cycle + attempts
+        self.set_status("Macro Stopped")
 
     def start_angler(self):
         time.sleep(0.05)
@@ -2547,9 +2656,13 @@ class Api:
         
         shake_x = shake_left + (shake_w // 2)
         shake_y = shake_top + (shake_h // 2)
+
+        detection_method = self.vars["detection_method"]
         
         # 5. Features & Overlay Settings
         shake_failsafe = int(self.vars["shake_failsafe"])
+        fish_color = self.vars["fish_color"]
+        fish_tolerance = int(self.vars["fish_tolerance"])
         friend_color = self.vars["friends_color"]
         friend_tolerance = int(self.vars["friends_tolerance"])
         auto_refresh = self.vars["auto_refresh"]
@@ -2643,10 +2756,16 @@ class Api:
                     if self.capture_frame is None:
                         attempts = attempts - 1
                         continue
-                    friend_img = self.capture_frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
-                    friend_x, friend_y = self.pixel_search(friend_img, friend_color, friend_tolerance)
-                    if friend_x is None or friend_y is None:
-                        break
+                    if detection_method == "friend_area":
+                        friend_img = self.capture_frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
+                        friend_x, friend_y = self.pixel_search(friend_img, friend_color, friend_tolerance)
+                        if friend_x is None or friend_y is None:
+                            break
+                    else:
+                        fish_img = self.capture_frame[fish_top:fish_bottom, fish_left:fish_right]
+                        fish_x, fish_y = self.pixel_search(fish_img, fish_color, fish_tolerance)
+                        if fish_x is not None or fish_y is not None:
+                            break
 
                     if self.macro_running == False:
                         break
@@ -2686,224 +2805,306 @@ class Api:
             self.macro_running = False
             self.stop_macro(f"Error at line {error_line}: {e}")
     def _execute_cast_perfect(self):
-        """
-        Scans for green and white Y coordinates and releases left click when
-        the top white Y reaches 95% of the area from green Y to bottom white Y.
-        """
-        # Hold Mouse
-        self.hold_mouse(False)
-        # Get Areas (Scale Factor and Ratio Calculations Applied Inside get_areas)
+        # Areas
         shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self.get_areas("shake")
-        self._fish_overlay_cast_bounds = None
-        # Config 
-        white_color = self.vars["white_cast_color"]
-        green_color = self.vars["green_cast_color"]
-        white_tol = int(self._get_var_number("perfect_cast2_tolerance", 5, int))
-        green_tol = int(self._get_var_number("perfect_cast_tolerance", 16, int))
-        max_time = float(self._get_var_number("perfect_max_time", 5.5, float))
+        # Colors
+        white_cast_color = self.vars["white_cast_color"]
+        tracking_color = self.vars["tracking_color"]
+        # Tolerance 
+        white_cast_tolerance = int(self.vars["white_cast_tolerance"])
+        green_cast_tolerance = int(self.vars["green_cast_tolerance"])
+        # Perfect Cast Settings
+        perfect_cast_method = self.vars["perfect_cast_method"].lower()
+        fall_scan_timeout = float(self.vars["fall_scan_timeout"])
         self.scan_delay = float(self.vars["cast_scan_delay"])
-        target_green = np.array(self._hex_to_bgr(green_color), dtype=np.int32)
-        target_white = np.array(self._hex_to_bgr(white_color), dtype=np.int32)
-        # Resolution scaling: velocity bands are tuned at 1440p height
-        scaling_factor = self.SCREEN_HEIGHT / 1440.0
-        tracking_mode = False
-        green_left_x = None
-        green_right_x = None
-        green_y = None
-        green_padding = 50
-        # Velocity tracking — up to 5 samples for linear regression
-        white_positions = []    # (x, y) in region-relative coords
-        white_timestamps = []   # parallel perf_counter values
-        MAX_VELOCITY_SAMPLES = 5
-        last_time_to_impact = None
-        if sys.platform == "darwin":
-            white_tol += 5
-            green_tol += 5
-        def color_mask(img, target_bgr, tolerance):
-            img_i = img.astype(np.int32)
-            diff = img_i - target_bgr
-            return np.sqrt(np.sum(diff ** 2, axis=2)) <= tolerance
-
-        def reset_tracking():
-            nonlocal tracking_mode, green_left_x, green_right_x, green_y
-            nonlocal last_time_to_impact
-            tracking_mode = False
-            green_left_x = None
-            green_right_x = None
-            green_y = None
-            last_time_to_impact = None
-            white_positions.clear()
-            white_timestamps.clear()
-        # Start Capture Thread; This Remains The Existing V3.42 Capture Path.
+        
+        # Last values (Failsafe)
+        last_capture_id = 0
+        is_initial_run = True
+        is_green_tracking = False
+        green_detected = False
         start_time = time.time()
-        # Perfect Cast Loop
+        last_time = time.time()
+        self.hold_mouse()
+        green_padding = 50
+        
+        # Simple method variables
+        speed_samples = []
+        max_speed_samples = 20
+        release_delay = 0  # Hardcoded value - setting removed in later versions
+        perfect_threshold = 95.5  # Hardcoded value - setting removed in later versions
+        release_timing = max(-50.0, min(50.0, release_delay))
+        
+        # Velocity method variables
+        if perfect_cast_method == 1:
+            white_positions = []
+            white_timestamps = []
+            MAX_VELOCITY_SAMPLES = 10
+            last_time_to_impact = None
+            # Get screen resolution for scaling
+            scaling_factor = 1920 / SCREEN_WIDTH
+        
+        # Initialize tracking variables
+        green_abs_top = 0
+        green_abs_left = 0
+        green_abs_right = 0
+        green_abs_bottom = 0
+        reached_bottom_5_percent = True
+        last_fill_percentage = None
+        last_frame_time = None
+        
+        # Loop
         while self.macro_running:
-            region = self.capture_frame[shake_top:shake_bottom, shake_left:shake_right]
-            if region.size == 0:
-                if time.time() - start_time > max_time:
-                    break
-
+            # Get image from self.capture_frame
+            if self.capture_id == last_capture_id:
+                time.sleep(self.scan_delay)
                 continue
-
-            if not tracking_mode:
-                mask = color_mask(region, target_green, green_tol)
-                rows, cols = np.nonzero(mask)
-                if rows.size > 0:
-                    found_y = int(rows[0])
-                    cols_in_row = cols[rows == found_y]
-                    green_left_x = int(np.min(cols_in_row))
-                    green_right_x = int(np.max(cols_in_row))
-                    green_y = found_y
-                    tracking_mode = True
-                elif time.time() - start_time > max_time:
-                    break
-
+            if self.capture_frame is None:
+                time.sleep(self.scan_delay)
                 continue
-
-            green_top = max(0, green_y - green_padding)
-            green_bottom = min(region.shape[0], green_y + green_padding)
-            green_left = max(0, green_left_x - green_padding)
-            green_right = min(region.shape[1], green_right_x + green_padding)
-            green_frame = region[green_top:green_bottom, green_left:green_right]
-            if green_frame.size == 0:
-                reset_tracking()
+            
+            # Scan time calculations
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            time_delta = current_time - last_time
+            
+            if elapsed_time >= fall_scan_timeout:
+                self.release_mouse()
+                break
+            # Check if macro stopped during perfect cast
+            if not self.macro_running:
+                self.release_mouse()
+                break
+            
+            # Scanning from shake_left, shake_top to shake_right, shake_bottom
+            shake_img = self.capture_frame[shake_top:shake_bottom, shake_left:shake_right]
+            
+            # GREEN DETECTION
+            if is_green_tracking:
+                # Track in sub-region around last known green position
+                green_area_top = max(0, green_abs_top - green_padding)
+                green_area_bottom = min(shake_img.shape[0], green_abs_top + green_padding)
+                green_area_left = max(0, green_abs_left - green_padding)
+                green_area_right = min(shake_img.shape[1], green_abs_right + green_padding)
+                
+                green_area = shake_img[green_area_top:green_area_bottom, green_area_left:green_area_right]
+                g_left, g_top = self.pixel_search(green_area, tracking_color, green_cast_tolerance)
+                g_right, g_bottom = self.pixel_search(green_area, tracking_color, green_cast_tolerance, 1)
+                
+                if None not in (g_left, g_top, g_right, g_bottom):
+                    # Convert from green_area coordinates to shake_img coordinates
+                    green_abs_left = g_left + green_area_left
+                    green_abs_top = g_top + green_area_top
+                    green_abs_right = g_right + green_area_left
+                    green_abs_bottom = g_bottom + green_area_top
+                    green_detected = True
+                else:
+                    green_detected = False
+                    is_green_tracking = False
+                    if perfect_cast_method == "simple":
+                        speed_samples.clear()
+                    else:
+                        white_positions.clear()
+                        white_timestamps.clear()
+                    continue  # Skip this frame, try full scan next frame
+            
+            if not is_green_tracking:
+                # Full scan for green
+                g_left, g_top = self.pixel_search(shake_img, tracking_color, green_cast_tolerance)
+                g_right, g_bottom = self.pixel_search(shake_img, tracking_color, green_cast_tolerance, 1)
+                
+                if None not in (g_left, g_top, g_right, g_bottom):
+                    green_abs_left = g_left
+                    green_abs_top = g_top
+                    green_abs_right = g_right
+                    green_abs_bottom = g_bottom
+                    green_detected = True
+                    is_green_tracking = True
+                else:
+                    continue  # No green found, try again
+            
+            # WHITE DETECTION (using absolute green coordinates)
+            scan_bottom = int(shake_img.shape[0] * 0.9)
+            green_center_x = (green_abs_left + green_abs_right) // 2
+            white_frame = shake_img[green_abs_top:scan_bottom, green_abs_left:green_abs_right]
+            
+            w_left, w_top = self.pixel_search(white_frame, white_cast_color, white_cast_tolerance)
+            w_right, w_bottom = self.pixel_search(white_frame, white_cast_color, white_cast_tolerance, 1)
+            
+            if None in (w_left, w_top, w_right, w_bottom):
                 continue
-
-            mask = color_mask(green_frame, target_green, green_tol)
-            rows, cols = np.nonzero(mask)
-            if rows.size == 0:
-                reset_tracking()
-                continue
-
-            found_y_relative = int(rows[0])
-            cols_in_row = cols[rows == found_y_relative]
-            green_left_x = int(np.min(cols_in_row)) + green_left
-            green_right_x = int(np.max(cols_in_row)) + green_left
-            green_y = found_y_relative + green_top
-            self.set_status(f"Green Y: {green_y}")
-            if green_right_x <= green_left_x:
-                reset_tracking()
-                continue
-
-            scan_bottom = int(region.shape[0] * 0.9)
-            white_frame = region[green_y:scan_bottom, green_left_x:green_right_x]
-            if white_frame.size == 0:
-                if time.time() - start_time > max_time:
-                    break
-
-                continue
-
-            mask_white = color_mask(white_frame, target_white, white_tol)
-            rows_white, _ = np.nonzero(mask_white)
-            if rows_white.size == 0:
-                if time.time() - start_time > max_time:
-                    break
-
-                continue
-
-            white_y_top = int(rows_white[0]) + green_y
-            white_y_bottom = int(rows_white[-1]) + green_y
-            total_distance = white_y_bottom - green_y
-            current_distance = white_y_top - green_y
+            
+            # Convert white coordinates to shake_img coordinates
+            white_abs_top = w_top + green_abs_top
+            white_abs_bottom = w_bottom + green_abs_top
+            
+            # Now calculate distances using matching coordinate systems
+            total_distance = white_abs_bottom - green_abs_top
+            current_distance = white_abs_top - green_abs_top
             if total_distance <= 0:
                 continue
-
-            cast_left = shake_left + green_left_x
-            cast_top = shake_top + green_y
-            cast_right = shake_left + green_right_x
-            cast_bottom = shake_top + white_y_bottom
-
-            self.fish_overlay.resize(cast_left, cast_top, cast_right, cast_bottom)
-            # --- Velocity tracking ---
-            now_pc = time.perf_counter()
-            white_positions.append((0, white_y_top))   # x is irrelevant; track Y only
-            white_timestamps.append(now_pc)
-            if len(white_positions) > MAX_VELOCITY_SAMPLES:
-                white_positions.pop(0)
-                white_timestamps.pop(0)
-            self.set_status(f"White Y: {white_y_top}")
-            # local_distance: pixels remaining until white reaches green
-            local_distance = current_distance  # white_y_top - green_y; positive = white below green
-            # --- Velocity-band predictive release ---
+            
+            # === RELEASE LOGIC BASED ON SELECTED METHOD ===
             released = False
-            if len(white_positions) >= 3:
-                velocity_y = self._calculate_speed_and_predict(white_positions, white_timestamps)
-                min_speed = 5 * scaling_factor
-                if velocity_y is not None and abs(velocity_y) > min_speed:
-                    white_above_green = white_y_top < green_y
-                    moving_toward_green = (white_above_green and velocity_y > 0) or (not white_above_green and velocity_y < 0)
-                    if moving_toward_green and local_distance > 0:
-                        time_to_impact = local_distance / abs(velocity_y)
-                        # Bounce/miss detection: if TtI suddenly grows when very close, we passed green
-                        bounce_threshold = 40 * scaling_factor
-                        if last_time_to_impact is not None and local_distance < bounce_threshold:
-                            if time_to_impact > last_time_to_impact * 1.3:
-                                mouse_controller.release(Button.left)
-                                released = True
-                        if not released:
-                            # Velocity-band reaction delays (tuned at 1440p)
-                            v = abs(velocity_y)
-                            if v < 700 * scaling_factor:
-                                reaction_delay = 0.060
-                                timing_key = "perfect_cast_timing_700"
-                            elif v < 800 * scaling_factor:
-                                reaction_delay = 0.058
-                                timing_key = "perfect_cast_timing_800"
-                            elif v < 900 * scaling_factor:
-                                reaction_delay = 0.057
-                                timing_key = "perfect_cast_timing_900"
-                            elif v < 1000 * scaling_factor:
-                                reaction_delay = 0.056
-                                timing_key = "perfect_cast_timing_1000"
-                            elif v < 1100 * scaling_factor:
-                                reaction_delay = 0.055
-                                timing_key = "perfect_cast_timing_1100"
-                            elif v < 1200 * scaling_factor:
-                                reaction_delay = 0.050
-                                timing_key = "perfect_cast_timing_1200"
-                            elif v < 1300 * scaling_factor:
-                                reaction_delay = 0.048
-                                timing_key = "perfect_cast_timing_1300"
-                            elif v < 1400 * scaling_factor:
-                                reaction_delay = 0.047
-                                timing_key = "perfect_cast_timing_1400"
-                            elif v < 1500 * scaling_factor:
-                                reaction_delay = 0.046
-                                timing_key = "perfect_cast_timing_1500"
-                            elif v < 1600 * scaling_factor:
-                                reaction_delay = 0.050
-                                timing_key = "perfect_cast_timing_1600"
-                            else:
-                                reaction_delay = 0.049
-                                timing_key = "perfect_cast_timing_1600_plus"
-                            timing_adjustment_ms = self._get_var_number(timing_key, 0, int)
-                            reaction_delay += timing_adjustment_ms * 0.001
-                            if time_to_impact <= reaction_delay:
-                                mouse_controller.release(Button.left)
-                                released = True
-                        last_time_to_impact = time_to_impact
-            # Slow-speed / emergency distance fallbacks
-            if not released:
-                slow_threshold = total_distance * 0.05  # within 5% of green
-                emergency_threshold = total_distance * 0.025
-                if local_distance <= emergency_threshold:
-                    mouse_controller.release(Button.left)
+            
+            if perfect_cast_method == "simple":
+                # --- SIMPLE (PERCENTAGE-BASED) METHOD ---
+                actual_fill_percentage = (1 - (current_distance / total_distance)) * 100
+                fill_speed = 0.0
+                position_offset_percent = 0.0
+
+                if last_fill_percentage is not None and last_frame_time is not None:
+                    time_delta = current_time - last_frame_time
+                    if time_delta > 0:
+                        fill_change = actual_fill_percentage - last_fill_percentage
+
+                        if fill_change < -50:
+                            last_fill_percentage = None
+                            last_frame_time = None
+                            reached_bottom_5_percent = False
+                            speed_samples.clear()
+                        elif fill_change > 0:
+                            instant_fill_speed = fill_change / time_delta
+                            speed_samples.append(instant_fill_speed)
+                            if len(speed_samples) > max_speed_samples:
+                                speed_samples.pop(0)
+
+                if speed_samples:
+                    fill_speed = sum(speed_samples) / len(speed_samples)
+                    base_offset = 1.5 * math.log(1 + fill_speed / 25.0)
+
+                    if release_timing < 0:
+                        base_multiplier = 1.0 - (release_timing / 5.0)
+                        speed_scale = min(6.0, (fill_speed / 100.0) ** 2)
+                        timing_multiplier = 1.0 + (base_multiplier - 1.0) * speed_scale
+                        position_offset_percent = max(0.0, min(50.0, base_offset * timing_multiplier))
+                    else:
+                        position_offset_percent = max(0.0, min(50.0, base_offset))
+
+                predicted_fill_percentage = actual_fill_percentage + position_offset_percent
+                offset_pixels = int((position_offset_percent / 100.0) * total_distance)
+                predicted_white_y_top = white_abs_top - offset_pixels
+                self.status_overlay.set_line(f"White Y: {predicted_white_y_top}", row=4)
+
+                bottom_threshold = 5.0 + position_offset_percent
+                if predicted_fill_percentage <= bottom_threshold and not reached_bottom_5_percent:
+                    reached_bottom_5_percent = True
+                    last_fill_percentage = None
+                    last_frame_time = None
+                    speed_samples.clear()
+
+                if release_timing <= 0:
+                    release_threshold = perfect_threshold
+                else:
+                    release_threshold = perfect_threshold + (release_timing / 50.0) * 4.5
+
+                if reached_bottom_5_percent and predicted_fill_percentage >= release_threshold:
                     released = True
-                elif local_distance <= slow_threshold and len(white_positions) >= 3:
-                    # Confirm approach: latest distance < oldest distance
-                    recent_dists = [p[1] - green_y for p in white_positions[-3:]]
-                    if recent_dists[-1] < recent_dists[0]:
-                        mouse_controller.release(Button.left)
+                    break
+
+                last_fill_percentage = actual_fill_percentage
+                last_frame_time = current_time
+                
+            else:  # perfect_cast_method == 1 (VELOCITY-BASED METHOD)
+                # --- Velocity tracking ---
+                now_pc = time.perf_counter()
+                white_positions.append((0, white_abs_top))  # x is irrelevant; track Y only
+                white_timestamps.append(now_pc)
+                if len(white_positions) > MAX_VELOCITY_SAMPLES:
+                    white_positions.pop(0)
+                    white_timestamps.pop(0)
+                self.status_overlay.set_line(f"White Y: {white_abs_top}", row=4)
+                
+                # local_distance: pixels remaining until white reaches green
+                local_distance = current_distance  # white_abs_top - green_abs_top; positive = white below green
+                
+                # --- Velocity-band predictive release ---
+                if len(white_positions) >= 3:
+                    velocity_y = self._calculate_speed_and_predict(white_positions, white_timestamps)
+                    min_speed = 5 * scaling_factor
+                    if velocity_y is not None and abs(velocity_y) > min_speed:
+                        white_above_green = white_abs_top < green_abs_top
+                        moving_toward_green = (white_above_green and velocity_y > 0) or (not white_above_green and velocity_y < 0)
+                        if moving_toward_green and local_distance > 0:
+                            time_to_impact = local_distance / abs(velocity_y)
+                            # Bounce/miss detection: if TtI suddenly grows when very close, we passed green
+                            bounce_threshold = 40 * scaling_factor
+                            if last_time_to_impact is not None and local_distance < bounce_threshold:
+                                if time_to_impact > last_time_to_impact * 1.3:
+                                    self.release_mouse()
+                                    released = True
+                            if not released:
+                                # Velocity-band reaction delays (tuned at 1440p)
+                                v = abs(velocity_y)
+                                if v < 700 * scaling_factor:
+                                    reaction_delay = 0.060
+                                    timing_key = "perfect_cast_timing_700"
+                                elif v < 800 * scaling_factor:
+                                    reaction_delay = 0.058
+                                    timing_key = "perfect_cast_timing_800"
+                                elif v < 900 * scaling_factor:
+                                    reaction_delay = 0.057
+                                    timing_key = "perfect_cast_timing_900"
+                                elif v < 1000 * scaling_factor:
+                                    reaction_delay = 0.056
+                                    timing_key = "perfect_cast_timing_1000"
+                                elif v < 1100 * scaling_factor:
+                                    reaction_delay = 0.055
+                                    timing_key = "perfect_cast_timing_1100"
+                                elif v < 1200 * scaling_factor:
+                                    reaction_delay = 0.050
+                                    timing_key = "perfect_cast_timing_1200"
+                                elif v < 1300 * scaling_factor:
+                                    reaction_delay = 0.048
+                                    timing_key = "perfect_cast_timing_1300"
+                                elif v < 1400 * scaling_factor:
+                                    reaction_delay = 0.047
+                                    timing_key = "perfect_cast_timing_1400"
+                                elif v < 1500 * scaling_factor:
+                                    reaction_delay = 0.046
+                                    timing_key = "perfect_cast_timing_1500"
+                                elif v < 1600 * scaling_factor:
+                                    reaction_delay = 0.050
+                                    timing_key = "perfect_cast_timing_1600"
+                                else:
+                                    reaction_delay = 0.049
+                                    timing_key = "perfect_cast_timing_1600_plus"
+                                timing_adjustment_ms = self._get_var_number(timing_key, 0, int)
+                                reaction_delay += timing_adjustment_ms * 0.001
+                                if time_to_impact <= reaction_delay:
+                                    self.release_mouse()
+                                    released = True
+                            last_time_to_impact = time_to_impact
+                
+                # Slow-speed / emergency distance fallbacks
+                if not released:
+                    slow_threshold = total_distance * 0.05  # within 5% of green
+                    emergency_threshold = total_distance * 0.025
+                    if local_distance <= emergency_threshold:
+                        self.release_mouse()
                         released = True
-            if released:
-                break
+                    elif local_distance <= slow_threshold and len(white_positions) >= 3:
+                        # Confirm approach: latest distance < oldest distance
+                        recent_dists = [p[1] - green_abs_top for p in white_positions[-3:]]
+                        if recent_dists[-1] < recent_dists[0]:
+                            self.release_mouse()
+                            released = True
+                
+                if released:
+                    break
 
-            if time.time() - start_time > max_time:
+            if time.time() - start_time > fall_scan_timeout:
                 break
-
+            
+            # Cleanup
             time.sleep(self.scan_delay)
-        # Cleanup
-        self.release_mouse(False)
+            last_capture_id = self.capture_id
+            is_initial_run = False
+            last_time = current_time
+        
+        # Final Cleanup
+        if not released:  # Only release if we didn't already release
+            self.release_mouse()
         self._fish_overlay_cast_bounds = None
         return
 
@@ -2998,11 +3199,13 @@ class Api:
             tracking_tolerance = 5
             friends_tolerance = 5
         # Minigame Settings
+        scale = get_scale_factor()
         bag_slot = str(self.vars["bag_slot"])
         bag_spam = self.vars["bag_spam"]
         lock_cursor = self.vars["lock_cursor"]
         fishing_mode = self.vars["fishing_mode"].lower()
         fishing_profile = self.vars["fishing_profile"].lower()
+        restart_method = self.vars["restart_method"]
         bar_ratio_from_side = float(self.vars["bar_ratio_from_side"])
         restart_delay = float(self.vars["restart_delay"])
         self.scan_delay = float(self.vars["minigame_scan_delay"])
@@ -3049,11 +3252,6 @@ class Api:
                 shake_img = self.capture_frame[shake_top:fish_bottom, fish_left:fish_right]
                 fish_img = self.capture_frame[fish_top:fish_bottom, fish_left:fish_right]
                 friend_img = self.capture_frame[friend_top:friend_bottom, friend_left:friend_right]
-            # Friend detection
-            friend_x, friend_y = self.pixel_search(friend_img, friends_color, friends_tolerance)
-            if friend_x is not None and friend_y is not None:
-                time.sleep(restart_delay)
-                return
 
             # Fish detection
             fish_x, fish_y = self.pixel_search(fish_img, fish_color, fish_tolerance)
@@ -3073,8 +3271,6 @@ class Api:
                 # Check if we should scan for arrows
                 if left_x is not None and right_x is not None:
                     bar_detected = True
-                    bar_center = int((left_x + right_x) / 2)
-                    bar_size = right_x - left_x
                     # print(f"Detection Source: Bar | Left: {left_x} | Right: {right_x}")
                 else:
                     # Try arrow
@@ -3090,6 +3286,7 @@ class Api:
                         else:
                             last_right_x = arrow_x
                     if arrow_x is not None:
+                        bar_detected = True
                         arrow_on_left_side = arrow_x - last_bar_center
                         dist_to_left = (arrow_x - last_left_x) if last_left_x is not None else fish_width
                         dist_to_right = (arrow_x - last_right_x) if last_right_x is not None else fish_width
@@ -3107,15 +3304,21 @@ class Api:
                             left_x = arrow_x
                             right_x = last_right_x
                             if right_x is None or right_x == 0:
-                                right_x = left_x + bar_size
+                                right_x = left_x + last_bar_size
                         else:
                             right_x = arrow_x
                             left_x = last_left_x
                             if left_x is None or left_x == 0:
-                                left_x = right_x - bar_size
+                                left_x = right_x - last_bar_size
                     else:
                         # Use Cache
                         bar_detected = False
+                try:
+                    bar_center = int((left_x + right_x) / 2)
+                    bar_size = right_x - left_x
+                except:
+                    bar_center = 0
+                    bar_size = 0
             else:
                 line_coords = self._detect_lines_in_frame(fish_img)
                 colors = self.get_colors_at_lines(fish_img, line_coords)
@@ -3124,6 +3327,23 @@ class Api:
                     line_mean = int(round(len(line_coords) / 2))
                     left_x = line_coords[line_mean - 1]
                     right_x = line_coords[line_mean + 1]
+            # Friend and Fish restart
+            if restart_method == "friend_area":
+                friend_x, friend_y = self.pixel_search(friend_img, friends_color, friends_tolerance)
+                if friend_x is not None and friend_y is not None:
+                    self.interruptible_sleep(restart_delay)
+                    return
+            else:
+                try:
+                    if fish_x is None:
+                        self.interruptible_sleep(restart_delay)
+                        return
+                except:
+                    time.sleep(self.scan_delay)
+                    continue
+            # print(f"bar_detected: {bar_detected}")
+            # print(f"left_x: {left_x}, right_x: {right_x}")
+            # print(f"bar_center: {bar_center}, bar_size: {bar_size}")
             # Bag Spam & Lock Cursor
             bag_spam_cycle += 1
             if bag_spam_cycle == 5:
@@ -3131,7 +3351,7 @@ class Api:
                 if bag_spam == "on":
                     self._send_key(bag_slot)
                 if lock_cursor == "on":
-                    mouse_controller.position = (shake_x, shake_y)
+                    mouse_controller.position = (int(shake_x / scale), int(shake_y / scale))
             # Restore from Cache
             self.fish_overlay.clear()
             if bar_detected == False:
@@ -3229,7 +3449,8 @@ class Api:
                     else:
                         if time_delta < 0.001:
                             time_delta = 0.001
-                        p_term = error * kp
+                        p_term_multiplier = time_delta / self.scan_delay
+                        p_term = int(error / p_term_multiplier) * kp
                         d_term = ((error - last_error) / time_delta) * kd
                         control_signal = p_term + d_term
                         # print("error - last_error: ", error - last_error)
@@ -3245,7 +3466,8 @@ class Api:
                     else:
                         if time_delta < 0.001:
                             time_delta = 0.001
-                        p_term = error * kp
+                        p_term_multiplier = time_delta / self.scan_delay
+                        p_term = int(error / p_term_multiplier) * kp
                         bar_velocity = bar_center - last_bar_center
                         error_magnitude_decreasing = abs(error) < abs(last_error)
                         bar_moving_toward_target = (

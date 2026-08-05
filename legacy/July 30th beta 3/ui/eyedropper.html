@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        user-select: none;
+        background: #000;
+    }
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+    }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+window.addEventListener("pywebviewready", () => {
+    try {
+        pywebview.api.window_ready(window.screenX, window.screenY);
+    } catch (e) {}
+    // Load frozen screenshot once the API is ready
+    loadScreenshot();
+});
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+let currentHexColor = null;
+let mouseX = 0;
+let mouseY = 0;
+let screenshotImg = null;
+let screenshotReady = false;
+let pendingColorRequest = false;
+
+function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, window.innerWidth || 1);
+    const h = Math.max(1, window.innerHeight || 1);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+}
+window.addEventListener("resize", resize);
+resize();
+
+function loadScreenshot() {
+    if (!window.pywebview || !pywebview.api) return;
+    pywebview.api.get_screenshot_data().then(dataUrl => {
+        if (!dataUrl) {
+            screenshotReady = false;
+            draw();
+            return;
+        }
+        const img = new Image();
+        img.onload = () => {
+            screenshotImg = img;
+            screenshotReady = true;
+            draw();
+        };
+        img.onerror = () => {
+            screenshotReady = false;
+            draw();
+        };
+        img.src = dataUrl;
+    }).catch(() => {
+        screenshotReady = false;
+        draw();
+    });
+}
+
+// Called from Python after window_ready as a secondary trigger
+window.__applyScreenshot = function () {
+    loadScreenshot();
+};
+
+function draw() {
+    const w = window.innerWidth || canvas.width;
+    const h = window.innerHeight || canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // 1) Frozen screenshot (menu-bar already cropped on the Python side)
+    if (screenshotReady && screenshotImg) {
+        ctx.drawImage(screenshotImg, 0, 0, w, h);
+    } else {
+        // Fallback while image loads
+        ctx.fillStyle = "#1a1a1a";
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    // 2) Very light dim so the crosshair / preview stand out
+    ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
+    ctx.fillRect(0, 0, w, h);
+
+    if (!currentHexColor) return;
+
+    const mx = mouseX;
+    const my = mouseY;
+
+    // Crosshair ring
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(mx, my, 18, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Crosshair lines
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(mx - 28, my);
+    ctx.lineTo(mx + 28, my);
+    ctx.moveTo(mx, my - 28);
+    ctx.lineTo(mx, my + 28);
+    ctx.stroke();
+
+    // Color preview + hex label:
+    // show ABOVE the cursor when near the bottom of the screen,
+    // show BELOW the cursor when near the top of the screen.
+    const previewSize = 36;
+    const gap = 26;
+    const labelH = 18;
+    const boxW = Math.max(previewSize, 78);
+    const boxH = previewSize + labelH + 6;
+
+    let boxX = mx - boxW / 2;
+    let boxY;
+    if (my > h * 0.5) {
+        // Bottom half → place above cursor
+        boxY = my - gap - boxH;
+    } else {
+        // Top half → place below cursor
+        boxY = my + gap;
+    }
+
+    // Clamp so the preview stays on-screen
+    boxX = Math.max(4, Math.min(boxX, w - boxW - 4));
+    boxY = Math.max(4, Math.min(boxY, h - boxH - 4));
+
+    // Shadow
+    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+    ctx.fillRect(boxX + 2, boxY + 2, boxW, boxH);
+
+    // Color swatch
+    ctx.fillStyle = currentHexColor;
+    ctx.fillRect(boxX, boxY, boxW, previewSize);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(boxX, boxY, boxW, previewSize);
+
+    // Hex label bar
+    ctx.fillStyle = "rgba(20, 20, 20, 0.92)";
+    ctx.fillRect(boxX, boxY + previewSize, boxW, labelH + 6);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "12px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(currentHexColor, boxX + boxW / 2, boxY + previewSize + (labelH + 6) / 2);
+}
+
+// Throttle pixel sampling to keep IPC responsive
+let lastSample = 0;
+const SAMPLE_MS = 16;
+
+canvas.addEventListener("mousemove", e => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+
+    const now = performance.now();
+    if (now - lastSample < SAMPLE_MS || pendingColorRequest) {
+        draw();
+        return;
+    }
+    lastSample = now;
+    pendingColorRequest = true;
+
+    pywebview.api.get_pixel_at(e.clientX, e.clientY).then(hexColor => {
+        currentHexColor = hexColor;
+        pendingColorRequest = false;
+        draw();
+    }).catch(() => {
+        pendingColorRequest = false;
+    });
+});
+
+canvas.addEventListener("click", e => {
+    if (!currentHexColor) return;
+    // Freeze current color and ask Python to store + close
+    const picked = currentHexColor;
+    pywebview.api.pick_color(picked).then(() => {
+        // Python destroys the window; nothing else to do here
+    }).catch(() => {});
+});
+
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+        try {
+            pywebview.api.close_eyedropper();
+        } catch (err) {}
+    }
+});
+</script>
+</body>
+</html>

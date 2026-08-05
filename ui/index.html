@@ -67,6 +67,9 @@
             <div id="basic" class="tab-content active">
                 <div class="card">
                     <h3>Hotkeys</h3>
+                    <div class="description"> 
+                        <p>Configure keyboard shortcuts to control the macro.</p>
+                    </div>
                     <div class="box-grid">
                         <div class="simple-box">
                             <p>Start Key</p>
@@ -130,6 +133,9 @@
                 </div>
                 <div class="card">
                     <h3>Color Options</h3>
+                    <div class="description"> 
+                        <p>Adjust colors used for the interface and detection.</p>
+                    </div>
                     <button onclick="startEyedropper()"> Pick Colors </button>
                     <button onclick="takeScreenshot()"> Take Screenshot </button>
                     <div class="box-grid">
@@ -185,6 +191,9 @@
             <div id="automation" class="tab-content">
                 <div class="card">
                     <h3>Basic Options</h3>
+                    <div class="description"> 
+                        <p>General settings that affect overall macro behavior.</p>
+                    </div>
                     <div class="switch2">
                         <p>Auto Zoom</p>
                         <label class="switch">
@@ -246,6 +255,13 @@
                 </div>
                 <div class="card" id="perfect-cast-card">
                     <h3>Perfect Cast Settings</h3>
+                    <div class="dropdown">
+                        <label for="perfect_cast_method">Perfect Cast Method:</label>
+                        <select name="perfect_cast_method" id="perfect_cast_method">
+                        <option value="velocity">Velocity-based</option>
+                        <option value="simple">Simple</option>
+                        </select>
+                    </div>
                     <div class="text">
                         <label>Fall Scan Timeout</label>
                         <input id=fall_scan_timeout type="text" placeholder="5">
@@ -303,6 +319,9 @@
                 </div>
                 <div class="card">
                     <h3>Casting</h3>
+                    <div class="description"> 
+                        <p>Configure casting accuracy, timing, and release behavior.</p>
+                    </div>
                     <div class="text">
                         <label>Delay</label>
                         <input id=delay_before_casting type="text" placeholder="0.5">
@@ -324,6 +343,9 @@
                 </div>
                 <div class="card">
                     <h3>Shaking</h3>
+                    <div class="description"> 
+                        <p>Customize automatic shake detection and interaction.</p>
+                    </div>
                     <div class="text">
                         <label>Shake Delay</label>
                         <input id=shake_scan_delay type="text" placeholder="0.08">
@@ -335,6 +357,9 @@
                 </div>
                 <div class="card">
                     <h3>Minigame</h3>
+                    <div class="description"> 
+                        <p>Tune fish tracking, bar control, and controller settings.</p>
+                    </div>
                     <div class="text">
                         <label>Minigame Scan Delay (seconds)</label>
                         <input id=minigame_scan_delay type="text" placeholder="0.01">
@@ -379,6 +404,9 @@
                 </div>
                 <div class="card">
                     <h3>Special Rods</h3>
+                    <div class="description"> 
+                        <p>Configure behavior for rods with unique mechanics.</p>
+                    </div>
                     <div class="text">
                         <label>Note Tracking Ratio (Pinion)</label>
                         <input id=pinion_note_ratio type="text" placeholder="0.3">
@@ -412,6 +440,9 @@
             <div id="utilities" class="tab-content">
                 <div class="card">
                     <h3>Global</h3>
+                    <div class="description"> 
+                        <p>Shared settings used across multiple utility features.</p>
+                    </div>
                     <div class="text">
                         <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
                         <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
@@ -425,16 +456,19 @@
                         <input id=click_delay type="text" placeholder="0.5">
                     </div>
                     <div class="text">
-                        <label>Delay After Click 2 (Enchant, Angler)</label>
+                        <label>Delay After Click 2 (Enchant, Angler, Treasure Appraisal)</label>
                         <input id=click_delay2 type="text" placeholder="0.5">
                     </div>
                     <div class="text">
-                        <label>Restart Delay (Angler)</label>
-                        <input id=utility_restart_delay type="text" placeholder="0.5">
+                        <label>Restart Delay (Angler, Treasure Appraisal)</label>
+                        <input id=utility_restart_delay type="text" placeholder="2">
                     </div>
                 </div>
                 <div class="card">
                     <h3>Logging</h3>
+                    <div class="description"> 
+                        <p>Send notifications and status updates to Discord or local files.</p>
+                    </div>
                     <div class="dropdown">
                         <label for="logging_mode">Logging Mode:</label>
                         <select name="logging_mode" id="logging_mode">
@@ -459,6 +493,9 @@
                 </div>
                 <div class="card">
                     <h3>Auto Totem</h3>
+                    <div class="description"> 
+                        <p>Automatically equip and activate supported totems.</p>
+                    </div>
                     <div class="switch2">
                         <p>Auto Totem</p>
                         <label class="switch">
@@ -489,6 +526,9 @@
                 </div>
                 <div class="card">
                     <h3>Auto Reconnect</h3>
+                    <div class="description"> 
+                        <p>Rejoin the game after disconnects or server errors.</p>
+                    </div>
                     <div class="switch2">
                         <p>Auto Reconnect</p>
                         <label class="switch">
@@ -516,9 +556,61 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Appraisal/Enchantment (toggle in Basic tab)</h3>
+                    <h3>Hunt Detect</h3>
+                    <div class="description"> 
+                        <p>Detect hunt events and react automatically.</p>
+                    </div>
+                    <div class="switch2">
+                        <p>Hunt Detect</p>
+                        <label class="switch">
+                            <input id=hunt_detect type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
                     <div class="text">
-                        <label>Mutation (Split by ,)</label>
+                        <label>Hunt Fishes (Split by ,)</label>
+                        <input id=hunt_fishes type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Cycles</label>
+                        <input id=hunt_cycles type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Auto Sovereign Recharge</h3>
+                    <div class="description"> 
+                        <p>Automatically recharge the Sovereign Relic when needed.</p>
+                    </div>
+                    <div class="switch2">
+                        <p>Sovereign Recharge</p>
+                        <label class="switch">
+                            <input id=sovereign_recharge type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="text">
+                        <label>Minimum %</label>
+                        <input id=minimum_percentage type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Maximum %</label>
+                        <input id=maximum_percentage type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Auto Appraisal (toggle in Basic tab)</h3>
+                    <div class="description"> 
+                        <p>Automatically appraise caught fish based on your settings.</p>
+                    </div>
+                    <div class="dropdown">
+                        <label for="appraisal_mode">Appraisal Mode:</label>
+                        <select name="appraisal_mode" id="appraisal_mode">
+                        <option value="normal">Normal</option>
+                        <option value="gamepass">Gamepass</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Mutations (Split by ,)</label>
                         <input id=appraisal_mutations type="text" placeholder="Hexed, Abyssal">
                     </div>
                     <div class="text">
@@ -531,10 +623,37 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Appraisal/Enchantment (toggle in Basic tab)</h3>
+                    <h3>Auto Treasure Appraisal</h3>
+                    <div class="description"> 
+                        <p>Automatically appraise caught fish in the Treasure Island.</p>
+                    </div>
+                    <div class="switch2">
+                        <p>Treasure Appraisal</p>
+                        <label class="switch">
+                            <input id=treasure_appraisal type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
                     <div class="text">
-                        <label>Enchantment (Split by ,)</label>
-                        <input id=mutation_enchant type="text" placeholder="Darkened">
+                        <label>Minimum Multiplier</label>
+                        <input id=minimum_multiplier type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Auto Enchant (toggle in Basic tab)</h3>
+                    <div class="description"> 
+                        <p>Automatically enchant rods using your selected configuration.</p>
+                    </div>
+                    <div class="dropdown">
+                        <label for="enchantment_mode">Enchantment Mode:</label>
+                        <select name="enchantment_mode" id="enchantment_mode">
+                        <option value="normal">Normal</option>
+                        <option value="gamepass">Gamepass</option>
+                        </select>
+                    </div>
+                    <div class="text">
+                        <label>Enchantments (Split by ,)</label>
+                        <input id=enchant_enchants type="text" placeholder="Darkened">
                     </div>
                     <div class="text">
                         <label>Click X (Ratio)</label>
@@ -547,6 +666,9 @@
                 </div>
                 <div class="card">
                     <h3>Angler/Quests (toggle in Basic tab)</h3>
+                    <div class="description"> 
+                        <p>Automate interactions with the Angler NPC and related tasks.</p>
+                    </div>
                     <div class="text">
                         <label>Click X (Ratio)</label>
                         <input id=angler_click_x type="text" placeholder="0.5">
@@ -566,12 +688,29 @@
                 </div>
                 <div class="card">
                     <h3>Compatibility Options</h3>
+                    <div class="description"> 
+                        <p>Improve compatibility with different hardware and game conditions.</p>
+                    </div>
                     <div class="switch2">
                         <p>Click After Minigame</p>
                         <label class="switch">
                             <input id=click_after_minigame type="checkbox">
                             <span class="slider"></span>
                         </label>
+                    </div>
+                    <div class="dropdown">
+                        <label for="detection_method">Detection Method:</label>
+                        <select name="detection_method" id="detection_method">
+                        <option value="fish">Fish</option>
+                        <option value="friend_area">Friend Area</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="restart_method">Restart Method:</label>
+                        <select name="restart_method" id="restart_method">
+                        <option value="fish">Fish</option>
+                        <option value="friend_area">Friend Area</option>
+                        </select>
                     </div>
                 </div>
             </div>
