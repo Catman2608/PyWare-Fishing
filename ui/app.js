@@ -86,9 +86,10 @@ function switchTab(tabId) {
     const breadcrumbTitle = document.getElementById("active-tab-title");
     if (breadcrumbTitle) {
         const titleMap = {
-            basic: "Basic",
+            overview: "Overview",
             automation: "Automation",
-            utilities: "Utilities"
+            fishing_tools: "Fishing Tools",
+            other_utilities: "Other Utilities"
         };
         breadcrumbTitle.textContent = titleMap[tabId] || "Settings";
     }

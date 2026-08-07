@@ -12,40 +12,21 @@
             <div class="logo">
                 PyWare Fishing V5.0
             </div>
-            <button class="tab-button active" onclick="switchTab('basic')">
-                Basic
+            <button class="tab-button active" onclick="switchTab('overview')">
+                Overview
             </button>
             <button class="tab-button" onclick="switchTab('automation')">
                 Automation
             </button>
-            <button class="tab-button" onclick="switchTab('utilities')">
-                Utilities
+            <button class="tab-button" onclick="switchTab('fishing_tools')">
+                Fishing Tools
+            </button>
+            <button class="tab-button" onclick="switchTab('other_utilities')">
+                Other Utilities
             </button>
             <div class="config-section">
                 <p>Active Configuration</p>
                 <select id="disabled" onchange="switchConfig(this.value)"></select>
-                <p>Utility Selection</p>
-                <div class="dropdown">
-                    <select name="automation_mode" id="automation_mode">
-                    <option value="fishing">Fishing</option>
-                    <option value="appraisal">Appraisal</option>
-                    <option value="enchant">Enchant</option>
-                    <option value="angler">Angler</option>
-                    <option value="disabled">Disabled</option>
-                    </select>
-                </div>
-                <p>Rod Ability</p>
-                <div class="dropdown">
-                    <select name="fishing_profile" id="fishing_profile">
-                    <option value="normal">Normal</option>
-                    <option value="notes">Notes (Pinion)</option>
-                    <option value="reverse">Reverse (Dreambreaker)</option>
-                    <option value="dual">Dual (Bellona)</option>
-                    <option value="lanes">4 Lanes (Tranquility)</option>
-                    <option value="metronome">Metronome (Lullaby)</option>
-                    </select>
-                </div>
-                <button onclick="openConfigManager()"> Manage </button>
                 <button onclick="openSupportTab()"> Support </button>
                 <button onclick="openAboutTab()"> About </button>
             </div>
@@ -54,7 +35,7 @@
             <!-- Top Bar -->
             <div class="topbar">
                 <div class="topbar-left">
-                    <span class="breadcrumb-current" id="active-tab-title">Basic</span>
+                    <span class="breadcrumb-current" id="active-tab-title">Overview</span>
                     <div class="status-container">
                         <span class="status-dot"></span>
                         <span id="status-label" class="status-text">Error: Status Label can't load properly</span>
@@ -63,8 +44,38 @@
             </div>
             <!-- Main Content -->
             <div class="content">
-            <!-- Basic Tab -->
-            <div id="basic" class="tab-content active">
+            <!-- Overview Tab -->
+            <div id="overview" class="tab-content active">
+                <div class="card">
+                    <h3>Core Settings</h3>
+                    <div class="description"> 
+                        <p>Configure the essential settings required before using the macro.</p>
+                    </div>
+                    <div class="dropdown">
+                        <label for="automation_mode">Automation Mode:</label>
+                        <select name="automation_mode" id="automation_mode">
+                            <option value="fishing">Fishing</option>
+                            <option value="appraisal">Appraisal</option>
+                            <option value="enchant">Enchant</option>
+                            <option value="angler">Angler</option>
+                            <option value="disabled">Disabled</option>
+                        </select>
+                    </div>
+
+                    <div class="dropdown">
+                        <label for="fishing_profile">Fishing Profile:</label>
+                        <select name="fishing_profile" id="fishing_profile">
+                            <option value="normal">Normal</option>
+                            <option value="notes">Notes (Pinion)</option>
+                            <option value="reverse">Reverse (Dreambreaker)</option>
+                            <option value="dual">Dual (Bellona)</option>
+                            <option value="lanes">4 Lanes (Tranquility)</option>
+                            <option value="metronome">Metronome (Lullaby)</option>
+                        </select>
+                    </div>
+
+                    <button onclick="openConfigManager()">Manage Configs</button>
+                </div>
                 <div class="card">
                     <h3>Hotkeys</h3>
                     <div class="description"> 
@@ -436,34 +447,8 @@
                     </div>
                 </div>
             </div>
-            <!-- Utilities Tab -->
-            <div id="utilities" class="tab-content">
-                <div class="card">
-                    <h3>Global</h3>
-                    <div class="description"> 
-                        <p>Shared settings used across multiple utility features.</p>
-                    </div>
-                    <div class="text">
-                        <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
-                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
-                    </div>
-                    <div class="text">
-                        <label>Delay After E (Enchant, Angler)</label>
-                        <input id=e_delay type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Delay After Click (Appraisal, Enchant, Angler)</label>
-                        <input id=click_delay type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Delay After Click 2 (Enchant, Angler, Treasure Appraisal)</label>
-                        <input id=click_delay2 type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Restart Delay (Angler, Treasure Appraisal)</label>
-                        <input id=utility_restart_delay type="text" placeholder="2">
-                    </div>
-                </div>
+            <!-- Fishing Tools Tab -->
+            <div id="fishing_tools" class="tab-content">
                 <div class="card">
                     <h3>Logging</h3>
                     <div class="description"> 
@@ -598,7 +583,63 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Auto Appraisal (toggle in Basic tab)</h3>
+                    <h3>Compatibility Options</h3>
+                    <div class="description"> 
+                        <p>Improve compatibility with different hardware and game conditions.</p>
+                    </div>
+                    <div class="switch2">
+                        <p>Click After Minigame</p>
+                        <label class="switch">
+                            <input id=click_after_minigame type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="dropdown">
+                        <label for="detection_method">Detection Method:</label>
+                        <select name="detection_method" id="detection_method">
+                        <option value="fish">Fish</option>
+                        <option value="friend_area">Friend Area</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="restart_method">Restart Method:</label>
+                        <select name="restart_method" id="restart_method">
+                        <option value="fish">Fish</option>
+                        <option value="friend_area">Friend Area</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <!-- Other Utilities Tab -->
+            <div id="other_utilities" class="tab-content">
+                <div class="card">
+                    <h3>Global</h3>
+                    <div class="description"> 
+                        <p>Shared settings used across multiple utility features.</p>
+                    </div>
+                    <div class="text">
+                        <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
+                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
+                    </div>
+                    <div class="text">
+                        <label>Delay After E (Enchant, Angler)</label>
+                        <input id=e_delay type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Delay After Click (Appraisal, Enchant, Angler)</label>
+                        <input id=click_delay type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Delay After Click 2 (Enchant, Angler, Treasure Appraisal)</label>
+                        <input id=click_delay2 type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Restart Delay (Angler, Treasure Appraisal)</label>
+                        <input id=utility_restart_delay type="text" placeholder="2">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Auto Appraisal (toggle in Overview tab)</h3>
                     <div class="description"> 
                         <p>Automatically appraise caught fish based on your settings.</p>
                     </div>
@@ -640,7 +681,7 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Auto Enchant (toggle in Basic tab)</h3>
+                    <h3>Auto Enchant (toggle in Overview tab)</h3>
                     <div class="description"> 
                         <p>Automatically enchant rods using your selected configuration.</p>
                     </div>
@@ -665,7 +706,7 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Angler/Quests (toggle in Basic tab)</h3>
+                    <h3>Angler/Quests (toggle in Overview tab)</h3>
                     <div class="description"> 
                         <p>Automate interactions with the Angler NPC and related tasks.</p>
                     </div>
@@ -684,33 +725,6 @@
                     <div class="text">
                         <label>Backpack Y (Ratio)</label>
                         <input id=backpack_y type="text" placeholder="0.5">
-                    </div>
-                </div>
-                <div class="card">
-                    <h3>Compatibility Options</h3>
-                    <div class="description"> 
-                        <p>Improve compatibility with different hardware and game conditions.</p>
-                    </div>
-                    <div class="switch2">
-                        <p>Click After Minigame</p>
-                        <label class="switch">
-                            <input id=click_after_minigame type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="dropdown">
-                        <label for="detection_method">Detection Method:</label>
-                        <select name="detection_method" id="detection_method">
-                        <option value="fish">Fish</option>
-                        <option value="friend_area">Friend Area</option>
-                        </select>
-                    </div>
-                    <div class="dropdown">
-                        <label for="restart_method">Restart Method:</label>
-                        <select name="restart_method" id="restart_method">
-                        <option value="fish">Fish</option>
-                        <option value="friend_area">Friend Area</option>
-                        </select>
                     </div>
                 </div>
             </div>

@@ -4011,7 +4011,7 @@ class Api:
         shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self._get_areas("shake")
         self._fish_overlay_cast_bounds = None
         self._set_fish_overlay_mode("casting")
-        # Config 
+        # Config
         white_color = self.vars.get("white_cast_color", self.vars.get("perfect_color2", "#d4d3ca"))
         green_color = self.vars.get("green_cast_color", self.vars.get("perfect_color", "#64a04c"))
         white_tol = int(self._get_var_number("perfect_cast2_tolerance", 5, int))

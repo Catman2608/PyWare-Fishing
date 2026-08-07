@@ -39,7 +39,7 @@
     "lock_cursor": "on",
     "casting_mode": "normal",
     "shake_mode": "navigation",
-    "fishing_mode": "line",
+    "fishing_mode": "color",
     "fall_scan_timeout": "5",
     "cast_scan_delay": "0.05",
     "perfect_cast_timing_700": "0.1",

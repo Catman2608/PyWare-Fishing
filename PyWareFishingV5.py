@@ -303,7 +303,6 @@ elif sys.platform == "darwin":
                 Quartz.kCGHIDEventTap,
                 Quartz.CGEventCreateKeyboardEvent(None, keycode, False)
             )
-
 # Linux (Mouse positions and Xdisplay)
 elif sys.platform.startswith("linux"):
     _xdisplay = None
@@ -369,7 +368,6 @@ elif sys.platform.startswith("linux"):
         time.sleep(delay)
         xtest.fake_input(d, X.KeyRelease, keycode)
         d.sync()
-
 # Config management
 def get_base_path():
     # 1. Check if the application is bundled/frozen
@@ -411,7 +409,6 @@ def open_base_folder():
         subprocess.run(["open", folder])
     else:  # Linux
         subprocess.run(["xdg-open", folder])
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Central area definitions.  To add a new selectable area:
 #   1. Add an entry below (key, color, label, default ratios 0–1).
@@ -471,23 +468,25 @@ AREA_CONFIG = {
     },
     "angler_dialogue": {
         "color": "#99ff95",
-        "label": "Backpack Box",
+        "label": "Dialogue Box (Angler)",
+        "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
+    },
+    "angler_quest": {
+        "color": "#121299",
+        "label": "Quest Box (Angler)",
         "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
     },
 }
 # Display / iteration order (also used for number-key toggles 1–9 in the selector)
 AREA_ORDER = list(AREA_CONFIG.keys())
-
 class AreaSelector:
     """
     Fullscreen transparent overlay implemented as a second pywebview window.
     Long-lived instance: call show() / hide() / update() as needed.
-
     Areas are fully data-driven via the module-level AREA_CONFIG / AREA_ORDER.
     Adding a new area requires only a new entry in AREA_CONFIG.
     """
     HTML_FILE = os.path.join(UI_PATH, "area_selector.html")
-
     def __init__(self, parent_app):
         self.parent_app = parent_app
         self.area_window = None
@@ -496,13 +495,13 @@ class AreaSelector:
         self._visible = {name: True for name in AREA_ORDER}
         self._screen_capture = None
         self._screenshot_b64 = None
-
     def _capture_and_crop(self):
         """Capture full screen and remove the macOS menu bar strip so the
         image matches the frameless window geometry (no menu bar)."""
         frame = self.parent_app.capture_single_frame()
         if frame is None:
             return None
+
         if frame.ndim == 3 and frame.shape[2] == 4:
             frame = frame[:, :, :3].copy()
         menu_offset = get_macos_menu_offset()
@@ -521,13 +520,16 @@ class AreaSelector:
         """Encode BGR numpy frame as a JPEG data-URL for the canvas."""
         if frame is None:
             return None
+
         try:
             # JPEG keeps the payload small enough for evaluate_js
             ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             if not ok:
                 return None
+
             b64 = base64.b64encode(buf.tobytes()).decode("ascii")
             return "data:image/jpeg;base64," + b64
+
         except Exception:
             return None
 
@@ -537,7 +539,6 @@ class AreaSelector:
         pywebview Window): on macOS Cocoa that triggers infinite recursion
         via AccessibilityObject.Bounds."""
         outer = self
-
         class _AreaApi:
             def get_area_config(self):
                 return outer.get_area_config()
@@ -562,6 +563,7 @@ class AreaSelector:
 
         if self._open and self.area_window:
             return
+
         self._screen_capture = self._capture_and_crop()
         self._screenshot_b64 = self._encode_screenshot(self._screen_capture)
         menu_offset = get_macos_menu_offset()
@@ -585,11 +587,11 @@ class AreaSelector:
                     except Exception:
                         print("Failed to maximize area selector:", e)
             self.area_window.events.shown += maximize_area_selector
-
     def _to_ratios(self, area):
         """Accept normalized areas and legacy pixel areas, store normalized values."""
         if not isinstance(area, dict):
             return {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+
         values = {
             "x": float(area.get("x", 0)),
             "y": float(area.get("y", 0)),
@@ -606,7 +608,6 @@ class AreaSelector:
     def update(self, area_name, area_dict):
         """Set one area by name (ratios or legacy pixels)."""
         self._areas[area_name] = self._to_ratios(area_dict)
-
     def update_all(self, areas_dict):
         """Bulk-load every known area from a {name: dict} mapping."""
         for name in AREA_ORDER:
@@ -614,10 +615,10 @@ class AreaSelector:
             if not isinstance(src, dict):
                 src = AREA_CONFIG[name]["default"]
             self._areas[name] = self._to_ratios(src)
-
     def get_area_config(self):
         """Return colours, labels, order and visibility so JS stays data-driven."""
         return {
+
             "order": list(AREA_ORDER),
             "areas": {
                 name: {"color": cfg["color"], "label": cfg["label"]}
@@ -625,14 +626,12 @@ class AreaSelector:
             },
             "visible": dict(self._visible),
         }
-
     def set_visibility(self, visible_dict):
         """Keep Python in sync when the overlay panel toggles boxes."""
         if isinstance(visible_dict, dict):
             for name, val in visible_dict.items():
                 if name in self._visible:
                     self._visible[name] = bool(val)
-
     def get_areas(self):
         """Return canvas-relative pixel boxes for JS (menu-bar offset subtracted)."""
         menu_offset = get_macos_menu_offset()
@@ -649,6 +648,7 @@ class AreaSelector:
     def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
         if not self._open:
             return
+
         menu_offset = get_macos_menu_offset()
         for name in AREA_ORDER:
             box = current_boxes.get(name, {})
@@ -667,16 +667,17 @@ class AreaSelector:
                         self.parent_app.set_status(f"{name.upper()} → X: {xr:.2f}  Y: {yr:.2f}")
                     except Exception:
                         pass
+
                     break
 
     def _pixels_to_ratios(self, box, menu_offset=0):
         return {
+
             "x": float(box.get("x", 0)) / SCREEN_WIDTH,
             "y": (float(box.get("y", 0)) + menu_offset) / SCREEN_HEIGHT,
             "width": float(box.get("width", box.get("w", 0))) / SCREEN_WIDTH,
             "height": float(box.get("height", box.get("h", 0))) / SCREEN_HEIGHT,
         }
-
     def window_ready(self, win_x, win_y):
         """JS signals the page is ready — push the frozen screenshot."""
         if self._screenshot_b64 and self.area_window and self._open:
@@ -689,11 +690,13 @@ class AreaSelector:
                 )
             except Exception:
                 pass
+
         return None
 
     def save_areas(self, areas):
         if not self._open:
             return
+
         menu_offset = get_macos_menu_offset()
         for name in AREA_ORDER:
             if name in areas:
@@ -719,14 +722,12 @@ class AreaSelector:
             self.parent_app.set_status("Area selector closed")
         self.area_window = None
         self._open = False
-
     def is_open(self):
         return self._open and self.area_window is not None
 
     def hide(self):
         if self.is_open():
             self.close()
-
     def close(self):
         if self.is_open():
             self.save_areas(self.get_areas())
@@ -738,7 +739,6 @@ class Eyedropper:
     frameless window), renders it in the canvas, and returns the picked color.
     """
     HTML_FILE = os.path.join(UI_PATH, "eyedropper.html")
-
     def __init__(self, parent_app):
         self.parent = parent_app
         self.eyedropper_window = None
@@ -754,13 +754,13 @@ class Eyedropper:
         self.top = 0
         self.width = 0
         self.height = 0
-
     def _capture_and_crop(self):
         """Capture full screen and remove the macOS menu bar strip so the
         image matches the frameless window geometry (no menu bar)."""
         frame = self.parent.capture_single_frame()
         if frame is None:
             return None
+
         if frame.ndim == 3 and frame.shape[2] == 4:
             frame = frame[:, :, :3].copy()
         menu_offset = get_macos_menu_offset()
@@ -778,13 +778,16 @@ class Eyedropper:
         """Encode BGR numpy frame as a JPEG data-URL for the canvas."""
         if frame is None:
             return None
+
         try:
             # JPEG keeps the payload small enough for evaluate_js
             ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             if not ok:
                 return None
+
             b64 = base64.b64encode(buf.tobytes()).decode("ascii")
             return "data:image/jpeg;base64," + b64
+
         except Exception:
             return None
 
@@ -797,17 +800,14 @@ class Eyedropper:
         self.last_picked_color = None
         self._cancelled = False
         self._color_key = color_key
-
         self._screen_capture = self._capture_and_crop()
         self._screenshot_b64 = self._encode_screenshot(self._screen_capture)
-
         menu_offset = get_macos_menu_offset()
         win_h = max(1, SCREEN_HEIGHT - menu_offset)
         self.left = SCREEN_LEFT
         self.top = SCREEN_TOP
         self.width = SCREEN_WIDTH
         self.height = win_h
-
         self.eyedropper_window = webview.create_window(
             "Eyedropper",
             self.HTML_FILE,
@@ -853,14 +853,12 @@ class Eyedropper:
                 self.eyedropper_window.destroy()
             except Exception:
                 pass
-            self._on_closed()
 
+            self._on_closed()
     def close(self):
         """Alias used by shutdown / toggle paths."""
         self.hide()
-
     # ── JS API methods (called from eyedropper.html) ──
-
     def window_ready(self, win_x, win_y):
         """JS signals the page is ready — push the frozen screenshot."""
         if self._screenshot_b64 and self.eyedropper_window and self._open:
@@ -873,6 +871,7 @@ class Eyedropper:
                 )
             except Exception:
                 pass
+
         return None
 
     def get_screenshot_data(self):
@@ -892,7 +891,6 @@ class Eyedropper:
         scale = self._scale if self._scale > 0 else 1.0
         px = int(x * scale)
         py = int(y * scale)
-
         if px < 0 or py < 0 or py >= frame.shape[0] or px >= frame.shape[1]:
             return "#000000"
 
@@ -900,7 +898,6 @@ class Eyedropper:
         g = int(frame[py, px, 1])
         r = int(frame[py, px, 2])
         hex_color = f"#{r:02X}{g:02X}{b:02X}"
-
         try:
             self.parent.set_status(f"{hex_color} • Click to pick • Esc to cancel")
         except Exception:
@@ -920,10 +917,8 @@ class Eyedropper:
         hex_color = hex_color.strip()
         if not hex_color.startswith("#"):
             hex_color = "#" + hex_color
-
         self.last_picked_color = hex_color
         self._cancelled = False
-
         # Write into settings vars when a target key was provided
         color_key = self._color_key
         if color_key:
@@ -934,7 +929,6 @@ class Eyedropper:
 
         # Notify the main webview so the color input updates
         self._notify_main_ui(hex_color, color_key)
-
         try:
             self.parent.set_status(f"Picked color: {hex_color}")
         except Exception:
@@ -947,14 +941,15 @@ class Eyedropper:
         """Called by JS on Escape — cancel without picking."""
         if not self.is_open():
             return
+
         self._cancelled = True
         self.last_picked_color = None
         try:
             self.parent.set_status("Eyedropper cancelled")
         except Exception:
             pass
-        self.hide()
 
+        self.hide()
     def _notify_main_ui(self, hex_color, color_key=None):
         """Push the picked color into the main pywebview window."""
         try:
@@ -987,7 +982,6 @@ class Eyedropper:
         self._visible = False
         self._screenshot_b64 = None
         # Keep last_picked_color so the main UI can still poll it
-
 class FishOverlay:
     HTML_FILE = os.path.join(UI_PATH, "fish_overlay.html")
     def __init__(self, parent_app):
@@ -1000,7 +994,6 @@ class FishOverlay:
         self.top = 0
         self.width = 0
         self.height = 0
-
     def _to_window_coords(self, left, top, width, height):
         """
         Convert physical-pixel geometry (from _get_areas / capture) into the
@@ -1023,13 +1016,11 @@ class FishOverlay:
 
     def show(self, left, top, width, height):
         """Creates and displays the transparent frameless overlay window.
-
         Arguments are physical-pixel screen coordinates (same space as
         _get_areas / capture_frame). They are converted to logical points
         for pywebview.
         """
         left, top, width, height = self._to_window_coords(left, top, width, height)
-
         if self._open and self.overlay_window:
             # If already open, shift/resize it instead of duplicating
             self.resize(left, top, width, height, already_logical=True)
@@ -1056,16 +1047,13 @@ class FishOverlay:
         self._open = True
         self._visible = True
         self.overlay_window.events.closed += self._on_closed
-
     def hide(self):
         """Destroys the current window instance completely."""
         if self.overlay_window and self._open:
             self.overlay_window.destroy()
             self._on_closed()
-
     def resize(self, left, top, width, height, already_logical=False):
         """Resizes and moves the window dynamically if it exists.
-
         By default arguments are physical pixels (same as show()).
         Pass already_logical=True when the caller has already converted them.
         """
@@ -1085,11 +1073,9 @@ class FishOverlay:
     def clear(self):
         """Clears rendering elements inside the web view context."""
         self._eval("window.fishOverlay && window.fishOverlay.clear()")
-
     def draw_box(self, bar_center, box_size, color, canvas_offset,
              show_bar_center=False, bar_y1=0.15, bar_y2=0.85):
         """Evaluates JS drawing contexts based on calculations inside the viewport.
-
         bar_center / box_size / canvas_offset are in physical pixels relative to
         the fish capture region; they are converted to logical CSS pixels for
         the overlay canvas (which matches the logical window size).
@@ -1118,7 +1104,6 @@ class FishOverlay:
             "bar_y2": max(0.0, min(1.0, float(bar_y2))),
         }
         self._eval(f"window.fishOverlay && window.fishOverlay.draw({json.dumps(shape)})")
-
     def _eval(self, script):
         """Safely executes JavaScript strings within the running window environment."""
         if self.overlay_window and self._open:
@@ -1155,7 +1140,7 @@ class Api:
         self.macro_thread = None
         # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
         self.bar_areas = {name: None for name in AREA_ORDER}
-        self.current_rod_name = "Basic Rod"
+        self.current_rod_name = "Default"
         self.scale_x_1440 = self.SCREEN_WIDTH / 2560
         self.scale_y_1440 = self.SCREEN_HEIGHT / 1440
         # Screen Capture
@@ -1565,6 +1550,7 @@ class Api:
             )
             if not os.path.exists(config_path):
                 return {
+
                     "success": True
                 }
             with open(config_path, "r") as f:
@@ -1573,15 +1559,14 @@ class Api:
             config_data.pop("bar_areas", None)
             with open(config_path, "w") as f:
                 json.dump(config_data, f, indent=4)
-
             # Also reset the in-memory areas so they take effect immediately
             if hasattr(self, "bar_areas"):
                 self.bar_areas = {}
-
             return {"success": True}
 
         except Exception as e:
             return {
+
                 "success": False,
                 "error": str(e)
             }
@@ -1625,6 +1610,7 @@ class Api:
         if IS_COMPILED == False:
             # print("Debug: ", message)
             pass
+
         try:
             safe = message.replace("\\", "\\\\").replace("`", "\\`").replace("'", "\\'")
             window.evaluate_js("window.setStatus && window.setStatus('" + safe + "')")
@@ -1662,7 +1648,6 @@ class Api:
         for name in AREA_ORDER:
             a = self.bar_areas.get(name)
             areas[name] = a if isinstance(a, dict) else dict(AREA_CONFIG[name]["default"])
-
         if hasattr(self, "area_selector") and self.area_selector and self.area_selector.is_open():
             self.area_selector.hide()
         else:
@@ -1698,6 +1683,7 @@ class Api:
                 crop = full_img[top:bottom, left:right]
                 if crop.size == 0:
                     continue
+
                 cv2.imwrite(os.path.join(BASE_PATH, f"debug_{name}.png"), crop)
                 saved.append(name)
         except Exception as e:
@@ -1708,14 +1694,12 @@ class Api:
     # Eyedropper
     def start_eyedropper(self, color_key=None):
         """Open the color picker overlay.
-
         color_key (optional): settings field name to write the result into
         (e.g. 'fish_color', 'shake_color'). The main UI is also notified via
         onColorPicked / setPickedColor and by updating matching input elements.
         """
         if not hasattr(self, "eyedropper") or self.eyedropper is None:
             self.eyedropper = Eyedropper(self)
-
         # Toggle off if already open
         if self.eyedropper.is_open():
             self.eyedropper.hide()
@@ -1730,6 +1714,7 @@ class Api:
         implement onColorPicked / setPickedColor callbacks."""
         if not hasattr(self, "eyedropper") or self.eyedropper is None:
             return None
+
         color = self.eyedropper.last_picked_color
         self.eyedropper.last_picked_color = None
         return color
@@ -1915,7 +1900,6 @@ class Api:
 
             remaining = end_time - time.perf_counter()
             time.sleep(min(0.01, remaining))
-
     # Get values
     def get_areas(self, area_key):
         # Apply Scale Factor
@@ -2007,7 +1991,9 @@ class Api:
             )
             if image is None:
                 return None
+
             return cgimage_to_srgb_numpy(image)
+
         else:
             scale = self._get_scale_factor()
             with MSS() as sct:
@@ -2037,7 +2023,6 @@ class Api:
                 self.capture_frame = np.asarray(sct.grab(monitor))[:, :, :3]
                 self.capture_id += 1
                 time.sleep(self.scan_delay)
-
     def capture_loop_quartz(self):
         """Continuous capture loop for the macro (macOS). Assumes self.macro_running is already True."""
         if not self.macro_running:
@@ -2060,7 +2045,6 @@ class Api:
             self.capture_frame = cgimage_to_srgb_numpy(image)
             self.capture_id += 1
             time.sleep(self.scan_delay)
-
     def process_image_for_ocr(self, img):
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # Upscale image
@@ -2077,6 +2061,7 @@ class Api:
         """
         if frame is None or frame.size == 0:
             return None, None
+
         try:
             tolerance = int(tolerance)
         except:
@@ -2086,6 +2071,7 @@ class Api:
             b, g, r = self._hex_to_bgr(hex)
         except:
             return None, None
+
         lower_bound = np.array([
             max(0, b - tolerance),
             max(0, g - tolerance),
@@ -2105,7 +2091,7 @@ class Api:
                 y, x = coords[-1]  # Get last pixel
             else:
                 raise RuntimeError("Invalid detection mode")
-            
+
             return int(x), int(y)
 
         return None, None
@@ -2113,13 +2099,11 @@ class Api:
     def find_color_cluster(self, frame, target_color_hex, tolerance=8, min_area=10):
         """
         Find the largest color cluster and return its center.
-
         Args:
             frame: BGR image
             target_color_hex: hex color string
             tolerance: color tolerance
             min_area: minimum cluster size to be valid
-
         Returns:
             (center_x, center_y) or None
         """
@@ -2131,35 +2115,28 @@ class Api:
         target_bgr = np.array(self._hex_to_bgr(target_color_hex), dtype=np.int16)
         frame_int = frame.astype(np.int16)
         tol = int(np.clip(tolerance, 0, 255))
-
         mask = np.all(np.abs(frame_int - target_bgr) <= tol, axis=2).astype(np.uint8)
-
         if not np.any(mask):
             return None
 
         # Connected Components (Cluster Detection) 
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
-
         if num_labels <= 1:
             return None  # Only Background
 
         # Skip Label 0 (Background)
         largest_label = None
         largest_area = 0
-
         for label in range(1, num_labels):
             area = stats[label, cv2.CC_STAT_AREA]
-
             if area > largest_area and area >= min_area:
                 largest_area = area
                 largest_label = label
-
         if largest_label is None:
             return None
 
         # Centroid 
         center_x, center_y = centroids[largest_label]
-
         return int(center_x), int(center_y)
 
     def _find_circles(self, frame):
@@ -2289,32 +2266,27 @@ class Api:
         except Exception as e:
             # print(f"    Error in line detection: {e}")
             return []
-        
+
     def get_colors_at_lines(self, frame, line_coords):
         """
         Get the color at each vertical line position as #RRGGBB hex strings.
-        
         Args:
             frame: BGR image
             line_coords: List of x-coordinates from _detect_lines_in_frame
-        
         Returns:
             List of '#RRGGBB' color strings for each line position, or None if out of bounds
         """
         colors = []
-
         for x in line_coords:
             # Make sure x is within image bounds
             if 0 <= x < frame.shape[1]:
                 height = frame.shape[0]
-
                 y_center = height // 2
                 # BGR tuple → convert to RRGGBB hex string
                 b, g, r = frame[y_center, x].tolist()
                 colors.append(f"#{r:02x}{g:02x}{b:02x}")
             else:
                 colors.append(None)
-
         return colors
 
     def auto_crop_template(self, template, lower_white=200):
@@ -2327,24 +2299,19 @@ class Api:
             gray_temp = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
         else:
             gray_temp = template
-        
         # 2. Threshold to find ONLY white/bright pixels (same as image_search)
         _, thresh_temp = cv2.threshold(gray_temp, lower_white, 255, cv2.THRESH_BINARY)
-        
         # 3. Find all white pixels (the actual totem content)
         coords = cv2.findNonZero(thresh_temp)
-        
         # If no white pixels found, return original
         if coords is None:
             return template
-        
+
         # 4. Get bounding box of white pixels
         x, y, w, h = cv2.boundingRect(coords)
-        
         # 5. Crop the ORIGINAL template (not the thresholded version)
         #    to preserve color/quality
         cropped = template[y:y+h, x:x+w]
-        
         return cropped
 
     def image_search(self, screenshot, template, lower_white=200, threshold=0.8):
@@ -2352,21 +2319,18 @@ class Api:
         screenshot_cropped = self.auto_crop_template(screenshot)
         template_height, template_width, _ = template.shape # template_height
         screenshot_resized = cv2.resize(screenshot_cropped, (template_width, template_height))
-        
         # 2. Convert screenshot & template to grayscale
         gray_screen = cv2.cvtColor(screenshot_resized, cv2.COLOR_BGR2GRAY)
         gray_temp = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-        
         # 3. Threshold both images so ONLY white/bright pixels remain (255) and rest is black (0)
         _, thresh_screen = cv2.threshold(gray_screen, lower_white, 255, cv2.THRESH_BINARY)
         _, thresh_temp = cv2.threshold(gray_temp, lower_white, 255, cv2.THRESH_BINARY)
-        
         # 4. Perform template matching on binary masks
         result = cv2.matchTemplate(thresh_screen, thresh_temp, cv2.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-        
         if max_val >= threshold:
             return True, max_loc, max_val
+
         return False, None, max_val
 
     def _calculate_speed_and_predict(self, white_positions, timestamps):
@@ -2395,7 +2359,6 @@ class Api:
     def test_logging(self):
         logging_mode = self.vars["logging_mode"].capitalize()
         self.send_logging(f"**{logging_mode} is working**", "Macro Stopped")
-
     def send_logging(self, text, loop_count, catch_rate=-1):
         logging_mode = self.vars["logging_mode"].lower()
         if logging_mode == "disabled":
@@ -2430,7 +2393,6 @@ class Api:
             )
         thread.start()
         thread.join()  # Wait for Discord/file log to finish before continuing
-
     def _discord_text_worker(self, webhook_url, message_prefix, loop_count, catch_rate):
         """Worker function to send text webhook."""
         logging_name = self.vars["logging_name"]
@@ -2453,7 +2415,6 @@ class Api:
                 self.set_status(f"Error: Discord text failed: {response.status_code}")
         except Exception as e:
             self.set_status(f"Error sending Discord text: {e}")
-
     def _discord_screenshot_worker(self, webhook_url, message_prefix, loop_count, catch_rate):
         logging_name = self.vars["logging_name"]
         try:
@@ -2461,6 +2422,7 @@ class Api:
             if screenshot is None:
                 self.set_status("Error: failed to capture screenshot for Discord")
                 return
+
             # Ensure BGR for imencode (mss already BGR; quartz conversion is BGR)
             if screenshot.shape[2] == 4:
                 screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
@@ -2480,7 +2442,6 @@ class Api:
                 self.set_status(f"Error: Discord screenshot failed: {response.status_code}")
         except Exception as e:
             self.set_status(f"Error sending Discord screenshot: {e}")
-
     def _debug_log_worker(self, text, loop_count, catch_rate):
         """Write debug logs to a text file."""
         try:
@@ -2506,7 +2467,6 @@ class Api:
             self.set_status(f"Debug log saved ({loop_count})")
         except Exception as e:
             self.set_status(f"Error writing debug log: {e}")
-
     def start_appraisal(self):
         # Validate Tesseract
         try:
@@ -2561,7 +2521,6 @@ class Api:
                     self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}", -1)
                 logging_cycle = logging_cycle + attempts
         self.set_status("Macro Stopped")
-
     def start_enchantment(self):
         # Validate Tesseract
         try:
@@ -2618,47 +2577,158 @@ class Api:
                     self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}", -1)
                 logging_cycle = logging_cycle + attempts
         self.set_status("Macro Stopped")
-
     def start_angler(self):
-        time.sleep(0.05)
-        self.stop_macro("Angler is not implemented yet")
+        # Validate Tesseract
+        try:
+            tesseract_path = self.vars["tesseract_path"]
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            self.macro_running = True
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            self.message_box_javascript(f"""An error occured during angler. 
+            Please copy the error and report the bug:\\n{e}\\n
+            Would you like to copy the full crash log to your clipboard?""", full_error)
+            self.macro_running = False
+            self.stop_macro(f"Angler error: {e}")
+        dialogue_left, dialogue_top, _, _, dialogue_width, dialogue_height = self._get_areas("angler_dialogue")
+        backpack_left, backpack_top, _, _, backpack_width, backpack_height = self._get_areas("angler_backpack")
+        quest_left, quest_top, quest_right, quest_bottom, _, _ = self._get_areas("angler_quest")
+        backpack_slot = str(self.vars["backpack_slot"])
+        utility_restart_delay = int(self.vars["utility_restart_delay"])
+        # Angler Key
+        angler_x_ratio = float(self.vars["angler_click_x"])
+        angler_y_ratio = float(self.vars["angler_click_y"])
+        angler_click_x = int(dialogue_width * angler_x_ratio) + dialogue_left
+        angler_click_y = int(dialogue_height * angler_y_ratio) + dialogue_top
+        # Backpack Key
+        backpack_x_ratio = self.vars["backpack_x"]
+        backpack_y_ratio = self.vars["backpack_y"]
+        backpack_x = int(backpack_width * backpack_x_ratio) + backpack_left
+        backpack_y = int(backpack_height * backpack_y_ratio) + backpack_top
+        # Check for utilities
+        self._check_logging_trigger(-1)
+        # Main loop
+        while self.macro_running:
+            time.sleep(0.1)
+            # STEP 1: CLICK E → OPEN QUEST DIALOGUE
+            self._send_key("e")
+            time.sleep(1.5)
+            # Click at angler area (accept quest)
+            self._click_at(angler_click_x, angler_click_y)
+            # STEP 2: OCR QUEST AREA — GET REQUIRED FISH TEXT
+            time.sleep(3)
+            img = self._grab_screen_full()
+            quest = img[quest_top:quest_bottom, quest_left:quest_right]
+            gray = cv2.cvtColor(quest, cv2.COLOR_BGR2GRAY)
+            gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
+            quest_text = pytesseract.image_to_string(gray)
+            lines = [
+                line.strip().lower()
+                for line in quest_text.splitlines()
+                if line.strip()
+            ]
+            required_fish = lines[-1] if lines else ""
+            self.set_status(f"Quest fish: {required_fish}")
+            if not required_fish:
+                self.set_status("Could not read fish name")
+                time.sleep(utility_restart_delay)
+                continue
 
+            # STEP 3: OPEN BACKPACK
+            self._send_key(backpack_slot)
+            time.sleep(0.5)
+            # STEP 4: CLICK SEARCH BAR + TYPE FISH NAME
+            self._click_at(backpack_x, backpack_y)
+            time.sleep(0.5)
+            # Type fish name
+            for char in required_fish:
+                self._send_key(char)
+            time.sleep(1.5)
+            # STEP 5: LOCATE quest_text IN QUEST AREA VIA OCR AND CLICK IT
+            img = self._grab_screen_full()
+            quest_region = img[quest_top:quest_bottom, quest_left:quest_right]
+            gray_q = cv2.cvtColor(quest_region, cv2.COLOR_BGR2GRAY)
+            gray_q = cv2.resize(gray_q, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            gray_q = cv2.threshold(gray_q, 150, 255, cv2.THRESH_BINARY)[1]
+            ocr_data_q = pytesseract.image_to_data(
+                gray_q,
+                output_type=pytesseract.Output.DICT,
+                config="--psm 11"
+            )
+            quest_click_x, quest_click_y = None, None
+            for i, text_tok in enumerate(ocr_data_q["text"]):
+                tok = text_tok.strip().lower()
+                try:
+                    conf = float(ocr_data_q["conf"][i])
+                except Exception:
+                    conf = -1
+                if conf < 40 or not tok:
+                    continue
+
+                if tok in required_fish or required_fish in tok:
+                    qx = ocr_data_q["left"][i]
+                    qy = ocr_data_q["top"][i]
+                    qw = ocr_data_q["width"][i]
+                    qh = ocr_data_q["height"][i]
+                    # Undo the 3× upscale to get back to screen coords
+                    quest_click_x = quest_left + (qx + qw // 2) // 3
+                    quest_click_y = quest_top  + (qy + qh // 2) // 3
+                    break
+
+            if quest_click_x is not None:
+                self.set_status(
+                    f"Quest text '{required_fish}' found at "
+                    f"{quest_click_x}, {quest_click_y} — clicking"
+                )
+                self._click_at(quest_click_x, quest_click_y)
+            else:
+                self.set_status(
+                    f"Quest text '{required_fish}' not found via OCR, skipping click"
+                )
+            time.sleep(0.25)
+            # STEP 6: CLOSE BACKPACK
+            self._send_key(backpack_slot)
+            time.sleep(0.5)
+            # STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)
+            self._send_key("e")
+            time.sleep(1.2)
+            # Click at angler area
+            self._click_at(angler_click_x, angler_click_y)
+            # STEP 8: COOLDOWN
+            time.sleep(utility_restart_delay)
+        self.set_status("Macro Stopped")
     def start_fishing(self):
         # 1. Core Config & Modes
         scale = self._get_scale_factor()
         self.macro_running = True
-        
         casting_mode = self.vars["casting_mode"].lower()
         shake_mode = self.vars["shake_mode"].lower()
         logging_mode = self.vars["logging_mode"].lower()
+        fishing_profile = self.vars["fishing_profile"].lower()
         click_after_minigame = self.vars["click_after_minigame"].lower()
         target_time = self.vars["target_time"].lower()
         logging_cycle = int(self.vars["logging_cycle"])
-        
         # 2. Hotkey & Inventory Slots
         bag_slot = str(self.vars["bag_slot"])
         rod_slot = str(self.vars["rod_slot"])
         sundial_slot = str(self.vars["sundial_slot"])
         target_slot = str(self.vars["target_slot"])
-        
         # 3. Delays & Timings
         select_rod_duration = float(self.vars["select_rod_duration"])
         delay_before_casting = float(self._get_var_number("delay_before_casting", 0.5, float))
         delay_after_casting = float(self._get_var_number("cast_delay", 1.0, float))
         sundial_delay = float(self.vars["sundial_delay"])
         totem_delay = float(self.vars["totem_delay"])
-        
         # 4. Screen Regions & Coordinates
         shake_left, shake_top, shake_right, shake_bottom, shake_w, shake_h = self.get_areas("shake")
         fish_left, fish_top, fish_right, fish_bottom, _, fish_height = self.get_areas("fish")
         friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self.get_areas("friend")
         totem_left, totem_top, totem_right, totem_bottom, _, _ = self.get_areas("totem")
-        
         shake_x = shake_left + (shake_w // 2)
         shake_y = shake_top + (shake_h // 2)
-
         detection_method = self.vars["detection_method"]
-        
         # 5. Features & Overlay Settings
         shake_failsafe = int(self.vars["shake_failsafe"])
         fish_color = self.vars["fish_color"]
@@ -2668,18 +2738,15 @@ class Api:
         auto_refresh = self.vars["auto_refresh"]
         auto_totem = self.vars["auto_totem"]
         fish_overlay = self.vars["fish_overlay"]
-        
         # 6. Optimized OpenCV Template Matching Setup
         sun = cv2.imread(os.path.join(IMAGES_PATH, "sun.png"))
         moon = cv2.imread(os.path.join(IMAGES_PATH, "moon.png"))
         sun_resized = self.auto_crop_template(sun)
         moon_resized = self.auto_crop_template(moon)
-        
         # 7. Internal Tracking State
         self.scan_delay = 0.1
         self.current_cycle = 0
         current_time = None
-        
         # Catch Metrics (0 = success, 1 = failed, 2 = N/A initial state)
         self.catch_success = 2
         self.catch_rate = 0.0
@@ -2756,11 +2823,13 @@ class Api:
                     if self.capture_frame is None:
                         attempts = attempts - 1
                         continue
+
                     if detection_method == "friend_area":
                         friend_img = self.capture_frame[friend_top_s:friend_bottom_s, friend_left_s:friend_right_s]
                         friend_x, friend_y = self.pixel_search(friend_img, friend_color, friend_tolerance)
                         if friend_x is None or friend_y is None:
                             break
+
                     else:
                         fish_img = self.capture_frame[fish_top:fish_bottom, fish_left:fish_right]
                         fish_x, fish_y = self.pixel_search(fish_img, fish_color, fish_tolerance)
@@ -2769,6 +2838,7 @@ class Api:
 
                     if self.macro_running == False:
                         break
+
                     elif shake_mode == "navigation":
                         keyboard_controller.press(Key.enter)
                         time.sleep(0.01)
@@ -2778,7 +2848,10 @@ class Api:
                     time.sleep(self.scan_delay)
                 # Minigame — sets self.catch_success = 0 at start; flips to 1 if fish ever leaves the bar
                 self.set_status("Playing Bar Minigame")
-                self._enter_minigame()
+                if fishing_profile == "reverse":
+                    self._enter_minigame_dreambreaker()
+                else:
+                    self._enter_minigame()
                 if click_after_minigame == "on":
                     time.sleep(select_rod_duration)
                     self._click_at(shake_x, shake_y)
@@ -2792,6 +2865,7 @@ class Api:
                         self.send_logging("**Cycle Checkpoint**", f"Cycle #{self.current_cycle}", catch_rate_percentage)
                     logging_cycle = logging_cycle + self.current_cycle
             return
+
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
@@ -2817,7 +2891,6 @@ class Api:
         perfect_cast_method = self.vars["perfect_cast_method"].lower()
         fall_scan_timeout = float(self.vars["fall_scan_timeout"])
         self.scan_delay = float(self.vars["cast_scan_delay"])
-        
         # Last values (Failsafe)
         last_capture_id = 0
         is_initial_run = True
@@ -2827,14 +2900,12 @@ class Api:
         last_time = time.time()
         self.hold_mouse()
         green_padding = 50
-        
         # Simple method variables
         speed_samples = []
         max_speed_samples = 20
         release_delay = 0  # Hardcoded value - setting removed in later versions
         perfect_threshold = 95.5  # Hardcoded value - setting removed in later versions
         release_timing = max(-50.0, min(50.0, release_delay))
-        
         # Velocity method variables
         if perfect_cast_method == 1:
             white_positions = []
@@ -2843,7 +2914,6 @@ class Api:
             last_time_to_impact = None
             # Get screen resolution for scaling
             scaling_factor = 1920 / SCREEN_WIDTH
-        
         # Initialize tracking variables
         green_abs_top = 0
         green_abs_left = 0
@@ -2852,33 +2922,32 @@ class Api:
         reached_bottom_5_percent = True
         last_fill_percentage = None
         last_frame_time = None
-        
         # Loop
         while self.macro_running:
             # Get image from self.capture_frame
             if self.capture_id == last_capture_id:
                 time.sleep(self.scan_delay)
                 continue
+
             if self.capture_frame is None:
                 time.sleep(self.scan_delay)
                 continue
-            
+
             # Scan time calculations
             current_time = time.time()
             elapsed_time = current_time - start_time
             time_delta = current_time - last_time
-            
             if elapsed_time >= fall_scan_timeout:
                 self.release_mouse()
                 break
+
             # Check if macro stopped during perfect cast
             if not self.macro_running:
                 self.release_mouse()
                 break
-            
+
             # Scanning from shake_left, shake_top to shake_right, shake_bottom
             shake_img = self.capture_frame[shake_top:shake_bottom, shake_left:shake_right]
-            
             # GREEN DETECTION
             if is_green_tracking:
                 # Track in sub-region around last known green position
@@ -2886,11 +2955,9 @@ class Api:
                 green_area_bottom = min(shake_img.shape[0], green_abs_top + green_padding)
                 green_area_left = max(0, green_abs_left - green_padding)
                 green_area_right = min(shake_img.shape[1], green_abs_right + green_padding)
-                
                 green_area = shake_img[green_area_top:green_area_bottom, green_area_left:green_area_right]
                 g_left, g_top = self.pixel_search(green_area, tracking_color, green_cast_tolerance)
                 g_right, g_bottom = self.pixel_search(green_area, tracking_color, green_cast_tolerance, 1)
-                
                 if None not in (g_left, g_top, g_right, g_bottom):
                     # Convert from green_area coordinates to shake_img coordinates
                     green_abs_left = g_left + green_area_left
@@ -2907,12 +2974,11 @@ class Api:
                         white_positions.clear()
                         white_timestamps.clear()
                     continue  # Skip this frame, try full scan next frame
-            
+
             if not is_green_tracking:
                 # Full scan for green
                 g_left, g_top = self.pixel_search(shake_img, tracking_color, green_cast_tolerance)
                 g_right, g_bottom = self.pixel_search(shake_img, tracking_color, green_cast_tolerance, 1)
-                
                 if None not in (g_left, g_top, g_right, g_bottom):
                     green_abs_left = g_left
                     green_abs_top = g_top
@@ -2922,42 +2988,36 @@ class Api:
                     is_green_tracking = True
                 else:
                     continue  # No green found, try again
-            
+
             # WHITE DETECTION (using absolute green coordinates)
             scan_bottom = int(shake_img.shape[0] * 0.9)
             green_center_x = (green_abs_left + green_abs_right) // 2
             white_frame = shake_img[green_abs_top:scan_bottom, green_abs_left:green_abs_right]
-            
             w_left, w_top = self.pixel_search(white_frame, white_cast_color, white_cast_tolerance)
             w_right, w_bottom = self.pixel_search(white_frame, white_cast_color, white_cast_tolerance, 1)
-            
             if None in (w_left, w_top, w_right, w_bottom):
                 continue
-            
+
             # Convert white coordinates to shake_img coordinates
             white_abs_top = w_top + green_abs_top
             white_abs_bottom = w_bottom + green_abs_top
-            
             # Now calculate distances using matching coordinate systems
             total_distance = white_abs_bottom - green_abs_top
             current_distance = white_abs_top - green_abs_top
             if total_distance <= 0:
                 continue
-            
+
             # === RELEASE LOGIC BASED ON SELECTED METHOD ===
             released = False
-            
             if perfect_cast_method == "simple":
                 # --- SIMPLE (PERCENTAGE-BASED) METHOD ---
                 actual_fill_percentage = (1 - (current_distance / total_distance)) * 100
                 fill_speed = 0.0
                 position_offset_percent = 0.0
-
                 if last_fill_percentage is not None and last_frame_time is not None:
                     time_delta = current_time - last_frame_time
                     if time_delta > 0:
                         fill_change = actual_fill_percentage - last_fill_percentage
-
                         if fill_change < -50:
                             last_fill_percentage = None
                             last_frame_time = None
@@ -2968,11 +3028,9 @@ class Api:
                             speed_samples.append(instant_fill_speed)
                             if len(speed_samples) > max_speed_samples:
                                 speed_samples.pop(0)
-
                 if speed_samples:
                     fill_speed = sum(speed_samples) / len(speed_samples)
                     base_offset = 1.5 * math.log(1 + fill_speed / 25.0)
-
                     if release_timing < 0:
                         base_multiplier = 1.0 - (release_timing / 5.0)
                         speed_scale = min(6.0, (fill_speed / 100.0) ** 2)
@@ -2980,31 +3038,26 @@ class Api:
                         position_offset_percent = max(0.0, min(50.0, base_offset * timing_multiplier))
                     else:
                         position_offset_percent = max(0.0, min(50.0, base_offset))
-
                 predicted_fill_percentage = actual_fill_percentage + position_offset_percent
                 offset_pixels = int((position_offset_percent / 100.0) * total_distance)
                 predicted_white_y_top = white_abs_top - offset_pixels
                 self.status_overlay.set_line(f"White Y: {predicted_white_y_top}", row=4)
-
                 bottom_threshold = 5.0 + position_offset_percent
                 if predicted_fill_percentage <= bottom_threshold and not reached_bottom_5_percent:
                     reached_bottom_5_percent = True
                     last_fill_percentage = None
                     last_frame_time = None
                     speed_samples.clear()
-
                 if release_timing <= 0:
                     release_threshold = perfect_threshold
                 else:
                     release_threshold = perfect_threshold + (release_timing / 50.0) * 4.5
-
                 if reached_bottom_5_percent and predicted_fill_percentage >= release_threshold:
                     released = True
                     break
 
                 last_fill_percentage = actual_fill_percentage
                 last_frame_time = current_time
-                
             else:  # perfect_cast_method == 1 (VELOCITY-BASED METHOD)
                 # --- Velocity tracking ---
                 now_pc = time.perf_counter()
@@ -3014,10 +3067,8 @@ class Api:
                     white_positions.pop(0)
                     white_timestamps.pop(0)
                 self.status_overlay.set_line(f"White Y: {white_abs_top}", row=4)
-                
                 # local_distance: pixels remaining until white reaches green
                 local_distance = current_distance  # white_abs_top - green_abs_top; positive = white below green
-                
                 # --- Velocity-band predictive release ---
                 if len(white_positions) >= 3:
                     velocity_y = self._calculate_speed_and_predict(white_positions, white_timestamps)
@@ -3075,7 +3126,6 @@ class Api:
                                     self.release_mouse()
                                     released = True
                             last_time_to_impact = time_to_impact
-                
                 # Slow-speed / emergency distance fallbacks
                 if not released:
                     slow_threshold = total_distance * 0.05  # within 5% of green
@@ -3089,19 +3139,17 @@ class Api:
                         if recent_dists[-1] < recent_dists[0]:
                             self.release_mouse()
                             released = True
-                
                 if released:
                     break
 
             if time.time() - start_time > fall_scan_timeout:
                 break
-            
+
             # Cleanup
             time.sleep(self.scan_delay)
             last_capture_id = self.capture_id
             is_initial_run = False
             last_time = current_time
-        
         # Final Cleanup
         if not released:  # Only release if we didn't already release
             self.release_mouse()
@@ -3111,6 +3159,7 @@ class Api:
     def _execute_cast_normal(self):
         if self.macro_running == False:
             return
+
         cast_duration = float(self._get_var_number("cast_duration", 0.5, float))
         self.hold_mouse(False)
         self.interruptible_sleep(cast_duration)
@@ -3135,6 +3184,175 @@ class Api:
             shake_y_screen = None
         self._click_at(shake_x_screen, shake_y_screen)
         return
+
+    def _enter_minigame_dreambreaker(self):
+        # Helper Functions
+        mouse_down = False
+        def hold_mouse(mouse_state=False):
+            "Hold mouse. False for left click, True for right click."
+            nonlocal mouse_down
+            if not mouse_down:
+                self.hold_mouse(mouse_state)
+                mouse_down = True
+        def release_mouse(mouse_state=False):
+            "Release mouse. False for left click, True for right click."
+            nonlocal mouse_down
+            if mouse_down:
+                self.release_mouse(mouse_state)
+                mouse_down = False
+        # Areas
+        shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self.get_areas("shake")
+        fish_left, fish_top, fish_right, fish_bottom, fish_width, fish_height = self.get_areas("fish")
+        friend_left, friend_top, friend_right, friend_bottom, _, _ = self.get_areas("friend")
+        # Area calculations
+        shake_x = int((shake_left + shake_right) / 2)
+        shake_y = int((shake_top + shake_bottom) / 2)
+        fish_overlay = self.vars["fish_overlay"]
+        if fish_overlay == "on":
+            # Position the overlay just above or below the fish bar so it does
+            # not cover the actual minigame.  show() expects (left, top, width,
+            # height) in physical pixels — NOT right/bottom.
+            fish_center = int((fish_top + fish_bottom) / 2)
+            if fish_center > HALF_HEIGHT:
+                fish_top_overlay = fish_top - fish_height - fish_height
+            else:
+                fish_top_overlay = fish_top + fish_height + fish_height
+            overlay_width = fish_right - fish_left
+            overlay_height = fish_height
+            self.fish_overlay.show(
+                fish_left,
+                fish_top_overlay,
+                overlay_width,
+                overlay_height,
+            )
+        # Colors
+        left_color = self.vars["left_color"]
+        right_color = self.vars["right_color"]
+        arrow_color = self.vars["arrow_color"]
+        fish_color = self.vars["fish_color"]
+        tracking_color = self.vars["tracking_color"]
+        friends_color = self.vars["friends_color"]
+        # Tolerance
+        try:
+            left_tolerance = int(self.vars["left_tolerance"])
+            right_tolerance = int(self.vars["right_tolerance"])
+            arrow_tolerance = int(self.vars["arrow_tolerance"])
+            fish_tolerance = int(self.vars["fish_tolerance"])
+            tracking_tolerance = int(self.vars["tracking_tolerance"])
+            friends_tolerance = int(self.vars["friends_tolerance"])
+        except:
+            left_tolerance = 8
+            right_tolerance = 8
+            arrow_tolerance = 8
+            fish_tolerance = 4
+            tracking_tolerance = 5
+            friends_tolerance = 5
+        # Minigame Settings
+        self.scan_delay = float(self.vars["minigame_scan_delay"])
+        restart_delay = float(self.vars["restart_delay"])
+        restart_method = self.vars["restart_method"].lower()
+        # Last Values (Failsafe)
+        last_capture_id = 0
+        last_bar_size = 0
+        last_bar_center = 0
+        last_detection_source = 0
+        while self.macro_running:
+            # Get image from self.capture_frame
+            if self.capture_id == last_capture_id:
+                time.sleep(self.scan_delay)
+                continue
+
+            elif self.capture_frame is None:
+                time.sleep(self.scan_delay)
+                continue
+
+            else:
+                fish_img = self.capture_frame[fish_top:fish_bottom, fish_left:fish_right]
+                friend_img = self.capture_frame[friend_top:friend_bottom, friend_left:friend_right]
+            fish_x, fish_y = self.pixel_search(fish_img, fish_color, fish_tolerance)
+            left_x, left_y = self.pixel_search(fish_img, left_color, left_tolerance)
+            right_x, right_y = self.pixel_search(fish_img, right_color, right_tolerance, 1)
+            if left_x == None:
+                left_x, left_y = self.pixel_search(fish_img, right_color, right_tolerance)
+            if right_x == None:
+                right_x, right_y = self.pixel_search(fish_img, left_color, left_tolerance, 1)
+            if left_x is None or right_x is None:
+                detection_source = 1
+                # Bars not found - scan for arrows
+                arrow_x, arrow_y = self.pixel_search(fish_img, arrow_color, arrow_tolerance)
+                # Reconstruct missing bar edge from previous geometry instead of mouse state
+                if arrow_x is not None:
+                    # Treat 0 as unknown to match the previous None semantics
+                    if last_left_x == 0:
+                        last_left_x = None
+                    if last_right_x == 0:
+                        last_right_x = None
+                    # If exactly one edge is missing, reconstruct it using the last known bar size
+                    if last_left_x is None and last_right_x is not None:
+                        last_left_x = last_right_x - last_bar_size
+                    elif last_right_x is None and last_left_x is not None:
+                        last_right_x = last_left_x + last_bar_size
+                if arrow_x is not None:
+                    bar_detected = True
+                    arrow_on_left_side = arrow_x < last_bar_center
+                    dist_to_left = abs(arrow_x - last_left_x) if last_left_x is not None else fish_width
+                    dist_to_right = abs(arrow_x - last_right_x) if last_right_x is not None else fish_width
+                    proximity_threshold = int(last_bar_size / 4)
+                    # Flip decision if wrong
+                    if arrow_on_left_side:
+                        if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
+                            # Arrow is actually closer to RIGHT bar - we were wrong!
+                            arrow_on_left_side = False  # Flip the decision
+                    else:
+                        if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
+                            # Arrow is actually closer to LEFT bar - we were wrong!
+                            arrow_on_left_side = True  # Flip the decision
+                    if arrow_on_left_side:
+                        left_x = arrow_x
+                        right_x = last_right_x
+                        if right_x is None:
+                            right_x = left_x + last_bar_size
+                    else:
+                        right_x = arrow_x
+                        left_x = last_left_x
+                        if left_x is None:
+                            left_x = right_x - last_bar_size
+            else:
+                detection_source = 0
+            try:
+                bar_size = right_x - left_x
+                bar_center = left_x + int(bar_size / 2)
+            except:
+                bar_size = 0
+                bar_center = 0
+            # Friend and Fish restart
+            if restart_method == "friend_area":
+                friend_x, friend_y = self.pixel_search(friend_img, friends_color, friends_tolerance)
+                if friend_x is not None and friend_y is not None:
+                    self.interruptible_sleep(restart_delay)
+                    return
+
+            else:
+                try:
+                    if fish_x is None:
+                        self.interruptible_sleep(restart_delay)
+                        return
+
+                except:
+                    time.sleep(self.scan_delay)
+                    continue
+
+            # Controller output
+            if detection_source == 1 and last_detection_source == 0:
+                if mouse_down == False:
+                    hold_mouse()
+                elif mouse_down == True:
+                    release_mouse()
+            # Cleanup
+            last_bar_center = bar_center
+            last_bar_size = bar_size
+            last_capture_id = self.capture_id
+            last_detection_source = detection_source
     def _enter_minigame(self):
         # Helper Functions
         mouse_down = False
@@ -3216,131 +3434,161 @@ class Api:
         velocity_smoothing = self._get_var_number("velocity_smoothing", 1)
         # Utility Settings
         pinion_note_ratio = float(self.vars["pinion_note_ratio"])
-        # Last values (failsafe)
+        # State Flags & Timers
         is_initial_run = True
-        last_arrow_x = False
         bar_detected = False
-        bag_spam_cycle = 0
+        frame_interpolation = False
+        self.catch_success = 0
+        last_time = time.perf_counter()
+        # Current Minigame Frame Tracking
         fish_size = 10
-        note_x = 0
-        note_y_ratio = 0
-        line_coords = []
         bar_size = 0
         bar_center = 0
         error = 0
+        line_coords = []
+        note_x = 0
+        note_y_ratio = 0
+        # Failsafe & Previous Frame Tracking (History)
         last_capture_id = 0
         last_fish_x = 0
         last_left_x = 0
         last_right_x = 0
         last_bar_center = 0
         last_bar_size = 0
+        last_valid_bar_center = 0
         last_error = 0
+        # Velocities & Mechanics
+        bag_spam_cycle = 0
         color_check_bar_velocity = 0.0
         color_check_target_velocity = 0.0
-        self.catch_success = 0
-        last_time = time.perf_counter()
+        interpolation_bar_velocity = 0
         # Loop
         while self.macro_running:
             # Get image from self.capture_frame
             if self.capture_id == last_capture_id:
+                frame_interpolation = True
+            elif self.capture_frame is None:
                 time.sleep(self.scan_delay)
                 continue
-            if self.capture_frame is None:
-                time.sleep(self.scan_delay)
-                continue
+
             else:
                 shake_img = self.capture_frame[shake_top:fish_bottom, fish_left:fish_right]
                 fish_img = self.capture_frame[fish_top:fish_bottom, fish_left:fish_right]
                 friend_img = self.capture_frame[friend_top:friend_bottom, friend_left:friend_right]
+                frame_interpolation = False
+            if frame_interpolation == True:
+                if controller_mode == "predictive":
+                    time.sleep(self.scan_delay)
+                    frame_interpolation = False
+                    continue
 
-            # Fish detection
-            fish_x, fish_y = self.pixel_search(fish_img, fish_color, fish_tolerance)
-            if fish_x is not None:
+                fish_x = last_fish_x
+                if last_left_x is not None and last_right_x is not None and interpolation_bar_velocity is not None:
+                    left_x = last_left_x + (interpolation_bar_velocity * self.scan_delay)
+                    right_x = last_right_x + (interpolation_bar_velocity * self.scan_delay)
+                else:
+                    left_x = 0
+                    right_x = 0
+                bar_size = right_x - left_x
+                bar_center = left_x + int(bar_size / 2)
+                bar_detected = True
                 fish_detected = True
             else:
-                fish_detected = False
-            # Bar detection (Color or Line)
-            if fishing_mode == "color":
-                left_x, left_y = self.pixel_search(fish_img, left_color, left_tolerance)
-                right_x, right_y = self.pixel_search(fish_img, right_color, right_tolerance, 1)
-                if left_x == None:
-                    left_x, left_y = self.pixel_search(fish_img, right_color, right_tolerance)
-                if right_x == None:
-                    right_x, right_y = self.pixel_search(fish_img, left_color, left_tolerance, 1)
-                # print(f"Raw coordinates: {left_x}, {right_x}, {fish_x}")
-                # Check if we should scan for arrows
-                if left_x is not None and right_x is not None:
-                    bar_detected = True
-                    # print(f"Detection Source: Bar | Left: {left_x} | Right: {right_x}")
+                # Fish detection
+                fish_x, fish_y = self.pixel_search(fish_img, fish_color, fish_tolerance)
+                if fish_x is not None:
+                    fish_detected = True
                 else:
-                    # Try arrow
-                    bar_detected = False
-                    # Bars not found - scan for arrows
-                    arrow_x, arrow_y = self.pixel_search(fish_img, arrow_color, arrow_tolerance)
-                    if last_left_x is None or last_right_x is None:
-                        last_left_x = 0
-                        last_right_x = 0
-                    if last_left_x == 0 or last_right_x == 0:
-                        if mouse_down == True:
-                            last_left_x = arrow_x
-                        else:
-                            last_right_x = arrow_x
-                    if arrow_x is not None:
+                    fish_detected = False
+                # Bar detection (Color or Line)
+                if fishing_mode == "color":
+                    left_x, left_y = self.pixel_search(fish_img, left_color, left_tolerance)
+                    right_x, right_y = self.pixel_search(fish_img, right_color, right_tolerance, 1)
+                    if left_x == None:
+                        left_x, left_y = self.pixel_search(fish_img, right_color, right_tolerance)
+                    if right_x == None:
+                        right_x, right_y = self.pixel_search(fish_img, left_color, left_tolerance, 1)
+                    # print(f"Raw coordinates: {left_x}, {right_x}, {fish_x}")
+                    # Check if we should scan for arrows
+                    if left_x is not None and right_x is not None:
                         bar_detected = True
-                        arrow_on_left_side = arrow_x - last_bar_center
-                        dist_to_left = (arrow_x - last_left_x) if last_left_x is not None else fish_width
-                        dist_to_right = (arrow_x - last_right_x) if last_right_x is not None else fish_width
-                        proximity_threshold = int(last_bar_size / 4)
-                        # Flip decision if wrong
-                        if arrow_on_left_side:
-                            if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
-                                # Arrow is actually closer to RIGHT bar - we were wrong!
-                                arrow_on_left_side = False  # Flip the decision
-                        else:
-                            if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
-                                # Arrow is actually closer to LEFT bar - we were wrong!
-                                arrow_on_left_side = True  # Flip the decision
-                        if arrow_on_left_side:
-                            left_x = arrow_x
-                            right_x = last_right_x
-                            if right_x is None or right_x == 0:
-                                right_x = left_x + last_bar_size
-                        else:
-                            right_x = arrow_x
-                            left_x = last_left_x
-                            if left_x is None or left_x == 0:
-                                left_x = right_x - last_bar_size
+                        # print(f"Detection Source: Bar | Left: {left_x} | Right: {right_x}")
                     else:
-                        # Use Cache
+                        # Try arrow
                         bar_detected = False
-                try:
-                    bar_center = int((left_x + right_x) / 2)
-                    bar_size = right_x - left_x
-                except:
-                    bar_center = 0
-                    bar_size = 0
-            else:
-                line_coords = self._detect_lines_in_frame(fish_img)
-                colors = self.get_colors_at_lines(fish_img, line_coords)
-                if is_initial_run == True:
-                    fish_x = np.mean(line_coords)
-                    line_mean = int(round(len(line_coords) / 2))
-                    left_x = line_coords[line_mean - 1]
-                    right_x = line_coords[line_mean + 1]
+                        # Bars not found - scan for arrows
+                        arrow_x, arrow_y = self.pixel_search(fish_img, arrow_color, arrow_tolerance)
+                        # Reconstruct missing bar edge from previous geometry instead of mouse state
+                        if arrow_x is not None:
+                            # Treat 0 as unknown to match the previous None semantics
+                            if last_left_x == 0:
+                                last_left_x = None
+                            if last_right_x == 0:
+                                last_right_x = None
+                            # If exactly one edge is missing, reconstruct it using the last known bar size
+                            if last_left_x is None and last_right_x is not None:
+                                last_left_x = last_right_x - last_bar_size
+                            elif last_right_x is None and last_left_x is not None:
+                                last_right_x = last_left_x + last_bar_size
+                        if arrow_x is not None:
+                            bar_detected = True
+                            arrow_on_left_side = arrow_x < last_bar_center
+                            dist_to_left = abs(arrow_x - last_left_x) if last_left_x is not None else fish_width
+                            dist_to_right = abs(arrow_x - last_right_x) if last_right_x is not None else fish_width
+                            proximity_threshold = int(last_bar_size / 4)
+                            # Flip decision if wrong
+                            if arrow_on_left_side:
+                                if dist_to_right < dist_to_left and dist_to_right < proximity_threshold:
+                                    # Arrow is actually closer to RIGHT bar - we were wrong!
+                                    arrow_on_left_side = False  # Flip the decision
+                            else:
+                                if dist_to_left < dist_to_right and dist_to_left < proximity_threshold:
+                                    # Arrow is actually closer to LEFT bar - we were wrong!
+                                    arrow_on_left_side = True  # Flip the decision
+                            if arrow_on_left_side:
+                                left_x = arrow_x
+                                right_x = last_right_x
+                                if right_x is None:
+                                    right_x = left_x + last_bar_size
+                            else:
+                                right_x = arrow_x
+                                left_x = last_left_x
+                                if left_x is None:
+                                    left_x = right_x - last_bar_size
+                        else:
+                            # Use Cache
+                            bar_detected = False
+                    try:
+                        bar_center = int((left_x + right_x) / 2)
+                        bar_size = right_x - left_x
+                    except:
+                        bar_center = 0
+                        bar_size = 0
+                else:
+                    line_coords = self._detect_lines_in_frame(fish_img)
+                    colors = self.get_colors_at_lines(fish_img, line_coords)
+                    if is_initial_run == True:
+                        fish_x = np.mean(line_coords)
+                        line_mean = int(round(len(line_coords) / 2))
+                        left_x = line_coords[line_mean - 1]
+                        right_x = line_coords[line_mean + 1]
             # Friend and Fish restart
             if restart_method == "friend_area":
                 friend_x, friend_y = self.pixel_search(friend_img, friends_color, friends_tolerance)
                 if friend_x is not None and friend_y is not None:
                     self.interruptible_sleep(restart_delay)
                     return
+
             else:
                 try:
                     if fish_x is None:
                         self.interruptible_sleep(restart_delay)
                         return
+
                 except:
                     time.sleep(self.scan_delay)
                     continue
+
             # print(f"bar_detected: {bar_detected}")
             # print(f"left_x: {left_x}, right_x: {right_x}")
             # print(f"bar_center: {bar_center}, bar_size: {bar_size}")
@@ -3430,7 +3678,8 @@ class Api:
             # PD controller
             current_time = time.perf_counter()
             time_delta = current_time - last_time
-            last_time = current_time
+            if frame_interpolation == False:
+                last_time = current_time
             if fish_x is not None:
                 error = fish_x - bar_center
             else:
@@ -3532,6 +3781,7 @@ class Api:
                             # Bar Moving Left Relative To Fish → Hold (Apply Right Thrust)
                             control_signal = 30
             # Mouse state
+            interpolation_bar_velocity = (bar_center - last_valid_bar_center) / time_delta
             # print(f"error: {error}")
             # print(f"control_signal: {control_signal}")
             if control_signal > 0:
@@ -3544,6 +3794,8 @@ class Api:
                 last_right_x = right_x
                 last_bar_center = bar_center
                 last_bar_size = bar_size
+                if frame_interpolation == False:
+                    last_valid_bar_center = bar_center
             if fish_detected == True:
                 if not fish_x == note_x:
                     last_fish_x = fish_x
@@ -3551,6 +3803,7 @@ class Api:
                 last_arrow_x = arrow_x
             except:
                 pass
+
             # Cleanup
             is_initial_run = False
             last_capture_id = self.capture_id
@@ -3560,28 +3813,25 @@ class Api:
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False
         self.fish_overlay.hide()
-
         if (
             self.macro_thread
             and self.macro_thread.is_alive()
             and self.macro_thread is not threading.current_thread()
         ):
             self.macro_thread.join()
-
         if (
             self.capture_thread
             and self.capture_thread.is_alive()
             and self.capture_thread is not threading.current_thread()
         ):
             self.capture_thread.join()
-
         if text:
             self.set_status(text)
-
         try:
             window.show()
         except Exception:
             pass
+
 try:
     with open(os.path.join(UI_PATH, "index.html"), "r", encoding="utf-8-sig") as file:
         lines = file.readline().strip()
