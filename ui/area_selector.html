@@ -230,7 +230,7 @@ function cursorFor(handle) {
 
 function sendUpdate(x, y) {
     const now = Date.now();
-    if (now - lastIpc < 40) return;
+    if (now - lastIpc < 250) return;
     lastIpc = now;
     if (window.pywebview && pywebview.api && pywebview.api.on_mouse_move)
         pywebview.api.on_mouse_move(x, y, JSON.parse(JSON.stringify(boxes)));

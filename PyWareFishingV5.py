@@ -57,7 +57,7 @@ mouse_controller = MouseController()
 macro_running = False
 macro_thread = None
 APP_VERSION = 5.0
-BETA_VERSION = 3
+BETA_VERSION = 4
 DEVELOPER = "Catman2608"
 def get_macos_menu_offset():
     if sys.platform != "darwin":
@@ -2850,6 +2850,8 @@ class Api:
                 self.set_status("Playing Bar Minigame")
                 if fishing_profile == "reverse":
                     self._enter_minigame_dreambreaker()
+                elif fishing_profile == "dual":
+                    self._enter_minigame_bellona()
                 else:
                     self._enter_minigame()
                 if click_after_minigame == "on":
@@ -3353,6 +3355,291 @@ class Api:
             last_bar_size = bar_size
             last_capture_id = self.capture_id
             last_detection_source = detection_source
+    def _enter_minigame_bellona(self):
+        # Helper Functions
+        mouse_down = False
+        def hold_mouse(mouse_state=False):
+            "Hold mouse. False for left click, True for right click."
+            nonlocal mouse_down
+            if not mouse_down:
+                self.hold_mouse(mouse_state)
+                mouse_down = True
+        def release_mouse(mouse_state=False):
+            "Release mouse. False for left click, True for right click."
+            nonlocal mouse_down
+            if mouse_down:
+                self.release_mouse(mouse_state)
+                mouse_down = False
+        # Areas
+        shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self.get_areas("shake")
+        raw_fish_left, fish_top, raw_fish_right, fish_bottom, raw_fish_width, fish_height = self.get_areas("fish")
+        friend_left, friend_top, friend_right, friend_bottom, _, _ = self.get_areas("friend")
+        # Area Calculations
+        fish_center = raw_fish_left + int(raw_fish_width / 2)
+        fish_left = raw_fish_left
+        fish_right = fish_center
+        fish_left2 = fish_center
+        fish_right2 = raw_fish_right
+        shake_x = int((shake_left + shake_right) / 2)
+        shake_y = int((shake_top + shake_bottom) / 2)
+        fish_overlay = self.vars["fish_overlay"]
+        if fish_overlay == "on":
+            # Position the overlay just above or below the fish bar so it does
+            # not cover the actual minigame.  show() expects (left, top, width,
+            # height) in physical pixels — NOT right/bottom.
+            fish_center = int((fish_top + fish_bottom) / 2)
+            if fish_center > HALF_HEIGHT:
+                fish_top_overlay = fish_top - fish_height - fish_height
+            else:
+                fish_top_overlay = fish_top + fish_height + fish_height
+            overlay_width = fish_right2 - fish_left
+            overlay_height = fish_height
+            self.fish_overlay.show(
+                fish_left,
+                fish_top_overlay,
+                overlay_width,
+                overlay_height,
+            )
+        # Colors
+        left_color = self.vars["left_color"]
+        right_color = self.vars["right_color"]
+        arrow_color = self.vars["arrow_color"]
+        fish_color = self.vars["fish_color"]
+        friends_color = self.vars["friends_color"]
+        # Tolerance
+        try:
+            left_tolerance = int(self.vars["left_tolerance"])
+            right_tolerance = int(self.vars["right_tolerance"])
+            arrow_tolerance = int(self.vars["arrow_tolerance"])
+            fish_tolerance = int(self.vars["fish_tolerance"])
+            friends_tolerance = int(self.vars["friends_tolerance"])
+        except:
+            left_tolerance = 8
+            right_tolerance = 8
+            arrow_tolerance = 8
+            fish_tolerance = 4
+            friends_tolerance = 5
+        # Minigame Settings
+        scale = get_scale_factor()
+        bag_slot = str(self.vars["bag_slot"])
+        bag_spam = self.vars["bag_spam"]
+        lock_cursor = self.vars["lock_cursor"]
+        fishing_mode = self.vars["fishing_mode"].lower()
+        fishing_profile = self.vars["fishing_profile"].lower()
+        restart_method = self.vars["restart_method"]
+        bar_ratio_from_side = float(self.vars["bar_ratio_from_side"])
+        restart_delay = float(self.vars["restart_delay"])
+        self.scan_delay = float(self.vars["minigame_scan_delay"])
+        controller_mode = self.vars["controller_mode"].lower()
+        kp = self._get_var_number("kp", 0.45)
+        kd = self._get_var_number("kd", 0.35)
+        stopping_distance = self._get_var_number("stopping_distance", 3)
+        velocity_smoothing = self._get_var_number("velocity_smoothing", 1)
+        # Cache values
+        last_capture_id = 0
+        last_bar_size1 = 0
+        last_bar_center1 = 0
+        last_bar_size2 = 0
+        last_bar_center2 = 0
+        last_left_x1 = 0
+        last_left_x2 = 0
+        last_right_x1 = 0
+        last_right_x2 = 0
+        last_fish_x1 = 0
+        last_fish_x2 = 0
+        last_time = time.perf_counter()
+        while self.macro_running:
+            # Get image from self.capture_frame
+            if self.capture_id == last_capture_id:
+                time.sleep(self.scan_delay)
+                continue
+            elif self.capture_frame is None:
+                time.sleep(self.scan_delay)
+                continue
+
+            else:
+                fish_img = self.capture_frame[fish_top:fish_bottom, fish_left:fish_right]
+                fish_img2 = self.capture_frame[fish_top:fish_bottom, fish_left2:fish_right2]
+                friend_img = self.capture_frame[friend_top:friend_bottom, friend_left:friend_right]
+            # Fish Detection
+            fish_x1, fish_y1 = self.pixel_search(fish_img, fish_color, fish_tolerance)
+            fish_x2, fish_y2 = self.pixel_search(fish_img2, fish_color, fish_tolerance)
+            fish_detected = True
+            fish_detected2 = True
+            if fish_x1 is None:
+                fish_detected = False
+            if fish_x2 is None:
+                fish_detected2 = False
+            # Left and right bar detection
+            left_x1, left_y1 = self.pixel_search(fish_img, left_color, left_tolerance)
+            right_x1, right_y1 = self.pixel_search(fish_img, right_color, right_tolerance, 1)
+            left_x2, left_y2 = self.pixel_search(fish_img2, left_color, left_tolerance)
+            right_x2, right_y2 = self.pixel_search(fish_img2, right_color, right_tolerance, 1)
+            bar_detected = True
+            bar_detected2 = True
+            if left_x1 is not None or right_x1 is not None:
+                # Bar 1 Detected - calculate bar center and bar size
+                bar_size1 = abs(right_x1 - left_x1)
+                bar_center1 = left_x1 + int(bar_size1 / 2)
+            else:
+                # Try arrow for left bar
+                arrow_x1, arrow_y1 = self.pixel_search(fish_img, arrow_color, arrow_tolerance)
+                if arrow_x1 is not None:
+                    arrow1_on_left_side = arrow_x1 < last_bar_center1
+                    if arrow1_on_left_side:
+                        left_x1 = arrow_x1
+                        right_x1 = arrow_x1 + last_bar_size1
+                    bar_size1 = abs(right_x1 - left_x1)
+                    bar_center1 = left_x1 + int(bar_size1 / 2)
+                else:
+                    bar_detected = False
+            if left_x2 is not None or right_x2 is not None:
+                # Bar 2 Detected - calculate bar center and bar size
+                bar_size2 = abs(right_x1 - left_x1)
+                bar_center2 = left_x1 + int(bar_size2 / 2)
+            else:
+                # Try arrow for right bar
+                arrow_x2, arrow_y2 = self.pixel_search(fish_img2, arrow_color, arrow_tolerance)
+                if arrow_x2 is not None:
+                    arrow2_on_left_side = arrow_x2 < last_bar_center2
+                    if arrow2_on_left_side:
+                        left_x2 = arrow_x2
+                        right_x2 = arrow_x2 + last_bar_size2
+                    bar_size2 = abs(right_x1 - left_x1)
+                    bar_center2 = left_x1 + int(bar_size2 / 2)
+                else:
+                    bar_detected2 = False
+            # Friend and Fish restart
+            if restart_method == "friend_area":
+                friend_x, friend_y = self.pixel_search(friend_img, friends_color, friends_tolerance)
+                if friend_x is not None and friend_y is not None:
+                    self.interruptible_sleep(restart_delay)
+                    return
+
+            else:
+                try:
+                    if fish_x1 is None and fish_x2 is None:
+                        self.interruptible_sleep(restart_delay)
+                        return
+
+                except:
+                    time.sleep(self.scan_delay)
+                    continue
+
+            # print(f"bar_detected: {bar_detected}")
+            # print(f"left_x: {left_x}, right_x: {right_x}")
+            # print(f"bar_center: {bar_center}, bar_size: {bar_size}")
+            # Bag Spam & Lock Cursor
+            bag_spam_cycle += 1
+            if bag_spam_cycle == 5:
+                bag_spam_cycle = 0
+                if bag_spam == "on":
+                    self._send_key(bag_slot)
+                if lock_cursor == "on":
+                    mouse_controller.position = (int(shake_x / scale), int(shake_y / scale))
+            # Restore from Cache
+            self.fish_overlay.clear()
+            if bar_detected == False:
+                left_x1 = last_left_x1
+                right_x1 = last_right_x1
+                bar_center1 = last_bar_center1
+                bar_size1 = last_bar_size1
+            if fish_detected == False:
+                fish_x1 = last_fish_x1
+            if bar_detected2 == False:
+                left_x2 = last_left_x2
+                right_x2 = last_right_x2
+                bar_center2 = last_bar_center2
+                bar_size2 = last_bar_size2
+            if fish_detected2 == False:
+                fish_x2 = last_fish_x2
+            # Edge Boundary for Left and Right Bar
+            boundary1 = bar_size1 * bar_ratio_from_side
+            boundary2 = bar_size2 * bar_ratio_from_side
+            left_boundary1 = fish_left + boundary1
+            right_boundary1 = fish_right - boundary1
+            left_boundary2 = fish_left2 + boundary2
+            right_boundary2 = fish_right2 - boundary2
+            if fish_overlay == "on":
+                self.fish_overlay.draw_box(
+                    bar_center=bar_center1, box_size=bar_size1,
+                    color="green", canvas_offset=0,
+                    show_bar_center=True
+                )
+                if left_boundary1 is not None:
+                    self.fish_overlay.draw_box(
+                        bar_center=left_boundary1, box_size=15,
+                        color="lightblue", canvas_offset=0
+                    )
+                if right_boundary1 is not None:
+                    self.fish_overlay.draw_box(
+                        bar_center=right_boundary1, box_size=15,
+                        color="lightblue", canvas_offset=0
+                    )
+                if fish_x1 is not None:
+                    self.fish_overlay.draw_box(
+                        bar_center=fish_x1, box_size=10,
+                        color="red", canvas_offset=0
+                    )
+                self.fish_overlay.draw_box(
+                    bar_center=bar_center2, box_size=bar_size2,
+                    color="green", canvas_offset=0,
+                    show_bar_center=True
+                )
+                if left_boundary2 is not None:
+                    self.fish_overlay.draw_box(
+                        bar_center=left_boundary2, box_size=15,
+                        color="lightblue", canvas_offset=0
+                    )
+                if right_boundary2 is not None:
+                    self.fish_overlay.draw_box(
+                        bar_center=right_boundary2, box_size=15,
+                        color="lightblue", canvas_offset=0
+                    )
+                if fish_x2 is not None:
+                    self.fish_overlay.draw_box(
+                        bar_center=fish_x2, box_size=10,
+                        color="red", canvas_offset=0
+                    )
+            current_time = time.perf_counter()
+            time_delta = current_time - last_time
+
+            error1 = fish_x1 - bar_center1
+            p_term1 = error1 / time_delta * self.scan_delay
+            d_term1 = (error1 - last_error1) / time_delta
+            control_signal1 = p_term1 * kp + d_term1 * kd
+
+            error2 = fish_x2 - bar_center2
+            p_term2 = error2 / time_delta * self.scan_delay
+            d_term2 = (error2 - last_error2) / time_delta
+            control_signal2 = p_term2 * kp + d_term2 * kd
+
+            if control_signal1 > 0:
+                hold_mouse(False)
+            else:
+                release_mouse(False)
+            if control_signal2 > 0:
+                hold_mouse(True)
+            else:
+                release_mouse(True)
+
+            if bar_detected == True:
+                last_left_x1 = left_x1
+                last_right_x1 = right_x1
+                last_bar_center1 = bar_center1
+                last_bar_size1 = bar_size1
+            if bar_detected2 == True:
+                last_left_x2 = left_x2
+                last_right_x2 = right_x2
+                last_bar_center2 = bar_center2
+                last_bar_size2 = bar_size2
+            if fish_detected == True:
+                last_fish_x1 = fish_x1
+            if fish_detected2 == True:
+                last_fish_x2 = fish_x2
+            last_error1 = error1
+            last_error2 = error2
+            last_time = current_time
     def _enter_minigame(self):
         # Helper Functions
         mouse_down = False
@@ -3831,20 +4118,56 @@ class Api:
             window.show()
         except Exception:
             pass
-
-try:
-    with open(os.path.join(UI_PATH, "index.html"), "r", encoding="utf-8-sig") as file:
-        lines = file.readline().strip()
-    with open(os.path.join(UI_PATH, "style.css"), "r", encoding="utf-8-sig") as file:
-        lines = file.readline().strip()
-    with open(os.path.join(UI_PATH, "app.js"), "r", encoding="utf-8-sig") as file:
-        lines = file.readline().strip()
-except FileNotFoundError:
-    open_folder = messagebox.askyesno("Missing Files", """Your installation is missing the configs, images and UI folder.
-    Please report this bug in the Discord Server.\n
-    Do you want to open the configs folder?""")
-    if open_folder == True:
-        open_base_folder()
+def check_setup_guide():
+    try:
+        with open(os.path.join(UI_PATH, "index.html"), "r", encoding="utf-8-sig") as file:
+            lines = file.readline().strip()
+        with open(os.path.join(UI_PATH, "style.css"), "r", encoding="utf-8-sig") as file:
+            lines = file.readline().strip()
+        with open(os.path.join(UI_PATH, "app.js"), "r", encoding="utf-8-sig") as file:
+            lines = file.readline().strip()
+    except FileNotFoundError:
+        open_folder = messagebox.askyesno("Missing Files", """Your installation is missing the configs, images and UI folder.
+        Please report this bug in the Discord Server.\n
+        Do you want to open the configs folder?""")
+        if open_folder == True:
+            open_base_folder()
+        return False
+    try:
+        with open(os.path.join(UI_PATH, "app.js"), "r", encoding="utf-8-sig") as file:
+            # Read first two lines
+            lines = [file.readline().strip() for _ in range(3)]
+            # Parse first line for APP_VERSION
+            first_line = lines[0]
+            js_app_version = float(first_line.replace("const APP_VERSION = ", "").replace('"', "").replace(";", ""))
+            # Parse second line for BETA_VERSION
+            second_line = lines[1]
+            js_beta_version = float(second_line.replace("const BETA_VERSION = ", "").replace('"', "").replace(";", ""))
+            # Parse third line for DEVELOPER
+            third_line = lines[2]
+            js_developer = third_line.replace("const DEVELOPER = ", "").replace('"', "").replace(";", "")
+        if js_app_version != APP_VERSION:
+            messagebox.showerror("Version Mismatch", f"""
+You are running version {APP_VERSION} but you're supposed to run version {js_app_version}.\nPlease report this bug in the Discord Server.
+""")
+            return False
+        if js_beta_version != BETA_VERSION:
+            if not BETA_VERSION == 0 or js_beta_version == 0:
+                messagebox.showerror("Beta Version Mismatch", f"""
+You are running beta {APP_VERSION} but you're supposed to run beta {js_app_version}.\nPlease report this bug in the Discord Server.
+""")
+                return False
+        if js_developer != DEVELOPER:
+            messagebox.showerror("Unofficial Build Detected", f"""
+You tried to download an unauthorized version of PyWare Fishing.\nPlease take actions against {js_developer} and download the official version.
+""")
+            return False
+        return True
+    except Exception as e:
+        messagebox.showerror("Unknown Error", f"An unknown error prevented PyWare Fishing from starting up:\n{e}")
+    return False
+setup_state = check_setup_guide()
+if setup_state == False:
     sys.exit(0)
 api = Api()
 window = webview.create_window(
