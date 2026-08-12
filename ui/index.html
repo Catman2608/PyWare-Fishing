@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PyWare Fishing V5.0</title>
+    <title>PyWare Fishing V4.42</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -10,23 +10,42 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
-                PyWare Fishing V5.0
+                PyWare Fishing V4.42
             </div>
-            <button class="tab-button active" onclick="switchTab('overview')">
-                Overview
+            <button class="tab-button active" onclick="switchTab('basic')">
+                Basic
             </button>
             <button class="tab-button" onclick="switchTab('automation')">
                 Automation
             </button>
-            <button class="tab-button" onclick="switchTab('fishing_tools')">
-                Fishing Tools
-            </button>
-            <button class="tab-button" onclick="switchTab('other_utilities')">
-                Other Utilities
+            <button class="tab-button" onclick="switchTab('utilities')">
+                Utilities
             </button>
             <div class="config-section">
                 <p>Active Configuration</p>
                 <select id="disabled" onchange="switchConfig(this.value)"></select>
+                <p>Utility Selection</p>
+                <div class="dropdown">
+                    <select name="automation_mode" id="automation_mode">
+                    <option value="fishing">Fishing</option>
+                    <option value="appraisal">Appraisal</option>
+                    <option value="enchant">Enchant</option>
+                    <option value="angler">Angler</option>
+                    <option value="disabled">Disabled</option>
+                    </select>
+                </div>
+                <p>Rod Ability</p>
+                <div class="dropdown">
+                    <select name="fishing_profile" id="fishing_profile">
+                    <option value="normal">Normal</option>
+                    <option value="notes">Notes (Pinion)</option>
+                    <option value="reverse">Reverse (Dreambreaker)</option>
+                    <option value="dual">Dual (Bellona)</option>
+                    <option value="lanes">4 Lanes (Tranquility)</option>
+                    <option value="metronome">Metronome (Lullaby)</option>
+                    </select>
+                </div>
+                <button onclick="openConfigManager()"> Manage </button>
                 <button onclick="openSupportTab()"> Support </button>
                 <button onclick="openAboutTab()"> About </button>
             </div>
@@ -44,43 +63,10 @@
             </div>
             <!-- Main Content -->
             <div class="content">
-            <!-- Overview Tab -->
-            <div id="overview" class="tab-content active">
-                <div class="card">
-                    <h3>Core Settings</h3>
-                    <div class="description"> 
-                        <p>Configure the essential settings required before using the macro.</p>
-                    </div>
-                    <div class="dropdown">
-                        <label for="automation_mode">Automation Mode:</label>
-                        <select name="automation_mode" id="automation_mode">
-                            <option value="fishing">Fishing</option>
-                            <option value="appraisal">Appraisal</option>
-                            <option value="enchant">Enchant</option>
-                            <option value="angler">Angler</option>
-                            <option value="disabled">Disabled</option>
-                        </select>
-                    </div>
-
-                    <div class="dropdown">
-                        <label for="fishing_profile">Fishing Profile:</label>
-                        <select name="fishing_profile" id="fishing_profile">
-                            <option value="normal">Normal</option>
-                            <option value="notes">Notes (Pinion)</option>
-                            <option value="reverse">Reverse (Dreambreaker)</option>
-                            <option value="dual">Dual (Bellona)</option>
-                            <option value="lanes">4 Lanes (Tranquility)</option>
-                            <option value="metronome">Metronome (Lullaby)</option>
-                        </select>
-                    </div>
-
-                    <button onclick="openConfigManager()">Manage Configs</button>
-                </div>
+            <!-- Basic Tab -->
+            <div id="basic" class="tab-content active">
                 <div class="card">
                     <h3>Hotkeys</h3>
-                    <div class="description"> 
-                        <p>Configure keyboard shortcuts to control the macro.</p>
-                    </div>
                     <div class="box-grid">
                         <div class="simple-box">
                             <p>Start Key</p>
@@ -144,9 +130,6 @@
                 </div>
                 <div class="card">
                     <h3>Color Options</h3>
-                    <div class="description"> 
-                        <p>Adjust colors used for the interface and detection.</p>
-                    </div>
                     <button onclick="startEyedropper()"> Pick Colors </button>
                     <button onclick="takeScreenshot()"> Take Screenshot </button>
                     <div class="box-grid">
@@ -186,9 +169,9 @@
                             <input id="white_cast_tolerance" type="number" placeholder="20">
                         </div>
                         <div class="simple-box">
-                            <p>Tracking</p>
-                            <input id="tracking_color" type="text" placeholder="#149604">
-                            <input id="tracking_tolerance" type="number" placeholder="5">
+                            <p>Pinion Notes</p>
+                            <input id="pinion_notes_color" type="text" placeholder="#149604">
+                            <input id="pinion_notes_tolerance" type="number" placeholder="5">
                         </div>
                         <div class="simple-box">
                             <p>Friends Area</p>
@@ -202,9 +185,6 @@
             <div id="automation" class="tab-content">
                 <div class="card">
                     <h3>Basic Options</h3>
-                    <div class="description"> 
-                        <p>General settings that affect overall macro behavior.</p>
-                    </div>
                     <div class="switch2">
                         <p>Auto Zoom</p>
                         <label class="switch">
@@ -259,8 +239,8 @@
                     <div class="dropdown">
                         <label for="fishing_mode">Fishing Mode:</label>
                         <select name="fishing_mode" id="fishing_mode">
-                        <option value="line">Line</option>
                         <option value="color">Color</option>
+                        <option value="line">Line</option>
                         </select>
                     </div>
                 </div>
@@ -280,6 +260,14 @@
                     <div class="text">
                         <label>Cast Scan Delay</label>
                         <input id=cast_scan_delay type="text" placeholder="0.01">
+                    </div>
+                    <div class="text">
+                        <label>Release Delay (Simple)</label>
+                        <input id=release_delay_simple type="text" placeholder="0">
+                    </div>
+                    <div class="text">
+                        <label>Perfect Cast Threshold (Simple)</label>
+                        <input id=perfect_threshold type="text" placeholder="95.5">
                     </div>
                     <div class="box-grid">
                         <div class="simple-box">
@@ -330,16 +318,13 @@
                 </div>
                 <div class="card">
                     <h3>Casting</h3>
-                    <div class="description"> 
-                        <p>Configure casting accuracy, timing, and release behavior.</p>
+                    <div class="text">
+                        <label>Select Rod Duration</label>
+                        <input id=select_rod_duration type="text" placeholder="0.35">
                     </div>
                     <div class="text">
                         <label>Delay</label>
                         <input id=delay_before_casting type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Select Rod Duration</label>
-                        <input id=select_rod_duration type="text" placeholder="0.35">
                     </div>
                     <div class="arrow">&darr;</div> <!-- Arrows -->
                     <div class="text">
@@ -354,12 +339,9 @@
                 </div>
                 <div class="card">
                     <h3>Shaking</h3>
-                    <div class="description"> 
-                        <p>Customize automatic shake detection and interaction.</p>
-                    </div>
                     <div class="text">
                         <label>Shake Delay</label>
-                        <input id=shake_scan_delay type="text" placeholder="0.08">
+                        <input id=shake_scan_delay type="text" placeholder="0.12">
                     </div>
                     <div class="text">
                         <label>Shake Failsafe (attempts)</label>
@@ -368,9 +350,6 @@
                 </div>
                 <div class="card">
                     <h3>Minigame</h3>
-                    <div class="description"> 
-                        <p>Tune fish tracking, bar control, and controller settings.</p>
-                    </div>
                     <div class="text">
                         <label>Minigame Scan Delay (seconds)</label>
                         <input id=minigame_scan_delay type="text" placeholder="0.01">
@@ -398,26 +377,23 @@
                     </div>
                     <div class="text">
                         <label>KP (Proportional)</label>
-                        <input id=kp type="text" placeholder="0.4">
+                        <input id=kp type="text" placeholder="0.6">
                     </div>
                     <div class="text">
                         <label>KD (Derivative)</label>
-                        <input id=kd type="text" placeholder="0.5">
+                        <input id=kd type="text" placeholder="0.6">
                     </div>
                     <div class="text">
                         <label>Stopping Distance</label>
-                        <input id=stopping_distance type="text" placeholder="1.4">
+                        <input id=stopping_distance type="text" placeholder="1.5">
                     </div>
                     <div class="text">
                         <label>Velocity Smoothing</label>
-                        <input id=velocity_smoothing type="text" placeholder="0.07">
+                        <input id=velocity_smoothing type="text" placeholder="0.2">
                     </div>
                 </div>
                 <div class="card">
                     <h3>Special Rods</h3>
-                    <div class="description"> 
-                        <p>Configure behavior for rods with unique mechanics.</p>
-                    </div>
                     <div class="text">
                         <label>Note Tracking Ratio (Pinion)</label>
                         <input id=pinion_note_ratio type="text" placeholder="0.3">
@@ -438,22 +414,42 @@
                         <input id=target_delay type="text" placeholder="0">
                     </div>
                     <div class="text">
-                        <label>Metronome Ratio (Lullaby)</label>
-                        <input id=lullaby_metronome_ratio type="text" placeholder="0.5">
+                        <label>Metronome Padding (Lullaby)</label>
+                        <input id=lullaby_metronome_padding type="text" placeholder="20">
                     </div>
                     <div class="text">
-                        <label>Fishing Ratio (Lullaby)</label>
-                        <input id=lullaby_fishing_ratio type="text" placeholder="0.7">
+                        <label>Mask Lost Ratio (Lullaby)</label>
+                        <input id=lullaby_mask_lost_ratio type="text" placeholder="0.2">
                     </div>
                 </div>
             </div>
             <!-- Fishing Tools Tab -->
-            <div id="fishing_tools" class="tab-content">
+            <div id="utilities" class="tab-content">
+                <div class="card">
+                    <h3>Global</h3>
+                    <div class="text">
+                        <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
+                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
+                    </div>
+                    <div class="text">
+                        <label>Delay After E (Enchant, Angler)</label>
+                        <input id=e_delay type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Delay After Click (Appraisal, Enchant, Angler)</label>
+                        <input id=click_delay type="text" placeholder="1">
+                    </div>
+                    <div class="text">
+                        <label>Delay After Click 2 (Enchant, Angler, Treasure Appraisal)</label>
+                        <input id=click_delay2 type="text" placeholder="0.5">
+                    </div>
+                    <div class="text">
+                        <label>Restart Delay (Angler, Treasure Appraisal)</label>
+                        <input id=utility_restart_delay type="text" placeholder="100">
+                    </div>
+                </div>
                 <div class="card">
                     <h3>Logging</h3>
-                    <div class="description"> 
-                        <p>Send notifications and status updates to Discord or local files.</p>
-                    </div>
                     <div class="dropdown">
                         <label for="logging_mode">Logging Mode:</label>
                         <select name="logging_mode" id="logging_mode">
@@ -467,6 +463,10 @@
                         <input id=logging_url type="text" placeholder="[___]">
                     </div>
                     <div class="text">
+                        <label>User ID</label>
+                        <input id=user_id type="text" placeholder="67">
+                    </div>
+                    <div class="text">
                         <label>Webhook Name</label>
                         <input id=logging_name type="text" placeholder="PyWare Fishing V4">
                     </div>
@@ -478,9 +478,6 @@
                 </div>
                 <div class="card">
                     <h3>Auto Totem</h3>
-                    <div class="description"> 
-                        <p>Automatically equip and activate supported totems.</p>
-                    </div>
                     <div class="switch2">
                         <p>Auto Totem</p>
                         <label class="switch">
@@ -498,22 +495,19 @@
                     </div>
                     <div class="text">
                         <label>Cycles</label>
-                        <input id=totem_cycles type="text" placeholder="3">
+                        <input id=totem_cycles type="text" placeholder="55">
                     </div>
                     <div class="text">
                         <label>Sundial Delay (seconds)</label>
-                        <input id=sundial_delay type="text" placeholder="15">
+                        <input id=sundial_delay type="text" placeholder="20">
                     </div>
                     <div class="text">
                         <label>Totem Delay (seconds)</label>
-                        <input id=totem_delay type="text" placeholder="4">
+                        <input id=totem_delay type="text" placeholder="2.5">
                     </div>
                 </div>
                 <div class="card">
                     <h3>Auto Reconnect</h3>
-                    <div class="description"> 
-                        <p>Rejoin the game after disconnects or server errors.</p>
-                    </div>
                     <div class="switch2">
                         <p>Auto Reconnect</p>
                         <label class="switch">
@@ -523,126 +517,25 @@
                     </div>
                     <div class="text">
                         <label>Threshold</label>
-                        <input id=reconnect_threshold type="text" placeholder="3">
+                        <input id=reconnect_threshold type="text" placeholder="30">
                     </div>
                     <div class="arrow">&darr;</div> <!-- Arrows -->
                     <div class="text">
                         <label>Wait Time (Seconds)</label>
-                        <input id=reconnect_wait_time type="text" placeholder="60">
+                        <input id=reconnect_wait_time type="text" placeholder="20">
                     </div>
                     <div class="arrow">&darr;</div> <!-- Arrows -->
                     <div class="text">
                         <label>Mirror X (Ratio)</label>
-                        <input id=mirror_ratio type="text" placeholder="60">
+                        <input id=mirror_ratio type="text" placeholder="0.5">
                     </div>
                     <div class="text">
                         <label>Mirror Y (Ratio)</label>
-                        <input id=mirror_ratio2 type="text" placeholder="60">
-                    </div>
-                </div>
-                <div class="card">
-                    <h3>Hunt Detect</h3>
-                    <div class="description"> 
-                        <p>Detect hunt events and react automatically.</p>
-                    </div>
-                    <div class="switch2">
-                        <p>Hunt Detect</p>
-                        <label class="switch">
-                            <input id=hunt_detect type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="text">
-                        <label>Hunt Fishes (Split by ,)</label>
-                        <input id=hunt_fishes type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Cycles</label>
-                        <input id=hunt_cycles type="text" placeholder="0.5">
-                    </div>
-                </div>
-                <div class="card">
-                    <h3>Auto Sovereign Recharge</h3>
-                    <div class="description"> 
-                        <p>Automatically recharge the Sovereign Relic when needed.</p>
-                    </div>
-                    <div class="switch2">
-                        <p>Sovereign Recharge</p>
-                        <label class="switch">
-                            <input id=sovereign_recharge type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="text">
-                        <label>Minimum %</label>
-                        <input id=minimum_percentage type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Maximum %</label>
-                        <input id=maximum_percentage type="text" placeholder="0.5">
-                    </div>
-                </div>
-                <div class="card">
-                    <h3>Compatibility Options</h3>
-                    <div class="description"> 
-                        <p>Improve compatibility with different hardware and game conditions.</p>
-                    </div>
-                    <div class="switch2">
-                        <p>Click After Minigame</p>
-                        <label class="switch">
-                            <input id=click_after_minigame type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="dropdown">
-                        <label for="detection_method">Detection Method:</label>
-                        <select name="detection_method" id="detection_method">
-                        <option value="fish">Fish</option>
-                        <option value="friend_area">Friend Area</option>
-                        </select>
-                    </div>
-                    <div class="dropdown">
-                        <label for="restart_method">Restart Method:</label>
-                        <select name="restart_method" id="restart_method">
-                        <option value="fish">Fish</option>
-                        <option value="friend_area">Friend Area</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <!-- Other Utilities Tab -->
-            <div id="other_utilities" class="tab-content">
-                <div class="card">
-                    <h3>Global</h3>
-                    <div class="description"> 
-                        <p>Shared settings used across multiple utility features.</p>
-                    </div>
-                    <div class="text">
-                        <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
-                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
-                    </div>
-                    <div class="text">
-                        <label>Delay After E (Enchant, Angler)</label>
-                        <input id=e_delay type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Delay After Click (Appraisal, Enchant, Angler)</label>
-                        <input id=click_delay type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Delay After Click 2 (Enchant, Angler, Treasure Appraisal)</label>
-                        <input id=click_delay2 type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Restart Delay (Angler, Treasure Appraisal)</label>
-                        <input id=utility_restart_delay type="text" placeholder="2">
+                        <input id=mirror_ratio2 type="text" placeholder="0.5">
                     </div>
                 </div>
                 <div class="card">
                     <h3>Auto Appraisal (toggle in Overview tab)</h3>
-                    <div class="description"> 
-                        <p>Automatically appraise caught fish based on your settings.</p>
-                    </div>
                     <div class="dropdown">
                         <label for="appraisal_mode">Appraisal Mode:</label>
                         <select name="appraisal_mode" id="appraisal_mode">
@@ -664,37 +557,18 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Auto Treasure Appraisal</h3>
-                    <div class="description"> 
-                        <p>Automatically appraise caught fish in the Treasure Island.</p>
-                    </div>
-                    <div class="switch2">
-                        <p>Treasure Appraisal</p>
-                        <label class="switch">
-                            <input id=treasure_appraisal type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="text">
-                        <label>Minimum Multiplier</label>
-                        <input id=minimum_multiplier type="text" placeholder="0.5">
-                    </div>
-                </div>
-                <div class="card">
                     <h3>Auto Enchant (toggle in Overview tab)</h3>
-                    <div class="description"> 
-                        <p>Automatically enchant rods using your selected configuration.</p>
-                    </div>
                     <div class="dropdown">
                         <label for="enchantment_mode">Enchantment Mode:</label>
                         <select name="enchantment_mode" id="enchantment_mode">
                         <option value="normal">Normal</option>
                         <option value="gamepass">Gamepass</option>
+                        <option value="disabled">Disabled</option>
                         </select>
                     </div>
                     <div class="text">
                         <label>Enchantments (Split by ,)</label>
-                        <input id=enchant_enchants type="text" placeholder="Darkened">
+                        <input id=enchant_enchants type="text" placeholder="Steady, Momentum">
                     </div>
                     <div class="text">
                         <label>Click X (Ratio)</label>
@@ -707,9 +581,6 @@
                 </div>
                 <div class="card">
                     <h3>Angler/Quests (toggle in Overview tab)</h3>
-                    <div class="description"> 
-                        <p>Automate interactions with the Angler NPC and related tasks.</p>
-                    </div>
                     <div class="text">
                         <label>Click X (Ratio)</label>
                         <input id=angler_click_x type="text" placeholder="0.5">
@@ -725,6 +596,30 @@
                     <div class="text">
                         <label>Backpack Y (Ratio)</label>
                         <input id=backpack_y type="text" placeholder="0.5">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Compatibility Options</h3>
+                    <div class="switch2">
+                        <p>Click After Minigame</p>
+                        <label class="switch">
+                            <input id=click_after_minigame type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="dropdown">
+                        <label for="detection_method">Detection Method:</label>
+                        <select name="detection_method" id="detection_method">
+                        <option value="friend_area">Friend Area</option>
+                        <option value="fish">Fish</option>
+                        </select>
+                    </div>
+                    <div class="dropdown">
+                        <label for="restart_method">Restart Method:</label>
+                        <select name="restart_method" id="restart_method">
+                        <option value="friend_area">Friend Area</option>
+                        <option value="fish">Fish</option>
+                        </select>
                     </div>
                 </div>
             </div>

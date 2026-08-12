@@ -86,6 +86,12 @@
         color: #fff;
     }
     .panel-actions button.primary:hover { background: #4a7fe8; }
+    .panel-actions button.active {
+        background: #2d8a5e;
+        border-color: #2d8a5e;
+        color: #fff;
+    }
+    .panel-actions button.active:hover { background: #349e6c; }
     #hint {
         position: fixed;
         bottom: 14px; left: 50%;
@@ -98,6 +104,7 @@
         border-radius: 20px;
         pointer-events: none;
         border: 1px solid rgba(255,255,255,0.08);
+        white-space: nowrap;
     }
 </style>
 </head>
@@ -113,7 +120,7 @@
         <div class="panel-actions">
             <button onclick="setAllVisible(true)">Show All</button>
             <button onclick="setAllVisible(false)">Hide All</button>
-            <button class="primary" onclick="saveAndClose()">Done (Esc)</button>
+            <button id="selectPointBtn" onclick="toggleSelectPoint()">Select Point</button>
         </div>
     </div>
 </div>
@@ -135,6 +142,7 @@ let drag = null;
 let lastIpc = 0;
 let screenshotImg = null;
 let screenshotReady = false;
+let selectPointMode = false;
 
 window.addEventListener("pywebviewready", () => {
     try {
@@ -187,19 +195,23 @@ function draw() {
         ctx.textBaseline = "bottom";
         ctx.fillStyle = color;
         ctx.fillText(label, b.x + b.w / 2, b.y - 5);
-        const points = [
-            [b.x, b.y], [b.x + b.w / 2, b.y], [b.x + b.w, b.y],
-            [b.x, b.y + b.h / 2], [b.x + b.w, b.y + b.h / 2],
-            [b.x, b.y + b.h], [b.x + b.w / 2, b.y + b.h], [b.x + b.w, b.y + b.h]
-        ];
-        ctx.fillStyle = "white";
-        ctx.strokeStyle = "rgba(0,0,0,.6)";
-        ctx.lineWidth = 1;
-        for (const [x, y] of points) ctx.fillRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE);
+        // Hide resize handles in Select Point mode
+        if (!selectPointMode) {
+            const points = [
+                [b.x, b.y], [b.x + b.w / 2, b.y], [b.x + b.w, b.y],
+                [b.x, b.y + b.h / 2], [b.x + b.w, b.y + b.h / 2],
+                [b.x, b.y + b.h], [b.x + b.w / 2, b.y + b.h], [b.x + b.w, b.y + b.h]
+            ];
+            ctx.fillStyle = "white";
+            ctx.strokeStyle = "rgba(0,0,0,.6)";
+            ctx.lineWidth = 1;
+            for (const [x, y] of points) ctx.fillRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE);
+        }
     }
 }
 
 function handleAt(x, y, b) {
+    if (selectPointMode) return null;
     const points = {
         nw: [b.x, b.y], n: [b.x + b.w / 2, b.y], ne: [b.x + b.w, b.y],
         w: [b.x, b.y + b.h / 2], e: [b.x + b.w, b.y + b.h / 2],
@@ -236,8 +248,53 @@ function sendUpdate(x, y) {
         pywebview.api.on_mouse_move(x, y, JSON.parse(JSON.stringify(boxes)));
 }
 
+function reportPoint(name, x, y) {
+    const b = boxes[name];
+    if (!b || !b.w || !b.h) return;
+    const xr = Math.max(0, Math.min(1, (x - b.x) / b.w));
+    const yr = Math.max(0, Math.min(1, (y - b.y) / b.h));
+    if (window.pywebview && pywebview.api && pywebview.api.on_point_select) {
+        try {
+            pywebview.api.on_point_select(name, xr, yr);
+        } catch (e) {}
+    }
+}
+
+function updateHint() {
+    const hint = document.getElementById("hint");
+    if (selectPointMode) {
+        hint.textContent = "Select Point ON · Click an area for ratios & close · Esc / F6 to save & close · 1-9 toggle";
+    } else {
+        hint.textContent = "Drag boxes · Resize handles · Esc / F6 to save & close · 1-9 toggle areas";
+    }
+}
+
+function toggleSelectPoint() {
+    selectPointMode = !selectPointMode;
+    drag = null;
+    const btn = document.getElementById("selectPointBtn");
+    if (selectPointMode) {
+        btn.classList.add("active");
+        btn.textContent = "Select Point ✓";
+        canvas.style.cursor = "crosshair";
+    } else {
+        btn.classList.remove("active");
+        btn.textContent = "Select Point";
+        canvas.style.cursor = "default";
+    }
+    updateHint();
+    draw();
+}
+
 canvas.addEventListener("mousemove", e => {
     const x = e.clientX, y = e.clientY;
+    if (selectPointMode) {
+        const name = boxAt(x, y);
+        canvas.style.cursor = name ? "crosshair" : "default";
+        // Still stream live hover ratios via existing mouse-move path
+        sendUpdate(x, y);
+        return;
+    }
     if (drag) {
         const b = boxes[drag.name], o = drag.original;
         const dx = x - drag.x, dy = y - drag.y, h = drag.handle;
@@ -264,6 +321,13 @@ canvas.addEventListener("mousedown", e => {
     if (e.target.closest && e.target.closest("#panel")) return;
     const name = boxAt(e.clientX, e.clientY);
     if (!name) return;
+
+    // Select Point mode: report ratios, do not drag
+    if (selectPointMode) {
+        reportPoint(name, e.clientX, e.clientY);
+        return;
+    }
+
     const b = boxes[name];
     drag = {
         name,
@@ -344,6 +408,12 @@ document.addEventListener("keydown", e => {
         saveAndClose();
         return;
     }
+    // P toggles Select Point mode
+    if (e.key === "p" || e.key === "P") {
+        e.preventDefault();
+        toggleSelectPoint();
+        return;
+    }
     const idx = parseInt(e.key, 10) - 1;
     if (idx >= 0 && idx < AREA_ORDER.length) {
         const name = AREA_ORDER[idx];
@@ -373,6 +443,7 @@ function loadScreenshot() {
     pywebview.api.get_screenshot_data().then(dataUrl => {
         if (!dataUrl) {
             screenshotReady = false;
+            screenshotImg = null;
             draw();
             return;
         }
@@ -384,11 +455,13 @@ function loadScreenshot() {
         };
         img.onerror = () => {
             screenshotReady = false;
+            screenshotImg = null;
             draw();
         };
         img.src = dataUrl;
     }).catch(() => {
         screenshotReady = false;
+        screenshotImg = null;
         draw();
     });
 }
@@ -422,34 +495,6 @@ function ready() {
         }
     };
     load();
-}
-
-function loadScreenshot() {
-    if (!window.pywebview || !pywebview.api) return;
-    pywebview.api.get_screenshot_data().then(dataUrl => {
-        if (!dataUrl) {
-            screenshotReady = false;
-            screenshotImg = null;
-            draw();
-            return;
-        }
-        const img = new Image();
-        img.onload = () => {
-            screenshotImg = img;
-            screenshotReady = true;
-            draw();
-        };
-        img.onerror = () => {
-            screenshotReady = false;
-            screenshotImg = null;
-            draw();
-        };
-        img.src = dataUrl;
-    }).catch(() => {
-        screenshotReady = false;
-        screenshotImg = null;
-        draw();
-    });
 }
 
 // Called from Python after window_ready as a secondary trigger

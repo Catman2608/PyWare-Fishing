@@ -1,5 +1,5 @@
-const APP_VERSION = "5.0";
-const BETA_VERSION = "4";
+const APP_VERSION = "4.42";
+const BETA_VERSION = "0";
 const DEVELOPER = "Catman2608";
 let currentConfig = null;
 const validHexColor = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
@@ -86,10 +86,9 @@ function switchTab(tabId) {
     const breadcrumbTitle = document.getElementById("active-tab-title");
     if (breadcrumbTitle) {
         const titleMap = {
-            overview: "Overview",
+            basic: "Basic",
             automation: "Automation",
-            fishing_tools: "Fishing Tools",
-            other_utilities: "Other Utilities"
+            utilities: "Utilities",
         };
         breadcrumbTitle.textContent = titleMap[tabId] || "Settings";
     }
@@ -469,6 +468,9 @@ async function startEyedropper() {
 async function takeScreenshot() {
     setStatus("Error saving debug screenshots");
     await pywebview.api.take_debug_screenshot();
+}
+async function selectPoint() {
+    return;
 }
 async function openLink(link) {
     if (!link) {

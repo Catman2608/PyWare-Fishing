@@ -4,7 +4,7 @@ This project is licensed under the GNU GPL v3.
 
 You are free to study, modify, and redistribute this software. If you distribute a project containing code from this repository, the resulting project must also be released under the GPL v3, with its source code made available.
 
-# PyWare Fishing V5
+# PyWare Fishing V4.42
 
 Pre-built versions are available for supported platforms on the official releases page:
 
