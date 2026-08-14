@@ -1,4 +1,4 @@
-name: Build macOS DMG (Apple Silicon Only)
+name: Build macOS DMG
 
 on:
     workflow_dispatch:
@@ -16,16 +16,16 @@ jobs:
             - name: Set up Python
               uses: actions/setup-python@main
               with:
-                  python-version: "3.12"
+                  python-version: "3.14"
 
             - name: Install dependencies
               run: |
                   python -m pip install --upgrade pip
-                  pip install pywebview numpy mss pytesseract pynput requests opencv-python pyinstaller
+                  pip install pywebview customtkinter numpy mss pytesseract pynput requests opencv-python pyinstaller
 
             - name: Build with PyInstaller
               run: |
-                  pyinstaller --onedir --windowed PyWareFishingV4.py --name PyWareFishingV4 --icon="icon.icns"
+                  pyinstaller --onedir --windowed --icon="icon.icns" --strip "PyWareFishingV4.py"
 
             - name: Check dist contents
               run: |

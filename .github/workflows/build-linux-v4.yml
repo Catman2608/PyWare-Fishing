@@ -15,7 +15,7 @@ jobs:
             - name: Set up Python
               uses: actions/setup-python@v5
               with:
-                  python-version: "3.12"
+                  python-version: "3.14"
 
             - name: Install system dependencies
               run: |
@@ -31,13 +31,14 @@ jobs:
                     libxcb-xfixes0 \
                     libxcb-xinerama0 \
                     libxcb-xkb1 \
-                    libxkbcommon-x11-0 \
-                    libgl1-mesa-glx \
+                    mesa-utils \
+                    libgl1-mesa-dri \
                     libegl1-mesa \
-                    libopengl0 \
+                    libglx-mesa0 \
                     tesseract-ocr \
                     libtesseract-dev \
                     libleptonica-dev
+
 
             - name: Install dependencies
               run: |
