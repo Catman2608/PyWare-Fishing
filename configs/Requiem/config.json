@@ -61,7 +61,7 @@
     "shake_scan_delay": "0.08",
     "shake_failsafe": "80",
     "minigame_scan_delay": "0.18",
-    "restart_delay": "2.5",
+    "restart_delay": "1.5",
     "fish_line_min_density": "0.8",
     "bar_ratio_from_side": "0.3",
     "controller_mode": "steady",

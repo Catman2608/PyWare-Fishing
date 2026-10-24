@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PyWare Fishing V4.42</title>
+    <title>PyWare Fishing V4.5</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -10,7 +10,7 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
-                PyWare Fishing V4.42
+                PyWare Fishing V4.5
             </div>
             <button class="tab-button active" onclick="switchTab('basic')">
                 Basic
@@ -207,6 +207,13 @@
                         </label>
                     </div>
                     <div class="switch2">
+                        <p>Status Overlay</p>
+                        <label class="switch">
+                            <input id=status_overlay type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
                         <p>Bag Spam</p>
                         <label class="switch">
                             <input id=bag_spam type="checkbox">
@@ -356,7 +363,7 @@
                     </div>
                     <div class="text">
                         <label>Restart Delay</label>
-                        <input id=restart_delay type="text" placeholder="2.5">
+                        <input id=restart_delay type="text" placeholder="1.5">
                     </div>
                     <div class="text">
                         <label>Minimum Line Density</label>
@@ -423,29 +430,13 @@
                     </div>
                 </div>
             </div>
-            <!-- Fishing Tools Tab -->
+            <!-- Utilities Tab -->
             <div id="utilities" class="tab-content">
                 <div class="card">
                     <h3>Global</h3>
                     <div class="text">
                         <label>Tesseract Path (Appraisal, Enchant, Angler)</label>
-                        <input id=tesseract_path type="text" placeholder="/opt/homebrew/bin/tesseract">
-                    </div>
-                    <div class="text">
-                        <label>Delay After E (Enchant, Angler)</label>
-                        <input id=e_delay type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Delay After Click (Appraisal, Enchant, Angler)</label>
-                        <input id=click_delay type="text" placeholder="1">
-                    </div>
-                    <div class="text">
-                        <label>Delay After Click 2 (Enchant, Angler, Treasure Appraisal)</label>
-                        <input id=click_delay2 type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Restart Delay (Angler, Treasure Appraisal)</label>
-                        <input id=utility_restart_delay type="text" placeholder="100">
+                        <input id=tesseract_path type="text" placeholder="C:\Program Files\Tesseract-OCR\tesseract.exe">
                     </div>
                 </div>
                 <div class="card">
@@ -535,7 +526,25 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Auto Appraisal (toggle in Overview tab)</h3>
+                    <h3>Hunt Detect</h3>
+                    <div class="switch2">
+                        <p>Hunt Detect</p>
+                        <label class="switch">
+                            <input id=hunt_detect type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="text">
+                        <label>Hunt Fishes (Split by ,)</label>
+                        <input id=hunt_fishes type="text" placeholder="Megalodon, Kraken">
+                    </div>
+                    <div class="text">
+                        <label>Cycles</label>
+                        <input id=hunt_cycles type="text" placeholder="20">
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Auto Appraisal (toggle in Sidebar)</h3>
                     <div class="dropdown">
                         <label for="appraisal_mode">Appraisal Mode:</label>
                         <select name="appraisal_mode" id="appraisal_mode">
@@ -544,20 +553,30 @@
                         </select>
                     </div>
                     <div class="text">
+                        <label>Normal Click X/Y (Screen Ratio seperated by ,)</label>
+                        <input id=normal_appraisal_click type="text" placeholder="0.5, 0.5">
+                    </div>
+                    <div class="text">
+                        <label>Gamepass Click X/Y 1 (Screen Ratio seperated by ,)</label>
+                        <input id=gamepass_appraisal_click type="text" placeholder="0.5, 0.5">
+                    </div>
+                    <div class="text">
+                        <label>Gamepass Click X/Y 2 (Screen Ratio seperated by ,)</label>
+                        <input id=gamepass_appraisal_click_2 type="text" placeholder="0.5, 0.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Delay After Appraisal</label>
+                        <input id=appraisal_delay type="text" placeholder="0.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
                         <label>Mutations (Split by ,)</label>
                         <input id=appraisal_mutations type="text" placeholder="Hexed, Abyssal">
                     </div>
-                    <div class="text">
-                        <label>Click X (Ratio)</label>
-                        <input id=appraisal_click_x type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Click Y (Ratio)</label>
-                        <input id=appraisal_click_y type="text" placeholder="0.5">
-                    </div>
                 </div>
                 <div class="card">
-                    <h3>Auto Enchant (toggle in Overview tab)</h3>
+                    <h3>Auto Enchant (toggle in Sidebar)</h3>
                     <div class="dropdown">
                         <label for="enchantment_mode">Enchantment Mode:</label>
                         <select name="enchantment_mode" id="enchantment_mode">
@@ -567,35 +586,61 @@
                         </select>
                     </div>
                     <div class="text">
+                        <label>E Delay</label>
+                        <input id=enchantment_e_delay type="text" placeholder="0.4">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Click Position</label>
+                        <input id=enchantment_click_position type="text" placeholder="0.5, 0.5">
+                    </div>
+                    <div class="text">
+                        <label>Click Position 2 (Gamepass)</label>
+                        <input id=enchantment_click_position2 type="text" placeholder="0.5, 0.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Click Delay</label>
+                        <input id=enchantment_click_delay type="text" placeholder="2">
+                    </div>
+                    <div class="text">
+                        <label>Click Delay 2</label>
+                        <input id=enchantment_click_delay2 type="text" placeholder="2">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
                         <label>Enchantments (Split by ,)</label>
                         <input id=enchant_enchants type="text" placeholder="Steady, Momentum">
                     </div>
                     <div class="text">
-                        <label>Click X (Ratio)</label>
-                        <input id=enchant_click_x type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Click Y (Ratio)</label>
-                        <input id=enchant_click_y type="text" placeholder="0.5">
+                        <label>Click Delay 3</label>
+                        <input id=enchantment_click_delay3 type="text" placeholder="6">
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Angler/Quests (toggle in Overview tab)</h3>
+                    <h3>Auto Angler (toggle in Sidebar)</h3>
                     <div class="text">
-                        <label>Click X (Ratio)</label>
-                        <input id=angler_click_x type="text" placeholder="0.5">
+                        <label>E Delay</label>
+                        <input id=angler_e_delay type="text" placeholder="1.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Accept Quest Click Position (Screen Ratio)</label>
+                        <input id=angler_click_position type="text" placeholder="0.5, 0.5">
+                    </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="text">
+                        <label>Backpack Search Click Position (Screen Ratio)</label>
+                        <input id=angler_click_position2 type="text" placeholder="0.5, 0.5">
                     </div>
                     <div class="text">
-                        <label>Click Y (Ratio)</label>
-                        <input id=angler_click_y type="text" placeholder="0.5">
+                        <label>Backpack Close Click Position (Screen Ratio)</label>
+                        <input id=angler_click_position3 type="text" placeholder="0.5, 0.5">
                     </div>
+                    <div class="arrow">&darr;</div> <!-- Arrows -->
                     <div class="text">
-                        <label>Backpack X (Ratio)</label>
-                        <input id=backpack_x type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Backpack Y (Ratio)</label>
-                        <input id=backpack_y type="text" placeholder="0.5">
+                        <label>Angler Cooldown</label>
+                        <input id=angler_cooldown type="text" placeholder="130">
                     </div>
                 </div>
                 <div class="card">

@@ -5233,7 +5233,7 @@ This uses a different folder to prevent crashes on the stable version"""
             # Parse third line for DEVELOPER
             third_line = lines[2]
             js_developer = third_line.replace("const DEVELOPER = ", "").replace('"', "").replace(";", "")
-        # Compatibility for 4.4 - 4.42 update
+        # Compatibility for 4.4 - 4.41 update
         if js_developer == "let currentConfig = null" or js_developer == "":
             js_developer = DEVELOPER
         # Check release version, beta version and developer

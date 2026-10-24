@@ -55,7 +55,7 @@ except:
 # All platforms
 keyboard_controller = KeyboardController()
 mouse_controller = MouseController()
-APP_VERSION = 4.42
+APP_VERSION = 4.5
 BETA_VERSION = 0
 DEVELOPER = "Catman2608"
 def get_macos_menu_offset():
@@ -213,10 +213,28 @@ elif sys.platform == "darwin":
     MAC_KEY_MAP = {
         "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9,
         "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17, "1": 18, "2": 19, "3": 20,
-        "4": 21, "6": 22, "5": 23, "equal": 24, "9": 25, "7": 26, "minus": 27, "8": 28, "0": 29, "o": 31,
-        "u": 32, "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "semicolon": 41, "comma": 43, "slash": 44, "n": 45,
-        "m": 46, "period": 47, "space": 49, "return": 36, "enter": 76, "tab": 48, "escape": 53,
+        "4": 21, "6": 22, "5": 23, "equal": 24, "9": 25, "7": 26, "minus": 27, "-": 27, "8": 28, "0": 29, "o": 31,
+        "u": 32, "i": 34, "p": 35, "l": 37, "j": 38, "'": 39, "quote": 39, "apostrophe": 39, "k": 40, "semicolon": 41, "comma": 43, "slash": 44, "n": 45,
+        "m": 46, "period": 47, "space": 49, "return": 36, "enter": 76, "tab": 48, "backspace": 51, "delete": 51, "escape": 53,
+        "command": 55, "cmd": 55, "shift": 56, "option": 58, "alt": 58, "control": 59, "ctrl": 59,
     }
+    _QUARTZ_KEY_SOURCE = None
+    def _get_quartz_key_source():
+        # Private Source So Posted Keys Do Not Inherit Hardware Command/Fn/Globe State
+        global _QUARTZ_KEY_SOURCE
+        if _QUARTZ_KEY_SOURCE is None:
+            _QUARTZ_KEY_SOURCE = Quartz.CGEventSourceCreate(
+                Quartz.kCGEventSourceStatePrivate
+            )
+            try:
+                Quartz.CGEventSourceSetLocalEventsSuppressionInterval(
+                    _QUARTZ_KEY_SOURCE, 0.0
+                )
+            except Exception:
+                pass
+
+        return _QUARTZ_KEY_SOURCE
+
     def get_scale_factor():
         global _scale_cache
         if _scale_cache is not None:
@@ -238,6 +256,16 @@ elif sys.platform == "darwin":
         point = Quartz.CGPointMake(x, y)
         Quartz.CGWarpMouseCursorPosition(point)
         Quartz.CGAssociateMouseAndMouseCursorPosition(True)
+    def _warp_mouse(x, y):
+        """
+        Instantly warps the mouse cursor to the given (x, y) coordinates
+        without generating mouse-motion events.
+        """
+        # Define the target point
+        point = Quartz.CGPointMake(float(x), float(y))
+        event = Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, point, Quartz.kCGMouseButtonLeft)
+        # Warp the cursor
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
     def _mouse_event(button="left", press=True, x=None, y=None):
         """Unified cross-platform mouse event.
         button: 'left'/'right'/'middle' or 1/2/3
@@ -245,7 +273,7 @@ elif sys.platform == "darwin":
         """
         if x is None or y is None:
             x, y = get_mouse_position()
-        # Map button → (Quartz button constant, down event, up event)
+        # Map Button → (Quartz Button Constant, Down Event, Up Event)
         button_map = {
             "left":   (Quartz.kCGMouseButtonLeft, Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp),
             1:        (Quartz.kCGMouseButtonLeft, Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp),
@@ -266,49 +294,55 @@ elif sys.platform == "darwin":
             btn
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-    def send_key(key, delay=0.05, click_type=0):
+    def send_key(key, delay=0.05, click_type=0, flags=0):
         """
         Send a keyboard event.
         click_type:
             0 = click (press + release)   [default]
             1 = hold (press only)
             2 = release (release only)
+        flags: Quartz modifier mask. Default 0 so Globe/Fn is never inherited.
         """
         keycode = MAC_KEY_MAP.get(str(key).lower())
         if keycode is None:
             return
 
-        if click_type == 0:           # Click (press + release)
-            Quartz.CGEventPost(
-                Quartz.kCGHIDEventTap,
-                Quartz.CGEventCreateKeyboardEvent(None, keycode, True)   # key down
-            )
-            time.sleep(delay)
-            Quartz.CGEventPost(
-                Quartz.kCGHIDEventTap,
-                Quartz.CGEventCreateKeyboardEvent(None, keycode, False)  # key up
-            )
-        elif click_type == 1:         # Hold (press only)
-            Quartz.CGEventPost(
-                Quartz.kCGHIDEventTap,
-                Quartz.CGEventCreateKeyboardEvent(None, keycode, True)   # key down
-            )
+        source = _get_quartz_key_source()
+        def _post_key(down):
+            event = Quartz.CGEventCreateKeyboardEvent(source, keycode, down)
+            if event is None:
+                return
+
+            # Explicit Flags Only. A Null Source Inherits Combined Session Flags,
+            # Often Including Globe/Fn. Two Letters Then Look Like A Double
+            # Globe Tap And macOS Opens Siri / Type To Siri / Dictation.
+            Quartz.CGEventSetFlags(event, flags or 0)
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+        if click_type == 1:           # Hold (press only)
+            _post_key(True)
         elif click_type == 2:         # Release only
-            Quartz.CGEventPost(
-                Quartz.kCGHIDEventTap,
-                Quartz.CGEventCreateKeyboardEvent(None, keycode, False)  # key up
-            )
-        else:
-            # Fallback to normal click if invalid value is passed
-            Quartz.CGEventPost(
-                Quartz.kCGHIDEventTap,
-                Quartz.CGEventCreateKeyboardEvent(None, keycode, True)
-            )
+            _post_key(False)
+        else:                         # Click (press + release)
+            _post_key(True)
             time.sleep(delay)
-            Quartz.CGEventPost(
-                Quartz.kCGHIDEventTap,
-                Quartz.CGEventCreateKeyboardEvent(None, keycode, False)
-            )
+            _post_key(False)
+    def send_hotkey(modifier, key, delay=0.05):
+        """Modifier Down, Key Click With That Flag, Modifier Up."""
+        flag_map = {
+            "command": Quartz.kCGEventFlagMaskCommand,
+            "cmd": Quartz.kCGEventFlagMaskCommand,
+            "shift": Quartz.kCGEventFlagMaskShift,
+            "option": Quartz.kCGEventFlagMaskAlternate,
+            "alt": Quartz.kCGEventFlagMaskAlternate,
+            "control": Quartz.kCGEventFlagMaskControl,
+            "ctrl": Quartz.kCGEventFlagMaskControl,
+        }
+        flag = flag_map.get(str(modifier).lower(), 0)
+        send_key(modifier, click_type=1, flags=flag)
+        time.sleep(0.02)
+        send_key(key, delay=delay, flags=flag)
+        time.sleep(0.02)
+        send_key(modifier, click_type=2, flags=0)
 # Linux (Mouse positions and Xdisplay)
 elif sys.platform.startswith("linux"):
     _xdisplay = None
@@ -423,6 +457,51 @@ def open_base_folder():
         subprocess.run(["open", folder])
     else:  # Linux
         subprocess.run(["xdg-open", folder])
+# Validate Tesseract Path
+def get_tesseract_path(configured_path=None):
+    """
+    Return a valid Tesseract path for the current operating system.
+    If an imported config contains a Tesseract path from another OS,
+    automatically fall back to the current OS's Tesseract installation.
+    """
+    # 1. Try the path stored in the config first
+    if configured_path:
+        try:
+            configured_path = str(configured_path).strip().strip('"')
+            if Path(configured_path).is_file():
+                return configured_path
+
+        except (OSError, ValueError, TypeError):
+            pass
+
+    # 2. Check if Tesseract is already available in PATH
+    detected = shutil.which("tesseract")
+    if detected:
+        return detected
+
+    # 3. Check common paths for the CURRENT operating system
+    if sys.platform == "win32":
+        possible_paths = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+    elif sys.platform == "darwin":
+        possible_paths = [
+            "/opt/homebrew/bin/tesseract",   # Apple Silicon Homebrew
+            "/usr/local/bin/tesseract",      # Intel Homebrew
+        ]
+    else:
+        # Linux
+        possible_paths = [
+            "/usr/bin/tesseract",
+            "/usr/local/bin/tesseract",
+        ]
+    for path in possible_paths:
+        if Path(path).is_file():
+            return path
+
+    # Nothing found
+    return None
 # ─────────────────────────────────────────────────────────────────────────────
 # Central area definitions.  To add a new selectable area:
 #   1. Add an entry below (key, color, label, default ratios 0–1).
@@ -450,18 +529,13 @@ AREA_CONFIG = {
         "label": "Totem Box (Day/Night)",
         "default": {"x": 0.9531, "y": 0.8333, "width": 0.0208, "height": 0.0463},
     },
-    "sovereign": {
-        "color": "#4200ff",
-        "label": "Sovereign Box (Bar)",
-        "default": {"x": 0.2844, "y": 0.7981, "width": 0.4297, "height": 0.0389},
-    },
     "lullaby": {
-        "color": "#126744",
+        "color": "#7b00ff",
         "label": "Lullaby Box (Above Fish)",
         "default": {"x": 0.4222, "y": 0.7043, "width": 0.1556, "height": 0.1360},
     },
     "chat": {
-        "color": "#004383",
+        "color": "#ff008c",
         "label": "Chat Box",
         "default": {"x": 0.3343, "y": 0.4156, "width": 0.3385, "height": 0.1629},
     },
@@ -471,37 +545,22 @@ AREA_CONFIG = {
         "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
     },
     "treasure_appraisal": {
-        "color": "#4f35f6",
+        "color": "#df0000",
         "label": "Treasure Appraisal Box (Grid)",
         "default": {"x": 0.3343, "y": 0.4156, "width": 0.3385, "height": 0.1629},
     },
-    "treasure_ocr": {
-        "color": "#ff4512",
-        "label": "Treasure Appraisal Box (OCR)",
-        "default": {"x": 0.3343, "y": 0.4156, "width": 0.3385, "height": 0.1629},
-    },
-    "appraisal_dialogue": {
-        "color": "#000fff",
-        "label": "Dialogue Box (Appraisal)",
-        "default": {"x": 0.3343, "y": 0.4156, "width": 0.3385, "height": 0.1629},
-    },
     "appraisal_hotbar": {
-        "color": "#e78300",
+        "color": "#00beff",
         "label": "Hotbar Box (Appraisal)",
         "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
     },
     "enchantment": {
-        "color": "#008363",
+        "color": "#ffed00",
         "label": "Enchantment Box (Text)",
         "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
     },
-    "angler_dialogue": {
-        "color": "#99ff95",
-        "label": "Dialogue Box (Angler)",
-        "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
-    },
     "angler_quest": {
-        "color": "#121299",
+        "color": "#00de07",
         "label": "Quest Box (Angler)",
         "default": {"x": 0.3983, "y": 0.8581, "width": 0.0426, "height": 0.0712},
     },
@@ -509,118 +568,269 @@ AREA_CONFIG = {
 # Display / iteration order (also used for number-key toggles 1–9 in the selector)
 AREA_ORDER = list(AREA_CONFIG.keys())
 class AreaSelector:
-    """
-    Fullscreen transparent overlay implemented as a second pywebview window.
-    Long-lived instance: call show() / hide() / update() as needed.
-    Areas are fully data-driven via the module-level AREA_CONFIG / AREA_ORDER.
-    Adding a new area requires only a new entry in AREA_CONFIG.
-    """
     HTML_FILE = os.path.join(UI_PATH, "area_selector.html")
     def __init__(self, parent_app):
         self.parent_app = parent_app
-        self.area_window = None
+        self.overlay_window = None  
         self._open = False
+        self._visible = False
         self._areas = {}
-        self._visible = {name: True for name in AREA_ORDER}
+        self._visible_areas = {}
         self._screen_capture = None
         self._screenshot_b64 = None
-    def _capture_and_crop(self):
-        """Capture full screen and remove the macOS menu bar strip so the
-        image matches the frameless window geometry (no menu bar)."""
-        frame = self.parent_app.capture_single_frame()
-        if frame is None:
-            return None
-
-        if frame.ndim == 3 and frame.shape[2] == 4:
-            frame = frame[:, :, :3].copy()
-        menu_offset = get_macos_menu_offset()
+        self._page_ready = False
+        self._pending_js = []
+        # Track active viewport geometry (logical points for pywebview)
+        self.left = 0
+        self.top = 0
+        self.width = 0
+        self.height = 0
+    def _to_window_coords(self, left, top, width, height):
+        """
+        Convert physical-pixel geometry (from _get_areas / capture) into the
+        logical points pywebview expects for window x/y/width/height.
+        On Windows scale is always 1; on macOS Retina it is typically 2.0.
+        Also clamps width/height so a bad (e.g. post-reset) size cannot make
+        the overlay cover the entire screen or exceed monitor bounds.
+        """
         scale = get_scale_factor()
         if scale <= 0:
             scale = 1.0
-        self._scale = scale
-        if menu_offset > 0:
-            crop = int(round(menu_offset * scale))
-            if 0 < crop < frame.shape[0]:
-                frame = frame[crop:, :, :].copy()
-        frame = np.clip(frame.astype(np.int16) - 15, 0, 255).astype(np.uint8)
-        return frame
-
-    def _encode_screenshot(self, frame):
-        """Encode BGR numpy frame as a JPEG data-URL for the canvas."""
-        if frame is None:
-            return None
-
-        try:
-            # JPEG keeps the payload small enough for evaluate_js
-            ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
-            if not ok:
-                return None
-
-            b64 = base64.b64encode(buf.tobytes()).decode("ascii")
-            return "data:image/jpeg;base64," + b64
-
-        except Exception:
-            return None
+        left = int(left)
+        top = int(top)
+        width = max(1, int(width))
+        height = max(1, int(height))
+        # SCREEN_* are physical pixels; window geometry is in logical points.
+        screen_w = max(1, int(SCREEN_WIDTH * scale))
+        screen_h = max(1, int(SCREEN_HEIGHT * scale))
+        width = min(width, screen_w)
+        height = min(height, screen_h)
+        left = max(0, min(left, max(0, screen_w - width)))
+        top = max(0, min(top, max(0, screen_h - height)))
+        return left, top, width, height
 
     def show(self):
-        """Thin js_api object — only exposes the methods the HTML page calls.
-        Do NOT pass `self` (or any object that holds a reference to the
-        pywebview Window): on macOS Cocoa that triggers infinite recursion
-        via AccessibilityObject.Bounds."""
+        """Creates and displays the transparent frameless overlay window.
+        Arguments are physical-pixel screen coordinates (same space as
+        _get_areas / capture_frame). They are converted to logical points
+        for pywebview.
+        """
+        # Position below the macOS menu area; use physical pixels because
+        # _to_window_coords converts its geometry to logical window points.
+        scale = get_scale_factor()
+        if scale <= 0:
+            scale = 1.0
+        macos_offset = int(round(get_macos_menu_offset()))
+        left, top, width, height = self._to_window_coords(
+            0,
+            macos_offset,
+            SCREEN_WIDTH,
+            max(1, SCREEN_HEIGHT - macos_offset),
+        )
+        if self._open and self.overlay_window:
+            # If already open, shift/resize it instead of duplicating
+            self.resize(left, top, width, height, already_logical=True)
+            return
+
+        self._page_ready = False
+        self._pending_js = []
+        self._screen_capture = self._capture_and_crop()
+        self._screenshot_b64 = self._encode_screenshot(self._screen_capture)
+        self._view_w = float(width)
+        self._view_h = float(height)
+        self.left = left
+        self.top = top
+        self.width = width
+        self.height = height
+
+        # Thin js_api only. Do not pass self — it holds the pywebview Window,
+        # and pywebview walks that into AccessibilityObject.Bounds recursion.
         outer = self
-        class _AreaApi:
-            def get_area_config(self):
-                return outer.get_area_config()
-
-            def set_visibility(self, visible_dict):
-                return outer.set_visibility(visible_dict)
-
-            def get_areas(self):
-                return outer.get_areas()
-
-            def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
-                return outer.on_mouse_move(mouse_x, mouse_y, current_boxes)
-
-            def on_point_select(self, name, xr, yr):
-                return outer.on_point_select(name, xr, yr)
-
-            def save_areas(self, areas):
-                return outer.save_areas(areas)
+        class _AreaSelectorApi:
+            def window_ready(self, win_x, win_y, width=None, height=None):
+                return outer.window_ready(win_x, win_y, width, height)
 
             def get_screenshot_data(self):
                 return outer.get_screenshot_data()
 
-            def window_ready(self, win_x, win_y):
-                return outer.window_ready(win_x, win_y)
+            def save_areas(self, areas):
+                return outer.save_areas(areas)
 
-        if self._open and self.area_window:
-            return
-
-        self._screen_capture = self._capture_and_crop()
-        self._screenshot_b64 = self._encode_screenshot(self._screen_capture)
-        menu_offset = get_macos_menu_offset()
-        self.area_window = webview.create_window(
-            "Area Selector", self.HTML_FILE, js_api=_AreaApi(),
-            transparent=True, frameless=True, easy_drag=False, on_top=True,
-            resizable=False, width=SCREEN_WIDTH, height=SCREEN_HEIGHT - menu_offset,
-            x=SCREEN_LEFT, y=SCREEN_TOP, background_color="#000000",
+        self.overlay_window = webview.create_window(
+            "Area Selector",
+            self.HTML_FILE,
+            js_api=_AreaSelectorApi(),
+            transparent=False,
+            frameless=True,
+            easy_drag=False,
+            on_top=True,
+            resizable=False,
+            width=self.width,
+            height=self.height,
+            x=self.left,
+            y=self.top,
+            background_color="#000000",
+            min_size=(10, 10),
         )
         self._open = True
-        self.area_window.events.closed += self._on_closed
+        self._visible = True
+        self.overlay_window.events.closed += self._on_closed
         if sys.platform == "win32":
             def maximize_area_selector():
                 try:
-                    hwnd = _get_hwnd(self.area_window)
+                    hwnd = _get_hwnd(self.overlay_window)
                     if hwnd:
                         user32.ShowWindow(wintypes.HWND(hwnd), SW_MAXIMIZE)
                 except Exception as e:
                     try:
-                        self.parent_app.set_status(f"Failed to maximize area selector: {e}")
+                        self.parent_app.set_status("Failed to maximize area selector:", e)
                     except Exception:
-                        print("Failed to maximize area selector:", e)
-            self.area_window.events.shown += maximize_area_selector
-    def _to_ratios(self, area):
-        """Accept normalized areas and legacy pixel areas, store normalized values."""
+                        pass
+            self.overlay_window.events.shown += maximize_area_selector
+    def hide(self):
+        """Destroys the current window instance completely.
+        Clear _open BEFORE destroy so concurrent minigame threads that still
+        call clear()/draw_box()/_eval skip the disposed WebView2 and avoid
+        ObjectDisposedException (logged by pywebview as 'Error occurred in script').
+        Destroy is scheduled off the JS-API thread to avoid pywebview deadlock.
+        """
+        """Destroys the current window instance completely."""
+        if self.overlay_window and self._open:
+            try:
+                self.overlay_window.destroy()
+            except Exception:
+                pass
+
+            self._on_closed()
+    def window_ready(self, win_x, win_y, width=None, height=None):
+        """JS signals the page is ready — record CSS client size and push screenshot.
+        width/height are window.innerWidth / innerHeight (CSS pixels). Using
+        these for box conversion fixes the off-screen drawing that happens
+        when display scale ≠ 100% and SCREEN_* (physical) ≠ canvas size.
+        """
+        try:
+            if width is not None and height is not None:
+                w = float(width)
+                h = float(height)
+                if w > 0 and h > 0:
+                    self._view_w = w
+                    self._view_h = h
+        except (TypeError, ValueError):
+            pass
+
+        if self._screenshot_b64 and self.overlay_window and self._open:
+            # Inject Via A Short Data Reference; Js Stores It And Draws.
+            try:
+                # Pass As Return Value Of A Dedicated Getter Instead Of
+                # Embedding A Huge String In Evaluate_Js When Possible.
+                self.overlay_window.evaluate_js(
+                    "window.__applyScreenshot && window.__applyScreenshot()"
+                )
+            except Exception:
+                pass
+
+        self._page_ready = True
+        self._flush_pending_js()
+        return None
+    def update(self, areas_dict, data):
+        self.clear()
+        scale = get_scale_factor() or 1.0
+        if scale <= 0:
+            scale = 1.0
+        menu_offset_pixels = int(round(get_macos_menu_offset() * scale))
+        self._visible_areas = {}
+        visible_areas = []
+        automation_mode = data["automation_mode"]
+        fishing_profile = data["fishing_profile"]
+        if automation_mode == "fishing":
+            visible_areas.append("fish")
+            if data["shake_mode"] != "navigation":
+                visible_areas.append("shake")
+            if data["detection_method"] == "friend_area" or data["restart_method"] == "friend_area":
+                visible_areas.append("friend")
+            if data["auto_totem"] == "on":
+                visible_areas.append("totem")
+            if data["hunt_detect"] == "on":
+                visible_areas.append("chat")
+            if fishing_profile == "metronome":
+                visible_areas.append("lullaby")
+        elif automation_mode == "appraisal":
+            visible_areas.append("appraisal_hotbar")
+        elif automation_mode == "treasure_appraisal":
+            visible_areas.append("treasure_appraisal")
+        elif automation_mode == "enchant":
+            visible_areas.append("enchantment")
+        elif automation_mode == "angler":
+            visible_areas.append("angler_quest")
+        for name in AREA_ORDER:
+            area_data = (areas_dict or {}).get(name)
+            if not isinstance(area_data, dict):
+                area_data = AREA_CONFIG[name]["default"]
+            color = AREA_CONFIG[name]["color"]
+            label = AREA_CONFIG[name].get("label", name)
+            self._areas[name] = self.pixels_to_ratios(area_data)
+            # Now draw the areas
+            if name in visible_areas:
+                self._visible_areas[name] = {"color": color, "label": label}
+        # Convert ratios to logical canvas coordinates (CSS pixels).
+        # SCREEN_WIDTH/HEIGHT are logical; menu_offset_pixels is physical and
+        # must be converted to logical before subtracting from the canvas y.
+        menu_offset_logical = menu_offset_pixels / scale
+        boxes = {}
+        for name, style in self._visible_areas.items():
+            area = self._areas[name]
+            boxes[name] = {
+                "x": area["x"] * SCREEN_WIDTH,
+                "y": area["y"] * SCREEN_HEIGHT - menu_offset_logical,
+                "width": area["width"] * SCREEN_WIDTH,
+                "height": area["height"] * SCREEN_HEIGHT,
+                **style,
+            }
+        self._eval(f"window.fishOverlay && window.fishOverlay.setBoxes({json.dumps(boxes)})")
+        # Draw cyan outline of the detected Roblox window (or full screen fallback)
+        roblox = getattr(self.parent_app, "roblox_bounds", None)
+        if roblox and isinstance(roblox, dict):
+            try:
+                left = float(roblox.get("left", 0) or 0)
+                top = float(roblox.get("top", 0) or 0)
+                width = float(roblox.get("width", 0) or 0)
+                height = float(roblox.get("height", 0) or 0)
+                # Same coordinate space as the area boxes (logical CSS pixels)
+                roblox_js = {
+                    "x": left,
+                    "y": top - menu_offset_logical,
+                    "width": width,
+                    "height": height,
+                    "color": "#00FFFF",
+                    "label": "Roblox",
+                }
+                self._eval(f"window.fishOverlay && window.fishOverlay.setRobloxRect({json.dumps(roblox_js)})")
+            except Exception:
+                self._eval("window.fishOverlay && window.fishOverlay.setRobloxRect(null)")
+        else:
+            self._eval("window.fishOverlay && window.fishOverlay.setRobloxRect(null)")
+    def resize(self, left, top, width, height, already_logical=False):
+        """Resizes and moves the window dynamically if it exists.
+        By default arguments are physical pixels (same as show()).
+        Pass already_logical=True when the caller has already converted them.
+        """
+        if not already_logical:
+            left, top, width, height = self._to_window_coords(left, top, width, height)
+        self.left = left
+        self.top = top
+        self.width = width
+        self.height = height
+        if self.overlay_window and self._open:
+            try:
+                self.overlay_window.move(self.left, self.top)
+                self.overlay_window.resize(self.width, self.height)
+            except Exception:
+                # Window may already be disposed (race with stop_macro / hide)
+                self._open = False
+                self.overlay_window = None
+
+    def pixels_to_ratios(self, area):
+        """Convert pixels to ratios by dividing values by screen width and height"""
         if not isinstance(area, dict):
             return {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
 
@@ -637,165 +847,153 @@ class AreaSelector:
             values["height"] /= SCREEN_HEIGHT
         return values
 
-    def update(self, area_name, area_dict):
-        """Set one area by name (ratios or legacy pixels)."""
-        self._areas[area_name] = self._to_ratios(area_dict)
-    def update_all(self, areas_dict):
-        """Bulk-load every known area from a {name: dict} mapping."""
-        for name in AREA_ORDER:
-            src = (areas_dict or {}).get(name)
-            if not isinstance(src, dict):
-                src = AREA_CONFIG[name]["default"]
-            self._areas[name] = self._to_ratios(src)
-    def get_area_config(self):
-        """Return colours, labels, order and visibility so JS stays data-driven."""
-        return {
-
-            "order": list(AREA_ORDER),
-            "areas": {
-                name: {"color": cfg["color"], "label": cfg["label"]}
-                for name, cfg in AREA_CONFIG.items()
-            },
-            "visible": dict(self._visible),
-        }
-    def set_visibility(self, visible_dict):
-        """Keep Python in sync when the overlay panel toggles boxes."""
-        if isinstance(visible_dict, dict):
-            for name, val in visible_dict.items():
-                if name in self._visible:
-                    self._visible[name] = bool(val)
-    def get_areas(self):
-        """Return canvas-relative pixel boxes for JS (menu-bar offset subtracted)."""
-        menu_offset = get_macos_menu_offset()
-        result = {}
-        for name, area in self._areas.items():
-            result[name] = {
-                "x": area["x"] * SCREEN_WIDTH,
-                "y": area["y"] * SCREEN_HEIGHT - menu_offset,
-                "width": area["width"] * SCREEN_WIDTH,
-                "height": area["height"] * SCREEN_HEIGHT,
-            }
-        return result
-
-    def on_mouse_move(self, mouse_x, mouse_y, current_boxes):
-        if not self._open:
-            return
-
-        menu_offset = get_macos_menu_offset()
-        for name in AREA_ORDER:
-            box = current_boxes.get(name, {})
-            if box:
-                self._areas[name] = self._pixels_to_ratios(box, menu_offset)
-            b = current_boxes.get(name)
-            if b and self._visible.get(name, True):
-                bx, by = float(b.get("x", 0)), float(b.get("y", 0))
-                bw = float(b.get("width", b.get("w", 0)) or 1)
-                bh = float(b.get("height", b.get("h", 0)) or 1)
-                mx, my = float(mouse_x or 0), float(mouse_y or 0)
-                if bx <= mx <= bx + bw and by <= my <= by + bh:
-                    xr = round((mx - bx) / bw, 2)
-                    yr = round((my - by) / bh, 2)
-                    try:
-                        self.parent_app.set_status(f"{name.upper()} → X: {xr:.2f}  Y: {yr:.2f}")
-                    except Exception:
-                        pass
-
-                    break
-
-    def on_point_select(self, name, xr, yr):
-        """Called by JS when Select Point mode is on and user clicks an area.
-        Shows ratios in the status bar and closes the selector without the
-        generic 'Area selector closed' message so the ratios remain visible."""
-        if not self._open:
-            return
-        try:
-            xr = float(xr)
-            yr = float(yr)
-        except (TypeError, ValueError):
-            return
-        xr = max(0.0, min(1.0, xr))
-        yr = max(0.0, min(1.0, yr))
-        label = (AREA_CONFIG.get(name) or {}).get("label", name)
-        status_msg = f"{label.upper()}  →  X RATIO: {xr:.4f}  Y RATIO: {yr:.4f}"
-
-        # Persist current areas, then close without overwriting the ratio status.
-        try:
-            self.parent_app.bar_areas.update(self._areas)
-            self.parent_app.save_misc_settings()
-        except Exception:
-            pass
-        self._open = False
-        try:
-            self.parent_app.set_status(status_msg)
-        except Exception:
-            pass
-        if self.area_window:
-            try:
-                self.area_window.destroy()
-            except Exception:
-                pass
-
-    def _pixels_to_ratios(self, box, menu_offset=0):
-        return {
-
-            "x": float(box.get("x", 0)) / SCREEN_WIDTH,
-            "y": (float(box.get("y", 0)) + menu_offset) / SCREEN_HEIGHT,
-            "width": float(box.get("width", box.get("w", 0))) / SCREEN_WIDTH,
-            "height": float(box.get("height", box.get("h", 0))) / SCREEN_HEIGHT,
-        }
-    def window_ready(self, win_x, win_y):
-        """JS signals the page is ready — push the frozen screenshot."""
-        if self._screenshot_b64 and self.area_window and self._open:
-            # Inject via a short data reference; JS stores it and draws.
-            try:
-                # Pass as return value of a dedicated getter instead of
-                # embedding a huge string in evaluate_js when possible.
-                self.area_window.evaluate_js(
-                    "window.__applyScreenshot && window.__applyScreenshot()"
-                )
-            except Exception:
-                pass
-
-        return None
-
-    def save_areas(self, areas):
-        if not self._open:
-            return
-
-        menu_offset = get_macos_menu_offset()
-        for name in AREA_ORDER:
-            if name in areas:
-                self._areas[name] = self._pixels_to_ratios(areas[name], menu_offset)
-        self.parent_app.bar_areas.update(self._areas)
-        self.parent_app.save_misc_settings()
-        self._open = False
-        self.parent_app.set_status("Area selector closed")
-        if self.area_window:
-            try:
-                self.area_window.destroy()
-            except Exception:
-                pass
-
+    def clear(self):
+        """Clears rendering elements inside the web view context."""
+        self._eval("window.fishOverlay && window.fishOverlay.clear()")
     def get_screenshot_data(self):
         """Return the data-URL of the frozen (menu-bar-cropped) screenshot."""
         return self._screenshot_b64 or ""
 
-    def _on_closed(self):
-        if self._open:
-            self.parent_app.bar_areas.update(self._areas)
-            self.parent_app.save_misc_settings()
+    def save_areas(self, areas):
+        """Persist the current canvas boxes (logical pixels) and close the overlay.
+        Called from JS on Esc / F6 / beforeunload so changes are always written back.
+        """
+        if not isinstance(areas, dict):
+            areas = {}
+        scale = get_scale_factor() or 1.0
+        if scale <= 0:
+            scale = 1.0
+        # menu_offset is stored/used in logical units to match the canvas and
+        # SCREEN_WIDTH/HEIGHT (which are logical).
+        menu_offset_logical = get_macos_menu_offset()
+        for name, box in areas.items():
+            if name not in self._areas or not isinstance(box, dict):
+                continue
+            self._areas[name] = {
+                "x": float(box.get("x", 0)) / SCREEN_WIDTH,
+                "y": (float(box.get("y", 0)) + menu_offset_logical) / SCREEN_HEIGHT,
+                "width": float(box.get("width", box.get("w", 0))) / SCREEN_WIDTH,
+                "height": float(box.get("height", box.get("h", 0))) / SCREEN_HEIGHT,
+            }
+            self.parent_app.bar_areas[name] = dict(self._areas[name])
+        self.parent_app.save_misc_settings()
+        try:
             self.parent_app.set_status("Area selector closed")
-        self.area_window = None
-        self._open = False
-    def is_open(self):
-        return self._open and self.area_window is not None
+        except Exception:
+            pass
+        self.hide()
 
-    def hide(self):
-        if self.is_open():
-            self.close()
-    def close(self):
-        if self.is_open():
-            self.save_areas(self.get_areas())
+    def request_save_and_close(self):
+        """Ask the page to persist its current boxes before closing."""
+        if not self._open or not self.overlay_window:
+            return
+        if not self._page_ready:
+            self.hide()
+            return
+        self.overlay_window.evaluate_js(
+            "window.fishOverlay && window.fishOverlay.saveAndClose()"
+        )
+
+    def draw_box(self, x1, y1, x2, y2, color, show_bar_center=False, label=""):
+        """Evaluates JS drawing contexts based on calculations inside the viewport.
+        bar_center / box_size / canvas_offset are in physical pixels relative to
+        the fish capture region; they are converted to logical CSS pixels for
+        the overlay canvas (which matches the logical window size).
+        """
+        # Ensure the overlay exists before trying to execute scripts on it
+        if not self._open or not self.overlay_window:
+            return
+
+        scale = get_scale_factor()
+        if scale <= 0:
+            scale = 1.0
+        shape = {
+            "x1": int(x1 / scale),
+            "y1": int(y1 / scale),
+            "x2": int(x2 / scale),
+            "y2": int(y2 / scale),
+            "color": str(color),
+            "show_bar_center": bool(show_bar_center),
+            "label": str(label or "")
+        }
+        self._eval(f"window.fishOverlay && window.fishOverlay.draw({json.dumps(shape)})")
+    def _eval(self, script):
+        """Safely executes JavaScript strings within the running window environment.
+        Calls made before the page is ready are queued — evaluate_js during
+        create_window can fail and must not tear the overlay down (that was
+        dropping the screenshot)."""
+        if not (self.overlay_window and self._open):
+            return
+        if not self._page_ready:
+            self._pending_js.append(script)
+            return
+        try:
+            self.overlay_window.evaluate_js(script)
+        except Exception:
+            # Page may not be attached yet; keep the window and retry later.
+            self._pending_js.append(script)
+
+    def _flush_pending_js(self):
+        if not (self.overlay_window and self._open and self._page_ready):
+            return
+        pending = self._pending_js
+        self._pending_js = []
+        for script in pending:
+            try:
+                self.overlay_window.evaluate_js(script)
+            except Exception:
+                self._pending_js.append(script)
+
+    def _capture_and_crop(self):
+        """Capture full screen and remove the macOS menu bar strip so the
+        image matches the frameless window geometry (no menu bar)."""
+        frame = self.parent_app.capture_single_frame()
+        
+        if frame is None:
+            return None
+
+        if frame.ndim == 3 and frame.shape[2] == 4:
+            frame = frame[:, :, :3].copy()
+        scale = get_scale_factor()
+        macos_offset = get_macos_menu_offset()
+        if scale <= 0:
+            scale = 1.0
+        self._scale = scale
+        # Crop top (macOS menu bar) so canvas y=0 aligns with menu macos_offset
+        menu_bar_pixels = int(round(macos_offset * scale))
+        if 0 < menu_bar_pixels < frame.shape[0]:
+            frame = frame[
+                menu_bar_pixels:int(round(SCREEN_HEIGHT * scale)),
+                0:int(round(SCREEN_WIDTH * scale)),
+            ]
+        frame = np.clip(frame.astype(np.int16) - 15, 0, 255).astype(np.uint8)
+        return frame
+
+    def _encode_screenshot(self, frame):
+        """Encode BGR numpy frame as a JPEG data-URL for the canvas."""
+        if frame is None:
+            return None
+
+        try:
+            # Jpeg Keeps The Payload Small Enough For Evaluate_Js
+            ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            if not ok:
+                return None
+
+            b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+            return "data:image/jpeg;base64," + b64
+
+        except Exception:
+            return None
+
+    def is_open(self):
+        return self._open
+
+    def _on_closed(self):
+        """Internal callback cleaning lifecycle states upon execution exit."""
+        self.overlay_window = None
+        self._open = False
+        self._visible = False
 # Eyedropper class
 class Eyedropper:
     """
@@ -1173,7 +1371,204 @@ class FishOverlay:
         self.overlay_window = None
         self._open = False
         self._visible = False
+class StatusOverlay:
+    # Prevent Pywebview From Walking This Object When The Main Api Is Js_Api.
+    # Statusoverlay.Show() Runs During Api.__Init__, So Overlay_Window Is A Live
+    # Window By The Time Create_Window(..., Js_Api=Api) Runs — That Is What
+    # Produced Status_Overlay.Overlay_Window.Native.Accessibilityobject.Bounds
+    # recursion and the WebView2 "must be accessed from the UI thread" errors.
+    _serializable = False
+    HTML_FILE = os.path.join(UI_PATH, "status_overlay.html")
+    def __init__(self, parent_app):
+        self.parent_app = parent_app
+        self._overlay_window = None
+        self._open = False
+        self._visible = False
+        # Track Active Viewport Geometry
+        # (Logical Points For Pywebview)
+        self.left = 0
+        self.top = 0
+        self.width = 0
+        self.height = 0
+    def _to_window_coords(self, left, top, width, height):
+        """
+        Convert physical-pixel geometry into logical points
+        for pywebview.
+        On Windows scale is usually 1.
+        On macOS Retina it is typically 2.0.
+        """
+        scale = get_scale_factor()
+        if scale <= 0:
+            scale = 1.0
+        left = int(left / scale)
+        top = int(top / scale)
+        width = max(1, int(width / scale))
+        height = max(1, int(height / scale))
+        # Clamp Window Dimensions To Screen Bounds
+        screen_w = max(1, SCREEN_WIDTH)
+        screen_h = max(1, SCREEN_HEIGHT)
+        width = min(width, screen_w)
+        height = min(height, screen_h)
+        left = max(0, min(left, max(0, screen_w - width)))
+        top = max(0, min(top, max(0, screen_h - height)))
+        return left, top, width, height
 
+    def show(self, left, top, width, height):
+        """
+        Creates and displays the status overlay window.
+        Arguments are physical-pixel screen coordinates.
+        """
+        left, top, width, height = self._to_window_coords(
+            left, top, width, height
+        )
+        if self._open and self._overlay_window:
+            self.resize(
+                left,
+                top,
+                width,
+                height,
+                already_logical=True
+            )
+            return
+
+        self.left = left
+        self.top = top
+        self.width = width
+        self.height = height
+        self._overlay_window = webview.create_window(
+            "Status Overlay",
+            url=self.HTML_FILE,
+            transparent=False,
+            frameless=True,
+            easy_drag=False,
+            on_top=True,
+            resizable=False,
+            width=self.width,
+            height=self.height,
+            x=self.left,
+            y=self.top,
+            background_color="#000000",
+            min_size=(0.1 * SCREEN_WIDTH, 0.1 * SCREEN_HEIGHT),
+        )
+        self._open = True
+        self._visible = True
+        self._overlay_window.events.closed += self._on_closed
+    def hide(self):
+        """Destroys the current window instance completely.
+        Clear _open BEFORE destroy so concurrent minigame threads that still
+        call clear()/draw_box()/_eval skip the disposed WebView2 and avoid
+        ObjectDisposedException (logged by pywebview as 'Error occurred in script').
+        Destroy is scheduled off the JS-API thread to avoid pywebview deadlock.
+        """
+        """Destroys the current window instance completely."""
+        if self._overlay_window and self._open:
+            try:
+                self._overlay_window.destroy()
+            except Exception:
+                pass
+
+            self._on_closed()
+    def resize(self, left, top, width, height, already_logical=False):
+        """
+        Resizes and moves the window dynamically.
+        By default arguments are physical pixels.
+        Pass already_logical=True when already converted.
+        """
+        if not already_logical:
+            left, top, width, height = self._to_window_coords(
+                left,
+                top,
+                width,
+                height
+            )
+        self.left = left
+        self.top = top
+        self.width = width
+        self.height = height
+        if self._overlay_window and self._open:
+            try:
+                self._overlay_window.move(
+                    self.left,
+                    self.top
+                )
+                self._overlay_window.resize(
+                    self.width,
+                    self.height
+                )
+            except Exception:
+                self._open = False
+                self._overlay_window = None
+    def set_title(self, title):
+        """
+        Updates the overlay title.
+        """
+        self._eval(
+            f"window.statusOverlay && "
+            f"window.statusOverlay.setTitle("
+            f"{json.dumps(str(title))})"
+        )
+    def set_main_status(self, status):
+        """
+        Updates the main process/status label.
+        """
+        self._eval(
+            f"window.statusOverlay && "
+            f"window.statusOverlay.setMainStatus("
+            f"{json.dumps(str(status))})"
+        )
+    def set_line(self, number, label, value):
+        """
+        Updates one of the three status lines.
+        number must be 1, 2, or 3.
+        """
+        if number not in (1, 2, 3):
+            raise ValueError("Status line number must be 1, 2, or 3")
+
+        self._eval(
+            f"window.statusOverlay && "
+            f"window.statusOverlay.setLine("
+            f"{number}, "
+            f"{json.dumps(str(label))}, "
+            f"{json.dumps(str(value))})"
+        )
+    def set_status(self, title, main_status, line1, line2, line3):
+        """
+        Updates the entire status overlay.
+        Each line should be a (label, value) tuple.
+        """
+        self.set_title(title)
+        self.set_main_status(main_status)
+        self.set_line(1,line1[0],line1[1])
+        self.set_line(2,line2[0],line2[1])
+        self.set_line(3,line3[0],line3[1])
+    def clear(self):
+        """
+        Resets the status overlay to its default state.
+        """
+        self._eval(
+            "window.statusOverlay && "
+            "window.statusOverlay.clear()"
+        )
+    def _eval(self, script):
+        """
+        Safely executes JavaScript within the WebView.
+        Prevents calls against a WebView that has already been destroyed.
+        """
+        if not (self._overlay_window and self._open):
+            return
+
+        try:
+            self._overlay_window.evaluate_js(script)
+        except Exception:
+            self._open = False
+            self._overlay_window = None
+    def _on_closed(self):
+        """
+        Cleans lifecycle state when the window closes.
+        """
+        self._overlay_window = None
+        self._open = False
+        self._visible = False
 class SetupGuide(ctk.CTk):
     def __init__(self, error, stealer, pirated_build):
         super().__init__()
@@ -1389,6 +1784,26 @@ class Api:
         self.area_selector = AreaSelector(self)
         self.eyedropper = Eyedropper(self)
         self.fish_overlay = FishOverlay(self)
+        self.status_overlay = StatusOverlay(self)
+        # Safe Defaults Before Key Listener Starts (Will Be Overwritten By Load_Misc_Settings)
+        scale = get_scale_factor()
+        menu_offset = get_macos_menu_offset()
+        self.bar_areas = {name: None for name in AREA_ORDER}
+        self.current_rod_name = "Default"
+        self.session_start = None
+        self.catch_rate = 0.0
+        # Status Overlay
+        self.perfect_catch_rate = 0.0
+        self.current_cycle = 0
+        self.scale_x_1440 = SCREEN_WIDTH / 2560
+        self.scale_y_1440 = SCREEN_HEIGHT / 1440
+        self.scale_x_1080 = SCREEN_WIDTH / 1920
+        self.scale_y_1080 = SCREEN_HEIGHT / 1080
+        self.status_left = 20
+        self.status_top = (menu_offset * scale) + 40
+        self.status_right = (300 * scale * self.scale_x_1080)
+        self.status_bottom = (230 * scale * self.scale_y_1080)
+        self.status_overlay.hide()
         # Load Settings
         self.load_misc_settings()
     def _refresh_screen_dimensions(self):
@@ -1888,16 +2303,16 @@ class Api:
 
     # Area Selector
     def open_area_selector(self):
-        # Build current areas from bar_areas or AREA_CONFIG defaults (all keys, including appraisal)
+        # Build Current Areas From Bar_Areas Or Area_Config Defaults (All Keys, Including Appraisal)
         areas = {}
         for name in AREA_ORDER:
             a = self.bar_areas.get(name)
             areas[name] = a if isinstance(a, dict) else dict(AREA_CONFIG[name]["default"])
         if hasattr(self, "area_selector") and self.area_selector and self.area_selector.is_open():
-            self.area_selector.hide()
+            self.area_selector.request_save_and_close()
         else:
             self.area_selector.show()
-            self.area_selector.update_all(areas)
+            self.area_selector.update(areas, self.vars)
     # Debug Screenshots
     def take_debug_screenshot(self):
         """
@@ -2116,7 +2531,7 @@ class Api:
         if sys.platform == "darwin":
             send_key(key2, delay=delay, click_type=click_type)
         else:
-            # Convert special key names
+            # Convert Special Key Names
             special_keys = {
                 "enter": Key.enter,
                 "return": Key.enter,
@@ -2143,6 +2558,42 @@ class Api:
                     keyboard_controller.release(key)
             except Exception as e:
                 print("Error sending keys:", e)
+    def _type_text(self, text, per_char_delay=0.08):
+        """Type A String As Individual Keys. Skips OCR Junk That Is Not In The Key Map."""
+        if not text:
+            return
+
+        for char in str(text):
+            if self.macro_running == False:
+                return
+
+            if char == " ":
+                key = "space"
+            elif char == "\n" or char == "\r" or char == "\t":
+                continue
+
+            else:
+                key = char.lower()
+                if sys.platform == "darwin" and key not in MAC_KEY_MAP:
+                    continue
+
+            self._send_key(key)
+            time.sleep(per_char_delay)
+    def _select_all_text(self):
+        """Cmd+A On macOS, Ctrl+A Everywhere Else. Clears The Search Field Selection."""
+        if sys.platform == "darwin":
+            send_hotkey("command", "a")
+        else:
+            try:
+                keyboard_controller.press(Key.ctrl)
+                time.sleep(0.02)
+                keyboard_controller.press("a")
+                time.sleep(0.05)
+                keyboard_controller.release("a")
+                time.sleep(0.02)
+                keyboard_controller.release(Key.ctrl)
+            except Exception as e:
+                print("Error sending select-all:", e)
     # Interruptible sleep
     def interruptible_sleep(self, duration):
         duration = max(0.01, duration)
@@ -2812,71 +3263,265 @@ class Api:
     def start_appraisal(self):
         # Validate Tesseract
         try:
-            tesseract_path = self.vars["tesseract_path"]
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            tesseract_path = get_tesseract_path(self.vars.get("tesseract_path"))
+            if tesseract_path:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                # Repair the imported config in memory
+                self.vars["tesseract_path"] = tesseract_path
+            else:
+                raise RuntimeError("⚠️ Tesseract could not be found.")
+
             self.macro_running = True
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
-            self.message_box_javascript(f"""An error occured during appraisal. 
+            result = self.message_box_javascript(f"""An error occured during appraisal. 
             Please copy the error and report the bug:\\n{e}\\n
-            Would you like to copy the full crash log to your clipboard?""", full_error)
+            Would you like to copy the full crash log to your clipboard?""", "askyesno")
+            if result == True:
+                if self.copy_to_clipboard(full_error):
+                    self.message_box_javascript("Error copied over to clipboard")
+                else:
+                    self.message_box_javascript("Failed to copy error to clipboard")
             self.macro_running = False
             self.stop_macro(f"Appraisal error: {e}")
-        # Get areas
-        dialogue_left, dialogue_top, _, _, dialogue_width, dialogue_height = self.get_areas("appraisal_dialogue")
+            return
+
+        # Get Areas
         hotbar_left, hotbar_top, hotbar_right, hotbar_bottom, _, _ = self.get_areas("appraisal_hotbar")
-        # Split mutations (Sometimes it contains , at the end)
+        # Split Mutations (Sometimes It Contains , At The End)
+        appraisal_mode = self.vars["appraisal_mode"].lower()
         appraisal_mutations = self.vars["appraisal_mutations"]
         appraisal_mutations_list = appraisal_mutations.split(",")
-        # Positions
-        appraisal_x_ratio = float(self.vars["appraisal_click_x"])
-        appraisal_y_ratio = float(self.vars["appraisal_click_y"])
-        appraisal_x = int(dialogue_width * appraisal_x_ratio) + dialogue_left
-        appraisal_y = int(dialogue_height * appraisal_y_ratio) + dialogue_top
-        click_delay = float(self.vars["click_delay"])
-        # Other calculations
+        # Delays
+        appraisal_delay = float(self.vars["appraisal_delay"])
+        # Configure appraisal delay
+        if appraisal_mode == "normal":
+            # Normal Appraisal
+            raw_normal_appraisal_ratio = self.vars["normal_appraisal_click"]
+            normal_appraisal_ratio = raw_normal_appraisal_ratio.replace(" ", "").split(",")
+            try:
+                appraisal_x_ratio = float(normal_appraisal_ratio[0])
+                appraisal_y_ratio = float(normal_appraisal_ratio[1])
+            except:
+                pass
+
+        else:
+            # Gamepass Appraisal
+            raw_gamepass_appraisal_ratio = self.vars["gamepass_appraisal_click"]
+            gamepass_appraisal_ratio = raw_gamepass_appraisal_ratio.replace(" ", "").split(",")
+            try:
+                appraisal_x_ratio = float(gamepass_appraisal_ratio[0])
+                appraisal_y_ratio = float(gamepass_appraisal_ratio[1])
+            except:
+                pass
+
+            # Gamepass Appraisal 2
+            raw_gamepass_appraisal_ratio2 = self.vars["gamepass_appraisal_click2"]
+            gamepass_appraisal_ratio2 = raw_gamepass_appraisal_ratio2.replace(" ", "").split(",")
+            try:
+                appraisal_x_ratio2 = float(gamepass_appraisal_ratio2[0])
+                appraisal_y_ratio2 = float(gamepass_appraisal_ratio2[1])
+            except:
+                pass
+
+        appraisal_x = int(SCREEN_WIDTH * appraisal_x_ratio)
+        appraisal_y = int(SCREEN_HEIGHT * appraisal_y_ratio)
+        appraisal_x2 = int(SCREEN_WIDTH * appraisal_x_ratio2)
+        appraisal_y2 = int(SCREEN_HEIGHT * appraisal_y_ratio2)
+        # Other Calculations
         logging_cycle = int(self.vars["logging_cycle"])
         logging_mode = self.vars["logging_mode"].lower()
         attempts = 0.0
-        # Main loop
+        # Main Loop
         time.sleep(0.1)
-        self._send_key("e", 0.05)
-        while self.macro_running:
-            attempts = attempts + 1
-            # Click
-            time.sleep(click_delay)
-            self._click_at(appraisal_x, appraisal_y)
-            # Detection
-            fish = self.capture_frame[hotbar_top:hotbar_bottom, hotbar_left:hotbar_right]
-            processed_img = self.process_image_for_ocr(fish)
-            text = pytesseract.image_to_string(processed_img, config="--psm 7")
-            for match in range(len(appraisal_mutations_list)):
-                # print("Requirements:", appraisal_mutations_list[match].lower().rstrip(",").replace(" ", ""))
-                # print("Text:", text.lower().rstrip(",").replace(" ", ""))
-                if appraisal_mutations_list[match].lower().rstrip(",").replace(" ", "") in text.lower().rstrip(",").replace(" ", ""):
-                    self.stop_macro("Appraisal finished")
-            if self.macro_running == False:
-                self.stop_macro("")
-            if round(attempts) == attempts and logging_mode != "disabled":
-                if attempts == logging_cycle:
-                    self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}", -1)
-                logging_cycle = logging_cycle + attempts
+        if appraisal_mode == "normal":
+            self._send_key("e", 0.05)
+        try:
+            while self.macro_running:
+                attempts = attempts + 1
+                # Click
+                if appraisal_mode == "normal":
+                    time.sleep(appraisal_delay)
+                    self._click_at(appraisal_x, appraisal_y)
+                else:
+                    self._click_at(appraisal_x, appraisal_y)
+                    time.sleep(appraisal_delay)
+                    self._click_at(appraisal_x2, appraisal_y2)
+                    time.sleep(appraisal_delay)
+                    time.sleep(appraisal_delay)
+                self.capture_frame = self.camera.get_latest_frame()
+                self.capture_id = self.capture_id + 1
+                fish = self.capture_frame[hotbar_top:hotbar_bottom, hotbar_left:hotbar_right]
+                processed_img = self.process_image_for_ocr(fish)
+                text = pytesseract.image_to_string(processed_img, config="--psm 7")
+                for match in range(len(appraisal_mutations_list)):
+                    # print("Requirements:", appraisal_mutations_list[match].lower().rstrip(",").replace(" ", ""))
+                    # print("Text:", text.lower().rstrip(",").replace(" ", ""))
+                    if appraisal_mutations_list[match].lower().rstrip(",").replace(" ", "") in text.lower().rstrip(",").replace(" ", ""):
+                        self.stop_macro("Appraisal finished")
+                if self.macro_running == False:
+                    self.stop_macro("")
+                if round(attempts) == attempts and logging_mode != "disabled":
+                    if attempts == logging_cycle:
+                        self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}")
+                    logging_cycle = logging_cycle + attempts
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            result = self.message_box_javascript(f"""An error occured during appraisal. 
+            Please copy the error and report the bug:\\n{e}\\n
+            Would you like to copy the full crash log to your clipboard?""", "askyesno")
+            if result == True:
+                if self.copy_to_clipboard(full_error):
+                    self.message_box_javascript("Error copied over to clipboard")
+                else:
+                    self.message_box_javascript("Failed to copy error to clipboard")
+            self.macro_running = False
+            self.stop_macro(f"Appraisal error: {e}")
+            return
+
         self.set_status("Macro Stopped")
-    def start_enchantment(self):
+    def start_treasure_appraisal(self):
         # Validate Tesseract
         try:
-            tesseract_path = self.vars["tesseract_path"]
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            tesseract_path = get_tesseract_path(self.vars.get("tesseract_path"))
+            if tesseract_path:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                # Repair the imported config in memory
+                self.vars["tesseract_path"] = tesseract_path
+            else:
+                raise RuntimeError("⚠️ Tesseract could not be found.")
+
             self.macro_running = True
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
-            self.message_box_javascript(f"""An error occured during enchantment. 
+            result = self.message_box_javascript(f"""An error occured during appraisal.
             Please copy the error and report the bug:\\n{e}\\n
-            Would you like to copy the full crash log to your clipboard?""", full_error)
+            Would you like to copy the full crash log to your clipboard?""", "askyesno")
+            if result == True:
+                if self.copy_to_clipboard(full_error):
+                    self.message_box_javascript("Error copied over to clipboard")
+                else:
+                    self.message_box_javascript("Failed to copy error to clipboard")
+            self.macro_running = False
+            self.stop_macro(f"Appraisal error: {e}")
+            return
+
+        # Areas
+        treasure_left, treasure_top, treasure_right, treasure_bottom, treasure_width, treasure_height = self.get_areas("treasure_appraisal")
+        # Area Calculations
+        treasure_click_center = treasure_left + int(treasure_width / 2)
+        treasure_click_left = treasure_left + int(treasure_width / 5)
+        treasure_click_right = treasure_right - int(treasure_width / 5)
+        treasure_click_y_multiplier = int(treasure_height / 7.25)
+        # Settings
+        treasure_appraisal_text = self.vars["treasure_appraisal_text"].replace(" ", "").split(",")
+        try:
+            treasure_appraisal_text_x = float(treasure_appraisal_text[0]) * SCREEN_WIDTH
+            treasure_appraisal_text_y = float(treasure_appraisal_text[1]) * SCREEN_HEIGHT
+        except:
+            pass
+
+        treasure_appraisal_click = self.vars["treasure_appraisal_click"].replace(" ", "").split(",")
+        try:
+            treasure_appraisal_click_x = float(treasure_appraisal_click[0]) * SCREEN_WIDTH
+            treasure_appraisal_click_y = float(treasure_appraisal_click[1]) * SCREEN_HEIGHT
+        except:
+            pass
+
+        ocr_width = int((treasure_width / 357) * 80) # Scaled at 720p
+        ocr_height = int((treasure_height / 459) * 15) # Scaled at 720p
+        ocr_left = treasure_appraisal_text_x - int(ocr_width / 2)
+        ocr_top = treasure_appraisal_text_y - int(ocr_height / 2)
+        ocr_right = treasure_appraisal_text_x + int(ocr_width / 2)
+        ocr_bottom = treasure_appraisal_text_y + int(ocr_height / 2)
+        minimum_multiplier = float(self.vars["minimum_multiplier"])
+        logging_mode = self.vars["logging_mode"].lower()
+        # Cache Values (Failsafe)
+        attempts = 0
+        # Main Loop
+        try:
+            while self.macro_running:
+                attempts = attempts + 1
+                # Main Loop (Appraise 7 Times)
+                for i in range(7):
+                    slot = random.randint(1, 3)
+                    if slot == 1:
+                        current_click_x = treasure_click_left
+                    elif slot == 2:
+                        current_click_x = treasure_click_center
+                    else:
+                        current_click_x = treasure_click_right
+                    current_click_y = treasure_top + (treasure_click_y_multiplier * (i + 1))
+                    self._click_at(current_click_x, current_click_y)
+                    time.sleep(0.5)
+                time.sleep(2)
+                self.capture_frame = self.camera.get_latest_frame()
+                self.capture_id = self.capture_id + 1
+                ocr_image = self.capture_frame[ocr_top:ocr_bottom, ocr_left:ocr_right]
+                processed_img = self.process_image_for_ocr(ocr_image)
+                text = pytesseract.image_to_string(processed_img, config="--psm 7")
+                extracted_value = float(self.extract_number_from_text(text))
+                if extracted_value is not None:
+                    if extracted_value > minimum_multiplier:
+                        self.stop_macro("Treasure Appraisal finished")
+                    else:
+                        self.set_status("Treasure Appraisal: extracted_value < minimum_multiplier")
+                else:
+                    self.set_status("Treasure Appraisal: extracted_value == None")
+                self._click_at(treasure_appraisal_click_x, treasure_appraisal_click_y)
+                if self.macro_running == False:
+                    self.stop_macro("")
+                if round(attempts) == attempts and logging_mode != "disabled":
+                    if attempts == logging_cycle:
+                        self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}")
+                    logging_cycle = logging_cycle + attempts
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            error_lines = full_error.splitlines()
+            error_line = self.get_error_line(error_lines[1])
+            result = self.message_box_javascript(f"""An error at line {error_line} occured. 
+                                                 Please copy the error and report the bug:\\n{e}\\n
+                                                 Would you like to copy the full crash log to your clipboard?""", "askyesno")
+            if result == True:
+                if self.copy_to_clipboard(full_error):
+                    self.message_box_javascript("Error copied over to clipboard")
+                else:
+                    self.message_box_javascript("Failed to copy error to clipboard")
+            if IS_COMPILED == False:
+                print(full_error)
+            self.macro_running = False
+            self.stop_macro(f"Error at line {error_line}: {e}")
+    def start_enchantment(self):
+        # Validate Tesseract
+        try:
+            tesseract_path = get_tesseract_path(self.vars.get("tesseract_path"))
+            if tesseract_path:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                # Repair the imported config in memory
+                self.vars["tesseract_path"] = tesseract_path
+            else:
+                raise RuntimeError("⚠️ Tesseract could not be found.")
+
+            self.macro_running = True
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            result = self.message_box_javascript(f"""An error occured during enchantment. 
+            Please copy the error and report the bug:\\n{e}\\n
+            Would you like to copy the full crash log to your clipboard?""", "askyesno")
+            if result == True:
+                if self.copy_to_clipboard(full_error):
+                    self.message_box_javascript("Error copied over to clipboard")
+                else:
+                    self.message_box_javascript("Failed to copy error to clipboard")
             self.macro_running = False
             self.stop_macro(f"Enchantment error: {e}")
+            return
+
         # Get Areas
         enchantment_left, enchantment_top, enchantment_right, enchantment_bottom, enchantment_width, enchantment_height = self.get_areas("enchantment")
         # Split Enchantments
@@ -2884,15 +3529,25 @@ class Api:
         enchant_enchants = self.vars["enchant_enchants"]
         enchant_enchants_list = enchant_enchants.split(",")
         # Positions
-        enchantment_x_ratio = float(self.vars["enchant_click_x"])
-        enchantment_y_ratio = float(self.vars["enchant_click_y"])
-        enchantment_x = int(enchantment_width * enchantment_x_ratio) + enchantment_left
-        enchantment_y = int(enchantment_height * enchantment_y_ratio) + enchantment_top
-        # Delays
-        e_delay = float(self.vars["e_delay"])
-        click_delay = float(self.vars["click_delay"])
-        click_delay2 = float(self.vars["click_delay2"])
-        # Other calculations
+        enchantment_e_delay = float(self.vars["enchantment_e_delay"])
+        enchantment_click_delay = float(self.vars["enchantment_click_delay"])
+        enchantment_click_delay2 = float(self.vars["enchantment_click_delay2"])
+        enchantment_click_delay3 = float(self.vars["enchantment_click_delay3"])
+        enchantment_click_position = self.vars["enchantment_click_position"].replace(" ", "").split(",")
+        try:
+            enchantment_click_position_x = float(enchantment_click_position[0]) * SCREEN_WIDTH
+            enchantment_click_position_y = float(enchantment_click_position[1]) * SCREEN_HEIGHT
+        except:
+            pass
+
+        enchantment_click_position2 = self.vars["enchantment_click_position2"].replace(" ", "").split(",")
+        try:
+            enchantment_click_position_x2 = float(enchantment_click_position2[0]) * SCREEN_WIDTH
+            enchantment_click_position_y2 = float(enchantment_click_position2[1]) * SCREEN_HEIGHT
+        except:
+            pass
+
+        # Other Calculations
         logging_cycle = int(self.vars["logging_cycle"])
         logging_mode = self.vars["logging_mode"].lower()
         attempts = 0.0
@@ -2900,12 +3555,18 @@ class Api:
         try:
             while self.macro_running:
                 time.sleep(0.1)
-                self._send_key("e")
-                time.sleep(e_delay)
-                self._click_at(enchantment_x, enchantment_y)
-                time.sleep(click_delay)
-                time.sleep(3)
-                # Detection
+                if enchantment_mode == "normal":
+                    self._send_key("e")
+                    time.sleep(enchantment_e_delay)
+                    self._click_at(enchantment_click_position_x, enchantment_click_position_y)
+                    time.sleep(enchantment_click_delay)
+                else:
+                    self._click_at(enchantment_click_position_x, enchantment_click_position_y)
+                    time.sleep(enchantment_click_delay)
+                    self._click_at(enchantment_click_position_x2, enchantment_click_position_y2)
+                    time.sleep(enchantment_click_delay2)
+                self.capture_frame = self.camera.get_latest_frame()
+                self.capture_id = self.capture_id + 1
                 text = self.capture_frame[enchantment_top:enchantment_bottom, enchantment_left:enchantment_right]
                 gray = self.process_image_for_ocr(text)
                 text = pytesseract.image_to_string(gray, config="--psm 7")
@@ -2914,12 +3575,12 @@ class Api:
                     # print("Text:", text.lower().rstrip(",").replace(" ", ""))
                     if enchant_enchants_list[match].lower().rstrip(",").replace(" ", "") in text.lower().rstrip(",").replace(" ", ""):
                         self.stop_macro("Enchantment finished")
-                time.sleep(click_delay2)
+                time.sleep(enchantment_click_delay3)
                 if self.macro_running == False:
                     self.stop_macro("")
                 if round(attempts) == attempts and logging_mode != "disabled":
                     if attempts == logging_cycle:
-                        self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}", -1)
+                        self.send_logging("**Attempts Checkpoint**", f"Attempt #{attempts}")
                     logging_cycle = logging_cycle + attempts
             self.set_status("Macro Stopped")
         except Exception as e:
@@ -2927,7 +3588,14 @@ class Api:
             full_error = traceback.format_exc()
             error_lines = full_error.splitlines()
             error_line = self.get_error_line(error_lines[1])
-            self.message_box_javascript(f"An error at line {error_line} occured. Please copy the error and report the bug:\\n{e}\\nWould you like to copy the full crash log to your clipboard?", full_error)
+            result = self.message_box_javascript(f"""An error at line {error_line} occured. 
+                                                 Please copy the error and report the bug:\\n{e}\\n
+                                                 Would you like to copy the full crash log to your clipboard?""", "askyesno")
+            if result == True:
+                if self.copy_to_clipboard(full_error):
+                    self.message_box_javascript("Error copied over to clipboard")
+                else:
+                    self.message_box_javascript("Failed to copy error to clipboard")
             if IS_COMPILED == False:
                 print(full_error)
             self.macro_running = False
@@ -2935,126 +3603,208 @@ class Api:
     def start_angler(self):
         # Validate Tesseract
         try:
-            tesseract_path = self.vars["tesseract_path"]
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            tesseract_path = get_tesseract_path(self.vars.get("tesseract_path"))
+            if tesseract_path:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                # Repair the imported config in memory
+                self.vars["tesseract_path"] = tesseract_path
+            else:
+                raise RuntimeError("⚠️ Tesseract could not be found.")
+
             self.macro_running = True
         except Exception as e:
             time.sleep(0.2)
             full_error = traceback.format_exc()
-            self.message_box_javascript(f"""An error occured during angler. 
+            result = self.message_box_javascript(f"""An error occured during angler. 
             Please copy the error and report the bug:\\n{e}\\n
-            Would you like to copy the full crash log to your clipboard?""", full_error)
+            Would you like to copy the full crash log to your clipboard?""", "askyesno")
+            if result == True:
+                if self.copy_to_clipboard(full_error):
+                    self.message_box_javascript("Error copied over to clipboard")
+                else:
+                    self.message_box_javascript("Failed to copy error to clipboard")
             self.macro_running = False
             self.stop_macro(f"Angler error: {e}")
-        dialogue_left, dialogue_top, _, _, dialogue_width, dialogue_height = self._get_areas("angler_dialogue")
-        backpack_left, backpack_top, _, _, backpack_width, backpack_height = self._get_areas("backpack")
-        quest_left, quest_top, quest_right, quest_bottom, _, _ = self._get_areas("angler_quest")
-        backpack_slot = str(self.vars["backpack_slot"])
-        utility_restart_delay = int(self.vars["utility_restart_delay"])
-        # Angler Key
-        angler_x_ratio = float(self.vars["angler_click_x"])
-        angler_y_ratio = float(self.vars["angler_click_y"])
-        angler_click_x = int(dialogue_width * angler_x_ratio) + dialogue_left
-        angler_click_y = int(dialogue_height * angler_y_ratio) + dialogue_top
-        # Backpack Key
-        backpack_x_ratio = self.vars["backpack_x"]
-        backpack_y_ratio = self.vars["backpack_y"]
-        backpack_x = int(backpack_width * backpack_x_ratio) + backpack_left
-        backpack_y = int(backpack_height * backpack_y_ratio) + backpack_top
-        # Check for utilities
-        self._check_logging_trigger(-1)
-        # Main loop
-        while self.macro_running:
-            time.sleep(0.1)
-            # STEP 1: CLICK E → OPEN QUEST DIALOGUE
-            self._send_key("e")
-            time.sleep(1.5)
-            # Click at angler area (accept quest)
-            self._click_at(angler_click_x, angler_click_y)
-            # STEP 2: OCR QUEST AREA — GET REQUIRED FISH TEXT
-            time.sleep(3)
-            img = self._grab_screen_full()
-            quest = img[quest_top:quest_bottom, quest_left:quest_right]
-            gray = cv2.cvtColor(quest, cv2.COLOR_BGR2GRAY)
-            gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-            gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
-            quest_text = pytesseract.image_to_string(gray)
-            lines = [
-                line.strip().lower()
-                for line in quest_text.splitlines()
-                if line.strip()
-            ]
-            required_fish = lines[-1] if lines else ""
-            self.set_status(f"Quest fish: {required_fish}")
-            if not required_fish:
-                self.set_status("Could not read fish name")
-                time.sleep(utility_restart_delay)
-                continue
+            return
 
-            # STEP 3: OPEN BACKPACK
-            self._send_key(backpack_slot)
-            time.sleep(0.5)
-            # STEP 4: CLICK SEARCH BAR + TYPE FISH NAME
-            self._click_at(backpack_x, backpack_y)
-            time.sleep(0.5)
-            # Type fish name
-            for char in required_fish:
-                self._send_key(char)
-            time.sleep(1.5)
-            # STEP 5: LOCATE quest_text IN QUEST AREA VIA OCR AND CLICK IT
-            img = self._grab_screen_full()
-            quest_region = img[quest_top:quest_bottom, quest_left:quest_right]
-            gray_q = cv2.cvtColor(quest_region, cv2.COLOR_BGR2GRAY)
-            gray_q = cv2.resize(gray_q, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-            gray_q = cv2.threshold(gray_q, 150, 255, cv2.THRESH_BINARY)[1]
-            ocr_data_q = pytesseract.image_to_data(
-                gray_q,
-                output_type=pytesseract.Output.DICT,
-                config="--psm 11"
-            )
-            quest_click_x, quest_click_y = None, None
-            for i, text_tok in enumerate(ocr_data_q["text"]):
-                tok = text_tok.strip().lower()
-                try:
-                    conf = float(ocr_data_q["conf"][i])
-                except Exception:
-                    conf = -1
-                if conf < 40 or not tok:
+        # Areas
+        quest_left, quest_top, quest_right, quest_bottom, _, _ = self.get_areas("angler_quest")
+        backpack_slot = str(self.vars["backpack_slot"])
+        # Delays
+        angler_cooldown = int(self.vars["angler_cooldown"])
+        angler_e_delay = float(self.vars["angler_e_delay"])
+        angler_click_position = self.vars["angler_click_position"].replace(" ", "").split(",")
+        try:
+            angler_click_position_x = float(angler_click_position[0]) * SCREEN_WIDTH
+            angler_click_position_y = float(angler_click_position[1]) * SCREEN_HEIGHT
+        except:
+            pass
+
+        angler_click_position2 = self.vars["angler_click_position2"].replace(" ", "").split(",")
+        try:
+            angler_click_position_x2 = float(angler_click_position2[0]) * SCREEN_WIDTH
+            angler_click_position_y2 = float(angler_click_position2[1]) * SCREEN_HEIGHT
+        except:
+            pass
+
+        angler_click_position3 = self.vars["angler_click_position3"].replace(" ", "").split(",")
+        try:
+            angler_click_position_x3 = float(angler_click_position3[0]) * SCREEN_WIDTH
+            angler_click_position_y3 = float(angler_click_position3[1]) * SCREEN_HEIGHT
+        except:
+            pass
+
+        # Main Loop
+        try:
+            while self.macro_running:
+                time.sleep(0.1)
+                # Step 1: Click E → Open Quest Dialogue
+                self._send_key("e")
+                time.sleep(angler_e_delay)
+                # Click At Angler Area (Accept Quest)
+                self._click_at(angler_click_position_x, angler_click_position_y)
+                # Step 2: OCR Quest Area — Get Required Fish Text
+                time.sleep(3)
+                quest = self.capture_frame[quest_top:quest_bottom, quest_left:quest_right]
+                gray = cv2.cvtColor(quest, cv2.COLOR_BGR2GRAY)
+                gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+                gray = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
+                quest_text = pytesseract.image_to_string(gray)
+                lines = [
+                    line.strip().lower()
+                    for line in quest_text.splitlines()
+                    if line.strip()
+                ]
+                required_fish = lines[-1] if lines else ""
+                self.status_overlay.set_line(1, "Quest fish:", f"{required_fish}")
+                print("Quest fish:", f"{required_fish}")
+                if not required_fish or not required_fish.strip():
+                    self.status_overlay.set_line(1, "Could not read fish name:", "")
+                    self.interruptible_sleep(angler_cooldown)
                     continue
 
-                if tok in required_fish or required_fish in tok:
-                    qx = ocr_data_q["left"][i]
-                    qy = ocr_data_q["top"][i]
-                    qw = ocr_data_q["width"][i]
-                    qh = ocr_data_q["height"][i]
-                    # Undo the 3× upscale to get back to screen coords
-                    quest_click_x = quest_left + (qx + qw // 2) // 3
-                    quest_click_y = quest_top  + (qy + qh // 2) // 3
-                    break
+                # Step 3: Open Backpack
+                self._send_key(backpack_slot)
+                time.sleep(0.5)
+                # Step 4: Click Search Bar + Type Fish Name
+                self._click_at(angler_click_position_x2, angler_click_position_y2)
+                time.sleep(0.5)
+                # Select All So A Second Quest Does Not Append ("red snapperred snapper")
+                self._select_all_text()
+                time.sleep(0.1)
+                self._send_key("backspace")
+                time.sleep(0.2)
+                # Type Fish Name (macOS Must Not Inherit Globe/Fn Or Siri Opens)
+                self._type_text(required_fish, per_char_delay=0.15)
+                time.sleep(1.5)
+                # Step 5: Locate Quest_Text In Quest Area Via OCR And Click It
+                self.capture_frame = self.camera.get_latest_frame()
+                self.capture_id = self.capture_id + 1
+                quest_region = self.capture_frame[quest_top:quest_bottom, quest_left:quest_right]
+                gray_q = cv2.cvtColor(quest_region, cv2.COLOR_BGR2GRAY)
+                gray_q = cv2.resize(gray_q, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+                gray_q = cv2.threshold(gray_q, 150, 255, cv2.THRESH_BINARY)[1]
+                ocr_data_q = pytesseract.image_to_data(
+                    gray_q,
+                    output_type=pytesseract.Output.DICT,
+                    config="--psm 11"
+                )
+                quest_click_x, quest_click_y = None, None
+                # Normalize the required fish name once.
+                required_words = required_fish.strip().lower().split()
+                # Tesseract gives us individual words, so combine words that belong
+                # to the same OCR line. This allows:
+                #   Red
+                #   Snapper
+                # to match "Red Snapper".
+                ocr_lines = {}
+                for i, text_tok in enumerate(ocr_data_q["text"]):
+                    tok = text_tok.strip().lower()
+                    try:
+                        conf = float(ocr_data_q["conf"][i])
+                    except Exception:
+                        conf = -1
+                    if conf < 40 or not tok:
+                        continue
 
-            if quest_click_x is not None:
-                self.set_status(
-                    f"Quest text '{required_fish}' found at "
-                    f"{quest_click_x}, {quest_click_y} — clicking"
-                )
-                self._click_at(quest_click_x, quest_click_y)
-            else:
-                self.set_status(
-                    f"Quest text '{required_fish}' not found via OCR, skipping click"
-                )
-            time.sleep(0.25)
-            # STEP 6: CLOSE BACKPACK
-            self._send_key(backpack_slot)
-            time.sleep(0.5)
-            # STEP 7: CLICK E → FINISH QUEST (PIXEL SEARCH OR RATIO)
-            self._send_key("e")
-            time.sleep(1.2)
-            # Click at angler area
-            self._click_at(angler_click_x, angler_click_y)
-            # STEP 8: COOLDOWN
-            time.sleep(utility_restart_delay)
+                    block_num = ocr_data_q["block_num"][i]
+                    par_num = ocr_data_q["par_num"][i]
+                    line_num = ocr_data_q["line_num"][i]
+                    line_key = (block_num, par_num, line_num)
+                    ocr_lines.setdefault(line_key, []).append({
+                        "text": tok,
+                        "left": ocr_data_q["left"][i],
+                        "top": ocr_data_q["top"][i],
+                        "width": ocr_data_q["width"][i],
+                        "height": ocr_data_q["height"][i],
+                    })
+                # Search each OCR line for the required fish name.
+                for words in ocr_lines.values():
+                    # Tesseract normally returns words left-to-right, but sort explicitly
+                    # so the matching also works reliably if the OCR ordering changes.
+                    words.sort(key=lambda w: (w["top"], w["left"]))
+                    for start in range(len(words)):
+                        candidate_words = []
+                        for end in range(start, len(words)):
+                            candidate_words.append(words[end]["text"])
+                            candidate = " ".join(candidate_words)
+                            # Exact multi-word match.
+                            if candidate == " ".join(required_words):
+                                matched_words = words[start:end + 1]
+                                left = min(w["left"] for w in matched_words)
+                                top = min(w["top"] for w in matched_words)
+                                right = max(w["left"] + w["width"] for w in matched_words)
+                                bottom = max(w["top"] + w["height"] for w in matched_words)
+                                # Click the center of the entire phrase.
+                                quest_click_x = quest_left + ((left + right) // 2) // 3
+                                quest_click_y = quest_top + ((top + bottom) // 2) // 3
+                                break
+
+                            # Don't keep extending once the candidate is longer than
+                            # the required fish name.
+                            if len(candidate_words) >= len(required_words):
+                                break
+
+                        if quest_click_x is not None:
+                            break
+
+                    if quest_click_x is not None:
+                        break
+
+                if quest_click_x is not None:
+                    self.status_overlay.set_line(1, f"Quest text '{required_fish}' found at ", f"{quest_click_x}, {quest_click_y} — clicking")
+                    self._click_at(quest_click_x, quest_click_y)
+                else:
+                    self.status_overlay.set_line(1, f"Quest text '{required_fish}' not found via OCR, skipping click", "")
+                time.sleep(0.1)
+                # Step 6: Close Backpack
+                self._send_key(backpack_slot)
+                time.sleep(0.5)
+                # Step 7: Click E → Finish Quest (Pixel Search Or Ratio)
+                self._send_key("e")
+                time.sleep(1.2)
+                # Click At Angler Area To Exit Quest
+                self._click_at(angler_click_position_x, angler_click_position_y)
+                # Step 8: Cooldown
+                self.interruptible_sleep(angler_cooldown)
+        except Exception as e:
+            time.sleep(0.2)
+            full_error = traceback.format_exc()
+            result = self.message_box_javascript(f"""An error occured during angler. 
+            Please copy the error and report the bug:\\n{e}\\n
+            Would you like to copy the full crash log to your clipboard?""", "askyesno")
+            if result == True:
+                if self.copy_to_clipboard(full_error):
+                    self.message_box_javascript("Error copied over to clipboard")
+                else:
+                    self.message_box_javascript("Failed to copy error to clipboard")
+            self.macro_running = False
+            self.stop_macro(f"Angler error: {e}")
+            return
+
         self.set_status("Macro Stopped")
     def start_fishing(self):
+        self.status_overlay.set_main_status("Initialization")
         # 1. Core Config & Modes
         scale = self._get_scale_factor()
         self.macro_running = True
@@ -3065,7 +3815,10 @@ class Api:
         click_after_minigame = self.vars["click_after_minigame"].lower()
         target_time = self.vars["target_time"].lower()
         logging_cycle = int(self.vars["logging_cycle"])
+        hunt_cycles = int(self.vars["hunt_cycles"])
+        totem_cycles = int(self.vars.get("totem_cycles", 55))
         auto_reconnect = self.vars["auto_reconnect"]
+        hunt_detect = int(self._get_var_number("hunt_detect", 20, float))
         # 2. Hotkey & Inventory Slots
         bag_slot = str(self.vars["bag_slot"])
         rod_slot = str(self.vars["rod_slot"])
@@ -3082,7 +3835,6 @@ class Api:
         fish_left, fish_top, fish_right, fish_bottom, _, fish_height = self.get_areas("fish")
         friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self.get_areas("friend")
         totem_left, totem_top, totem_right, totem_bottom, _, _ = self.get_areas("totem")
-        sovereign_left, sovereign_top, sovereign_right, sovereign_bottom, sovereign_width, _ = self.get_areas("sovereign")
         shake_x = shake_left + (shake_w // 2)
         shake_y = shake_top + (shake_h // 2)
         detection_method = self.vars["detection_method"]
@@ -3095,13 +3847,13 @@ class Api:
         auto_refresh = self.vars["auto_refresh"]
         auto_totem = self.vars["auto_totem"]
         fish_overlay = self.vars["fish_overlay"]
-        enchant_click_x = self.vars["enchant_click_x"]
-        enchant_click_y = self.vars["enchant_click_y"]
+        status_overlay = self.vars["status_overlay"]
         # 6. Optimized OpenCV Template Matching Setup
         sun = cv2.imread(os.path.join(IMAGES_PATH, "sun.png"))
         moon = cv2.imread(os.path.join(IMAGES_PATH, "moon.png"))
         sun_resized = self.auto_crop_template(sun)
         moon_resized = self.auto_crop_template(moon)
+        totem_cycles2 = 0
         # 7. Internal Tracking State
         self.scan_delay = 0.1
         self.current_cycle = 0
@@ -3112,6 +3864,7 @@ class Api:
         self.catch_rate = 0.0
         successful_catches = 0
         logging_cycle2 = logging_cycle
+        hunt_cycles2 = hunt_cycles
         if fish_overlay == "on":
             # Position the overlay just above or below the fish bar so it does
             # not cover the actual minigame.  show() expects (left, top, width,
@@ -3129,9 +3882,16 @@ class Api:
                 overlay_width,
                 overlay_height,
             )
-        # Main Loop (With bug reports)
+        # Status Overlay
+        if status_overlay == "on":
+            # Position The Status Overlay At The Top Left, But Avoiding The macOS Menu Offset.
+            self.status_overlay.show(self.status_left, self.status_top, self.status_right, self.status_bottom)
+        else:
+            self.status_overlay.hide()
+        # Main Loop (With Bug Reports)
         try:
             while self.macro_running:
+                self.status_overlay.set_main_status("Resetting Statistics")
                 self.set_status("Resetting statistics")
                 self.capture_id = 0
                 if auto_refresh == "on":
@@ -3142,38 +3902,56 @@ class Api:
                     self.interruptible_sleep(delay_after_casting / 2)
                 self.set_status("Using Utilities")
                 # Auto Totem
-                if auto_totem == "on":
+                if auto_totem == True and self.current_cycle == totem_cycles2:
+                    self.status_overlay.set_main_status("Auto Totem")
                     self.set_status("Auto Totem")
+                    time.sleep(0.1)
                     if not target_time == "disabled":
+                        self.capture_frame = self.camera.get_latest_frame()
                         totem = self.capture_frame[totem_top:totem_bottom, totem_left:totem_right]
-                        sun_found, _, sun_confidence = self.image_search(totem, sun_resized)
-                        moon_found, _, moon_confidence = self.image_search(totem, moon_resized)
+                        sun_found, _, sun_confidence = self.image_search_totem(totem, sun_resized)
+                        moon_found, _, moon_confidence = self.image_search_totem(totem, moon_resized)
                         if sun_found == False and moon_found == False:
                             current_time = None
-                            self.send_logging("**Sundial Failed**", f"Cycle #{self.current_cycle}", "N/A")
+                            self.send_logging("**Sundial Failed**", f"Cycle #{self.current_cycle}")
                         elif sun_found == True:
-                            current_time = "Day"
+                            current_time = "day"
                         elif moon_found == True:
-                            current_time = "Night"
+                            current_time = "night"
                         else:
                             if sun_confidence > moon_confidence:
-                                current_time = "Day"
+                                current_time = "day"
                             else:
-                                current_time = "Night"
+                                current_time = "night"
+                        # Show confidence and current time in status overlay
+                        time_display = current_time if current_time else "Unknown"
+                        conf_display = f"Sun {sun_confidence:.2f} / Moon {moon_confidence:.2f}"
+                        self.status_overlay.set_line(1, "Current Time", time_display)
+                        self.status_overlay.set_line(2, "Confidence", conf_display)
                         if not target_time == current_time:
                             self._send_key(sundial_slot)
+                            self._click_at(shake_x, shake_y)
                             self.interruptible_sleep(sundial_delay)
-                            self.send_logging("**Sundial Success**", f"Cycle #{self.current_cycle}", "N/A")
+                            self.send_logging("**Sundial Success**", f"Cycle #{self.current_cycle}")
                     self._send_key(target_slot)
+                    self._click_at(shake_x, shake_y)
                     self.interruptible_sleep(totem_delay)
                     self._send_key(rod_slot)
                     time.sleep(delay_after_casting / 4)
+                    totem_cycles2 = self.current_cycle + totem_cycles
                 if auto_reconnect == "on":
+                    self.status_overlay.set_main_status("Auto Reconnect")
                     self._auto_reconnect(shake_x, shake_y)
-                # Update current cycle
+                if hunt_detect == "on":
+                    self.status_overlay.set_main_status("Hunt Detect")
+                    if self.current_cycle == hunt_cycles:
+                        self.hunt_detect(current_hunt)
+                        hunt_cycles = hunt_cycles2 + self.current_cycle
+                # Update Current Cycle
                 self.current_cycle = self.current_cycle + 1
                 # Cast
-                self.set_status("Casting")
+                self.set_status(f"Casting ({casting_mode})")
+                self.status_overlay.set_main_status(f"Casting ({casting_mode})")
                 time.sleep(delay_before_casting)
                 if casting_mode == "perfect":
                     self._execute_cast_perfect()
@@ -3182,8 +3960,10 @@ class Api:
                 time.sleep(delay_after_casting)
                 # Shake
                 self.set_status("Shaking")
+                self.status_overlay.set_main_status(f"Shaking ({shake_mode})")
                 self.scan_delay = float(self.vars["shake_scan_delay"])
                 for attempts in range(shake_failsafe):
+                    self.status_overlay.set_line(1, "Attempts", attempts)
                     if self.capture_frame is None:
                         attempts = attempts - 1
                         continue
@@ -3212,6 +3992,7 @@ class Api:
                     time.sleep(self.scan_delay)
                 # Minigame — sets self.catch_success = 0 at start; flips to 1 if fish ever leaves the bar
                 self.set_status("Playing Bar Minigame")
+                self.status_overlay.set_main_status(f"Playing Bar Minigame ({fishing_profile})")
                 if fishing_profile == "reverse":
                     self._enter_minigame_dreambreaker()
                 elif fishing_profile == "dual":
@@ -3277,6 +4058,56 @@ class Api:
                 self.interruptible_sleep(0.2)
                 self._click_at(mirror_click_x, mirror_click_y)
             return
+    def hunt_detect(self, current_hunt):
+        "current_hunt: Does nothing"
+        try:
+            tesseract_path = get_tesseract_path(self.vars.get("tesseract_path"))
+            if tesseract_path:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                # Repair the imported config in memory
+                self.vars["tesseract_path"] = tesseract_path
+            else:
+                raise RuntimeError("⚠️ Tesseract could not be found.")
+
+        except:
+            return
+
+        chat_left, chat_top, chat_right, chat_bottom = self.get_areas("chat")
+        hunt_fishes = self.vars["hunt_fishes"].lower()
+        user_id = int(self.vars["user_id"])
+        hunt_fishes_list = hunt_fishes.split(",")
+        text = self.capture_frame[
+            chat_top:chat_bottom,
+            chat_left:chat_right
+        ]
+        gray = self.process_image_for_ocr(text)
+        text = pytesseract.image_to_string(
+            gray,
+            config="--psm 6"
+        )
+        # Get The Bottommost Nonempty OCR Line
+        lines = [
+            line.strip()
+            for line in text.splitlines()
+            if line.strip()
+        ]
+        if not lines:
+            return
+
+        latest_line = lines[-1]
+        # Check Only The Latest Chat Message
+        latest_line_normalized = latest_line.lower().replace(" ", "")
+        for hunt in hunt_fishes_list:
+            hunt = hunt.strip()
+            current_hunt = hunt
+            if hunt.lower().replace(" ", "") in latest_line_normalized:
+                self.send_logging(
+                    f"<@{user_id}> Found {hunt}",
+                    self.current_cycle
+                )
+                return current_hunt
+
+        return current_hunt
     def _execute_cast_perfect(self):
         # Areas
         shake_left, shake_top, shake_right, shake_bottom, _, shake_height = self.get_areas("shake")
@@ -3348,6 +4179,9 @@ class Api:
                 released = True
                 break
 
+            # Status Overlay
+            self.status_overlay.set_line(1, "Green: ", f"Undefined")
+            self.status_overlay.set_line(2, "White: ", f"Undefined")
             # Scanning from shake_left, shake_top to shake_right, shake_bottom
             shake_img = self.capture_frame[shake_top:shake_bottom, shake_left:shake_right]
             # GREEN DETECTION
@@ -3375,6 +4209,7 @@ class Api:
                     else:
                         white_positions.clear()
                         white_timestamps.clear()
+                    self.status_overlay.set_line(1, "Green: ", f"None (Full Scan)")
                     continue  # Skip this frame, try full scan next frame
 
             if not is_green_tracking:
@@ -3389,9 +4224,12 @@ class Api:
                     green_detected = True
                     is_green_tracking = True
                 else:
+                    self.status_overlay.set_line(1, "Green: ", f"None (Skipped)")
                     continue  # No green found, try again
 
-            # WHITE DETECTION (using absolute green coordinates)
+            # Show Status For Green
+            self.status_overlay.set_line(1, "Green: ", f"{green_abs_left}, {green_abs_top}")
+            # White Detection
             scan_bottom = int(shake_img.shape[0] * 0.9)
             green_center_x = (green_abs_left + green_abs_right) // 2
             white_frame = shake_img[green_abs_top:scan_bottom, green_abs_left:green_abs_right]
@@ -3559,6 +4397,7 @@ class Api:
             return
 
         cast_duration = float(self._get_var_number("cast_duration", 0.5, float))
+        self.status_overlay.set_line(1, "Casting For: (seconds)", cast_duration)
         self.hold_mouse(False)
         self.interruptible_sleep(cast_duration)
         self.release_mouse(False)
@@ -3584,6 +4423,9 @@ class Api:
         return
 
     def _enter_minigame_tranquility(self):
+        # Areas
+        shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self.get_areas("shake")
+        friend_left, friend_top, friend_right, friend_bottom, _, _ = self.get_areas("friend")
         # Colors
         left_color = self.vars["left_color"]
         right_color = self.vars["right_color"]
@@ -3596,7 +4438,7 @@ class Api:
         arrow_tolerance = int(self.vars["arrow_tolerance"])
         fish_tolerance = int(self.vars["fish_tolerance"])
         friends_tolerance = int(self.vars["friends_tolerance"])
-        # Minigame variables
+        # Minigame Variables
         tranquility_note_ratio = float(self.vars["tranquility_note_ratio"])
         target_delay = float(self.vars["target_delay"])
         tranquility_mode = self.vars["tranquility_mode"].lower()
@@ -3604,39 +4446,36 @@ class Api:
         restart_delay = float(self.vars["restart_delay"])
         restart_method = self.vars["restart_method"].lower()
         last_capture_id = 0
-        # Get hotkeys
+        # Get Hotkeys
         tranquility_key_1 = str(self.vars["tranquility_key_1"])
         tranquility_key_2 = str(self.vars["tranquility_key_2"])
         tranquility_key_3 = str(self.vars["tranquility_key_3"])
         tranquility_key_4 = str(self.vars["tranquility_key_4"])
-        # Last values (cache)
+        # Last Values (Cache)
         is_initial_run = True
-
-        # Initial note positions.
-        # The first four detected notes are ignored for the initial state.
-        initial_left = []
-        initial_right = []
-        initial_arrow = []
-        initial_fish = []
-
-        # Per-frame detected note positions.
-        lowest_left = []
-        lowest_right = []
-        lowest_arrow = []
-        lowest_fish = []
-        # Get areas
-        shake_left, shake_top, shake_right, shake_bottom, shake_width, shake_height = self.get_areas("shake")
-        friend_left, friend_top, friend_right, friend_bottom, _, _ = self.get_areas("friend")
-        # Resize overlay
+        note_scan_width = int(shake_width / 4.1)
+        half_note_scan_width = int(note_scan_width / 2)
+        # Note Positions (Dict)
+        last_note_positions = {}
+        current_note_positions = {}
+        initial_note_positions = {}
+        # Resize Overlay
         left_offset = shake_left - int(shake_width / 3.8)
         overlay_width = int(shake_width / 4)
         self.fish_overlay.resize(left_offset, shake_top, overlay_width, shake_height)
         time.sleep(0.5)
         while self.macro_running:
-            # Crop images
+            # Dxcam is not available in v4.5
+            self.capture_frame = self.camera.get_latest_frame()
+            self.capture_id = last_capture_id + 1
             if self.capture_id == last_capture_id:
                 time.sleep(self.scan_delay)
                 continue
+
+            elif self.capture_frame is None:
+                time.sleep(self.scan_delay)
+                continue
+
             else:
                 friend_img = self.capture_frame[friend_top:friend_bottom, friend_left:friend_right]
                 detection_img = self.capture_frame[shake_top:shake_bottom, shake_left:shake_right]
@@ -3646,117 +4485,113 @@ class Api:
                 if friend_x is not None:
                     time.sleep(restart_delay)
                     return
+
+            current_note_positions = {}
             circles = self._find_all_circles(detection_img)
+            self.status_overlay.set_line(1, "Circles: ", len(circles))
+            for i, (x, y) in enumerate(circles):
+                lane = round(((x + half_note_scan_width) / shake_width) * 4)
+                if is_initial_run == True:
+                    initial_note_positions[lane] = y
+                if lane in current_note_positions:
+                    pass
+                else:
+                    current_note_positions[lane] = y
+                if abs(current_note_positions[lane] - initial_note_positions[lane]) <= 5:
+                    del current_note_positions[lane]
+                if lane not in current_note_positions:
+                    continue
 
-            # Collect the four starting note positions.
-            # Nothing is pressed during the initial run.
-            if is_initial_run:
-                for circle in range(len(circles)):
-                    circle_x_ratio = round(circles[circle][0] / shake_width, 2)
-                    circle_y_ratio = round(circles[circle][1] / shake_height, 2)
+                current_y = current_note_positions[lane]
+                last_y = last_note_positions.get(lane)
 
-                    if 0.0 <= circle_x_ratio <= 0.25:
-                        initial_left.append(circle_y_ratio)
-                    elif 0.25 < circle_x_ratio <= 0.5:
-                        initial_right.append(circle_y_ratio)
-                    elif 0.5 < circle_x_ratio <= 0.75:
-                        initial_arrow.append(circle_y_ratio)
-                    elif 0.75 < circle_x_ratio <= 1.0:
-                        initial_fish.append(circle_y_ratio)
+                # We need a previous position before we can calculate velocity.
+                if last_y is None:
+                    continue
 
-                    self.fish_overlay.draw_box(
-                        x1=int(overlay_width * 0.15),
-                        y1=circles[circle][1],
-                        x2=int(overlay_width * 0.85),
-                        y2=circles[circle][1] + 67,
-                        color=f"#{min(circle * 3500, 9999)}ff"
+                # Calculate the note's vertical movement.
+                velocity = current_y - last_y
+
+                # Notes normally move downwards. A positive velocity means
+                # that the detected note is falling.
+                if velocity <= 0:
+                    continue
+            # Check for notes that disappeared from the circle detector.
+            # This can happen when the falling note overlaps the initial note.
+            for lane, last_y in last_note_positions.items():
+                if lane in current_note_positions:
+                    continue
+
+                if lane not in initial_note_positions:
+                    continue
+
+                initial_y = initial_note_positions[lane]
+
+                # Only check when the note was moving downward toward
+                # its initial position.
+                if last_y <= initial_y:
+                    continue
+
+                # Calculate the horizontal detection block for this lane.
+                lane_center = int((lane / 4) * shake_width)
+                block_left = max(0, lane_center - half_note_scan_width)
+                block_right = min(
+                    shake_width,
+                    lane_center + half_note_scan_width
+                )
+
+                # Check a small vertical region around the initial note.
+                block_top = max(0, initial_y - 5)
+                block_bottom = min(
+                    shake_height,
+                    initial_y + 5
+                )
+
+                detection_block = detection_img[
+                    block_top:block_bottom,
+                    block_left:block_right
+                ]
+
+                # Look for the note colors in the overlap region.
+                detected = False
+
+                for color, tolerance in (
+                    (left_color, left_tolerance),
+                    (right_color, right_tolerance),
+                    (arrow_color, arrow_tolerance),
+                    (fish_color, fish_tolerance),
+                ):
+                    pixel_x, pixel_y = self.pixel_search(
+                        detection_block,
+                        color,
+                        tolerance
                     )
 
-                # Wait until the four initial notes have been detected.
-                initial_note_count = (
-                    len(initial_left)
-                    + len(initial_right)
-                    + len(initial_arrow)
-                    + len(initial_fish)
+                    if pixel_x is not None:
+                        detected = True
+                        break
+
+                if not detected:
+                    continue
+
+                # The falling note has reached the initial note.
+                if lane == 0:
+                    key = tranquility_key_1
+                elif lane == 1:
+                    key = tranquility_key_2
+                elif lane == 2:
+                    key = tranquility_key_3
+                else:
+                    key = tranquility_key_4
+
+                self.status_overlay.set_line(
+                    2,
+                    f"Pressing {key}",
+                    f"Lane {lane}"
                 )
-
-                if initial_note_count >= 4:
-                    is_initial_run = False
-
-                last_capture_id = self.capture_id
-                time.sleep(self.scan_delay)
-                continue
-
-            # Normal detection after the initial four notes have been recorded.
-            for circle in range(len(circles)):
-                circle_x_ratio = round(circles[circle][0] / shake_width, 2)
-                circle_y_ratio = round(circles[circle][1] / shake_height, 2)
-
-                if 0.0 <= circle_x_ratio <= 0.25:
-                    lowest_left.append(circle_y_ratio)
-                elif 0.25 < circle_x_ratio <= 0.5:
-                    lowest_right.append(circle_y_ratio)
-                elif 0.5 < circle_x_ratio <= 0.75:
-                    lowest_arrow.append(circle_y_ratio)
-                elif 0.75 < circle_x_ratio <= 1.0:
-                    lowest_fish.append(circle_y_ratio)
-
-                # print(
-                #     f"Circle #{circle}: "
-                #     f"x{circles[circle][0]} y{circles[circle][1]} "
-                #     f"xr{circle_x_ratio} yr{circle_y_ratio}"
-                # )
-
-                self.fish_overlay.draw_box(
-                    x1=int(overlay_width * 0.15),
-                    y1=circles[circle][1],
-                    x2=int(overlay_width * 0.85),
-                    y2=circles[circle][1] + 67,
-                    color=f"#{min(circle * 3500, 9999)}ff"
-                )
-
-            # A note at its original starting position is still part of
-            # the protected initial state, so do nothing.
-            #
-            # If the original position disappeared because two circles
-            # connected, the newly detected position will not match the
-            # starting position and can be processed normally.
-
-            for circle_y_ratio in lowest_left:
-                if circle_y_ratio in initial_left:
-                    continue
-
-                if circle_y_ratio > tranquility_note_ratio:
-                    self._send_key(tranquility_key_1, 0.01)
-
-            for circle_y_ratio in lowest_right:
-                if circle_y_ratio in initial_right:
-                    continue
-
-                if circle_y_ratio > tranquility_note_ratio:
-                    self._send_key(tranquility_key_2, 0.01)
-
-            for circle_y_ratio in lowest_arrow:
-                if circle_y_ratio in initial_arrow:
-                    continue
-
-                if circle_y_ratio > tranquility_note_ratio:
-                    self._send_key(tranquility_key_3, 0.01)
-
-            for circle_y_ratio in lowest_fish:
-                if circle_y_ratio in initial_fish:
-                    continue
-
-                if circle_y_ratio > tranquility_note_ratio:
-                    self._send_key(tranquility_key_4, 0.01)
-            lowest_left.clear()
-            lowest_right.clear()
-            lowest_arrow.clear()
-            lowest_fish.clear()
-            last_capture_id = self.capture_id
+                self._send_key(key, target_delay)
+            last_note_positions = current_note_positions
             is_initial_run = False
-            time.sleep(self.scan_delay)
-        return
 
     def _enter_minigame_dreambreaker(self):
         # Helper Functions
@@ -3915,7 +4750,9 @@ class Api:
                     time.sleep(self.scan_delay)
                     continue
 
-            # Controller output
+            # Controller Output
+            self.status_overlay.set_line(1, f"Detection Source: ", detection_source)
+            self.status_overlay.set_line(2, f"Last Source: ", last_detection_source)
             if detection_source == 1 and last_detection_source == 0:
                 if mouse_down == False:
                     hold_mouse()
@@ -4205,58 +5042,47 @@ class Api:
     def enter_minigame_lullaby(self):
         # Helper Functions
         mouse_down = False
-
         def hold_mouse(mouse_state=False):
             "Hold mouse. False for left click, True for right click."
             nonlocal mouse_down
             if not mouse_down:
                 self.hold_mouse(mouse_state)
                 mouse_down = True
-
         def release_mouse(mouse_state=False):
             "Release mouse. False for left click, True for right click."
             nonlocal mouse_down
             if mouse_down:
                 self.release_mouse(mouse_state)
                 mouse_down = False
-
         # Areas
-        lullaby_left, lullaby_top, lullaby_right, lullaby_bottom, _, _ = self.get_areas("lullaby")
+        lullaby_left, lullaby_top, lullaby_right, lullaby_bottom, lullaby_width, _ = self.get_areas("lullaby")
         fish_left, fish_top, fish_right, fish_bottom, fish_width, fish_height = self.get_areas("fish")
         friend_left, friend_top, friend_right, friend_bottom, _, _ = self.get_areas("friend")
-
         # Area Calculations
         fish_overlay = self.vars["fish_overlay"]
-
         if fish_overlay == "on":
             fish_center = int((lullaby_top + lullaby_bottom) / 2)
-
             if fish_center > HALF_HEIGHT:
                 fish_top_overlay = lullaby_top - fish_height - fish_height
             else:
                 fish_top_overlay = lullaby_top + fish_height + fish_height
-
             overlay_width = fish_right - fish_left
-            overlay_height = fish_height
-
-            self.fish_overlay.show(
-                fish_left,
+            overlay_height = int(fish_height / 1.5)
+            self.fish_overlay.resize(
+                lullaby_left,
                 fish_top_overlay,
-                overlay_width,
+                lullaby_width,
                 overlay_height,
             )
-
         # Colors
         left_color = self.vars["left_color"]
         right_color = self.vars["right_color"]
         arrow_color = self.vars["arrow_color"]
         fish_color = self.vars["fish_color"]
         friends_color = self.vars["friends_color"]
-
-        # Convert HEX → BGR once (capture frames are BGR)
+        # Convert Hex → Bgr Once (Capture Frames Are Bgr)
         left_bgr = np.array(self._hex_to_bgr(left_color), dtype=np.int16)
         right_bgr = np.array(self._hex_to_bgr(right_color), dtype=np.int16)
-
         # Tolerance
         try:
             left_tolerance = int(self.vars["left_tolerance"])
@@ -4270,72 +5096,61 @@ class Api:
             arrow_tolerance = 8
             fish_tolerance = 4
             friends_tolerance = 5
-
         # Minigame Variables
         lullaby_metronome_padding = int(self.vars["lullaby_metronome_padding"])
         lullaby_mask_lost_ratio = float(self.vars["lullaby_mask_lost_ratio"])
-
         # Cache Variables
         is_initial_run = True
         last_capture_id = 0
-
         lullaby_area_x1 = None
         lullaby_area_x2 = None
         lullaby_area_y1 = None
         lullaby_area_y2 = None
-
+        metronome_inside = False
         last_metronome_inside = False
-
-        # Initial color masks
+        # Initial Color Masks
         initial_left_mask = None
         initial_right_mask = None
-
-        # Baseline mask bounding boxes
+        # Baseline Mask Bounding Boxes
         initial_left_coords = None
         initial_right_coords = None
-
         while self.macro_running:
-            # Get image from self.capture_frame
+            # Dxcam Is Not Available in v4.5
+            self.capture_frame = self.camera.get_latest_frame()
+            self.capture_id = last_capture_id + 1
+            # Get Image From Self.Capture_Frame
             if self.capture_id == last_capture_id:
                 time.sleep(self.scan_delay)
                 continue
 
-            if self.capture_frame is None:
+            elif self.capture_frame is None:
                 time.sleep(self.scan_delay)
                 continue
 
-            # ---------------------------------------------------------
-            # INITIAL RUN
-            # Find the Lullaby area and save the initial color masks.
-            # ---------------------------------------------------------
+            # Initial Run
+            # Find The Lullaby Area And Save The Initial Color Masks.
             if is_initial_run:
                 lullaby_img = self.capture_frame[
                     lullaby_top:lullaby_bottom,
                     lullaby_left:lullaby_right
                 ]
-
-                # Current frame as int16 so subtraction cannot overflow
+                # Current Frame As Int16 So Subtraction Cannot Overflow
                 lullaby_pixels = lullaby_img.astype(np.int16)
-
-                # Create initial masks (colors already converted to BGR above)
+                # Create Initial Masks (Colors Already Converted To Bgr Above)
                 left_diff = np.abs(lullaby_pixels - left_bgr)
                 right_diff = np.abs(lullaby_pixels - right_bgr)
-
                 initial_left_mask = np.all(
                     left_diff <= left_tolerance,
                     axis=2
                 )
-
                 initial_right_mask = np.all(
                     right_diff <= right_tolerance,
                     axis=2
                 )
-
-                # Get coordinates of the initial masks
+                # Get Coordinates Of The Initial Masks
                 left_y, left_x = np.where(initial_left_mask)
                 right_y, right_x = np.where(initial_right_mask)
-
-                # Make sure both colors were found
+                # Make Sure Both Colors Were Found
                 if (
                     len(left_x) == 0
                     or len(right_x) == 0
@@ -4344,144 +5159,124 @@ class Api:
                     last_capture_id = self.capture_id
                     continue
 
-                # Save initial mask coordinates
+                # Save Initial Mask Coordinates
                 initial_left_coords = (left_x, left_y)
                 initial_right_coords = (right_x, right_y)
-
-                # Calculate the complete initial Lullaby area
+                # Calculate The Complete Initial Lullaby Area
                 lullaby_area_x1 = min(
                     left_x.min(),
                     right_x.min()
                 )
-
                 lullaby_area_x2 = max(
                     left_x.max(),
                     right_x.max()
                 )
-
                 lullaby_area_y1 = min(
                     left_y.min(),
                     right_y.min()
                 )
-
                 lullaby_area_y2 = max(
                     left_y.max(),
                     right_y.max()
                 )
-
-                # Add padding for the metronome
+                # Add Padding For The Metronome
                 lullaby_area_x1 = max(
                     0,
                     lullaby_area_x1 - lullaby_metronome_padding
                 )
-
                 lullaby_area_x2 = min(
                     lullaby_img.shape[1],
                     lullaby_area_x2 + lullaby_metronome_padding
                 )
-
                 lullaby_area_y1 = max(
                     0,
                     lullaby_area_y1 - lullaby_metronome_padding
                 )
-
                 lullaby_area_y2 = min(
                     lullaby_img.shape[0],
                     lullaby_area_y2 + lullaby_metronome_padding
                 )
-
-                # -----------------------------------------------------
-                # Switch to the smaller region after initialization.
-                # -----------------------------------------------------
+                # Switch To The Smaller Region After Initialization.
                 is_initial_run = False
-
-            # ---------------------------------------------------------
-            # SUBSEQUENT RUNS
-            # Only capture/process the smaller Lullaby region.
-            # ---------------------------------------------------------
+            # Subsequent Runs
+            # Only Capture/Process The Smaller Lullaby Region.
             else:
                 lullaby_img2 = self.capture_frame[
                     lullaby_top + lullaby_area_y1:
                     lullaby_top + lullaby_area_y2,
-
                     lullaby_left + lullaby_area_x1:
                     lullaby_left + lullaby_area_x2
                 ]
-
-                # Create current color masks only inside the small area
+                # Create Current Color Masks Only Inside The Small Area
                 current_pixels = lullaby_img2.astype(np.int16)
-
                 current_left_mask = np.all(
                     np.abs(current_pixels - left_bgr) <= left_tolerance,
                     axis=2
                 )
-
                 current_right_mask = np.all(
                     np.abs(current_pixels - right_bgr) <= right_tolerance,
                     axis=2
                 )
-
-                # -----------------------------------------------------
-                # Compare current masks against the initial masks.
-                #
-                # The initial masks are in full Lullaby coordinates,
-                # so crop them to the same smaller region first.
-                # -----------------------------------------------------
+                # Compare Current Masks Against The Initial Masks.
+                # The Initial Masks Are In Full Lullaby Coordinates,
+                # So Crop Them To The Same Smaller Region First.
                 initial_left_small = initial_left_mask[
                     lullaby_area_y1:lullaby_area_y2,
                     lullaby_area_x1:lullaby_area_x2
                 ]
-
                 initial_right_small = initial_right_mask[
                     lullaby_area_y1:lullaby_area_y2,
                     lullaby_area_x1:lullaby_area_x2
                 ]
-
-                # Pixels that existed initially but disappeared now
+                # Pixels That Existed Initially But Disappeared Now
                 left_missing_mask = (
                     initial_left_small &
                     ~current_left_mask
                 )
-
                 right_missing_mask = (
                     initial_right_small &
                     ~current_right_mask
                 )
-
-                # Calculate how much of the original mask disappeared
+                # Calculate How Much Of The Original Mask Disappeared
                 initial_left_count = np.count_nonzero(initial_left_small)
                 initial_right_count = np.count_nonzero(initial_right_small)
-
                 left_missing_count = np.count_nonzero(left_missing_mask)
                 right_missing_count = np.count_nonzero(right_missing_mask)
 
-                if initial_left_count > 0:
-                    left_missing_ratio = (
-                        left_missing_count / initial_left_count
-                    )
-                else:
-                    left_missing_ratio = 0.0
-
-                if initial_right_count > 0:
-                    right_missing_ratio = (
-                        right_missing_count / initial_right_count
-                    )
-                else:
-                    right_missing_ratio = 0.0
-
-                # If enough of the original area disappears,
-                # the metronome is likely covering that area.
-                metronome_inside = (
-                    left_missing_ratio > lullaby_mask_lost_ratio
-                    or right_missing_ratio > lullaby_mask_lost_ratio
+                # Calculate The Total Mask Count
+                initial_mask_count = initial_left_count + initial_right_count
+                current_mask_count = (
+                    np.count_nonzero(current_left_mask)
+                    + np.count_nonzero(current_right_mask)
                 )
 
-                # Metronome Logic (metronome_inside == True)
-                if last_metronome_inside != metronome_inside:
-                    hold_mouse()
-                    time.sleep(0.05)
-                    release_mouse()
+                # If The Current Mask Is Larger Than The Initial Mask,
+                # Update The Initial Mask Count To Prevent The Metronome
+                # From Occupying Too Much Of The Baseline.
+                if current_mask_count > initial_mask_count:
+                    initial_mask_count = current_mask_count
 
+                mask_missing_count = left_missing_count + right_missing_count
+
+                self.status_overlay.set_line(1, "Initial Mask Count: ", initial_mask_count)
+                self.status_overlay.set_line(2, "Current Mask Count: ", mask_missing_count)
+                if left_missing_count + right_missing_count == 0:
+                    continue # Invalid detection
+
+                # Decide whether the metronome is inside or not
+                metronome_ratio = mask_missing_count / initial_mask_count
+                lullaby_mask_contain_ratio = 1 - lullaby_mask_lost_ratio
+                if metronome_ratio < lullaby_mask_contain_ratio:
+                    metronome_inside = True
+                else:
+                    metronome_inside = False
+                self.status_overlay.set_line(3, "Metronome Ratio: ", round(metronome_ratio, 2))
+                # Metronome Logic (Metronome_Inside = True)
+                if not metronome_inside == False:
+                    if last_metronome_inside != metronome_inside:
+                        hold_mouse()
+                        time.sleep(0.05)
+                        release_mouse()
             last_metronome_inside = metronome_inside
             time.sleep(self.scan_delay)
             last_capture_id = self.capture_id
@@ -4644,6 +5439,7 @@ class Api:
                     # Check if we should scan for arrows
                     if left_x is not None and right_x is not None:
                         bar_detected = True
+                        self.status_overlay.set_line(1, "Detection Source: ", "Bar")
                         # print(f"Detection Source: Bar | Left: {left_x} | Right: {right_x}")
                     else:
                         # Try arrow
@@ -4687,9 +5483,11 @@ class Api:
                                 left_x = last_left_x
                                 if left_x is None:
                                     left_x = right_x - last_bar_size
+                            self.status_overlay.set_line(1, "Detection Source: ", "Arrows")
                         else:
                             # Use Cache
                             bar_detected = False
+                            self.status_overlay.set_line(1, "Detection Source: ", "Cache")
                     try:
                         bar_center = int((left_x + right_x) / 2)
                         bar_size = right_x - left_x
@@ -4792,15 +5590,24 @@ class Api:
                     self._send_key(bag_slot)
                 if lock_cursor == "on":
                     mouse_controller.position = (int(shake_x / scale), int(shake_y / scale))
-            # Restore from Cache
+            # Restore From Cache
             self.fish_overlay.clear()
             if bar_detected == False:
                 left_x = last_left_x
                 right_x = last_right_x
                 bar_center = last_bar_center
                 bar_size = last_bar_size
+                bar_detected = True
             if fish_detected == False:
                 fish_x = last_fish_x
+                fish_detected = True
+            # Set Status
+            try:
+                bar_velocity2 = round(bar_center - last_bar_center, 2)
+                self.status_overlay.set_line(2, "Bar Velocity: ", bar_velocity2)
+            except:
+                bar_velocity2 = 0
+                self.status_overlay.set_line(2, "", "")
             # Note Detection
             if fishing_profile == "notes":
                 note_x, note_y = self.pixel_search(shake_img, pinion_notes_color, pinion_notes_tolerance)
@@ -4924,11 +5731,9 @@ class Api:
                         d_term = ((error - last_error) / time_delta) * kd * steady_kd_multiplier
                         control_signal = p_term + d_term
                         last_error = error
-                elif current_controller_mode == "predictive":
-                    # Predictive: Predictive controller with linear stopping distance and counter-thrust
+                elif controller_mode == "predictive":
+                    # Predictive: Predictive Controller With Linear Stopping Distance And Counter-thrust
                     # Init Failsafe
-                    if last_time == None:
-                        last_time = time.perf_counter()
                     if color_check_bar_velocity is None:
                         color_check_bar_velocity = 0.0
                     if color_check_target_velocity is None:
@@ -4940,38 +5745,62 @@ class Api:
                     if last_bar_center is not None and last_fish_x is not None:
                         if time_delta > 0:
                             raw_bar_velocity = (bar_center - last_bar_center) / time_delta
+                            # If The Center Is Unchanged But The Overlay Edges Moved
+                            # (Resize / One-Edge Fill), Use Average Edge Velocity.
+                            if (
+                                raw_bar_velocity == 0
+                                and last_left_x is not None
+                                and last_right_x is not None
+                                and left_x is not None
+                                and right_x is not None
+                            ):
+                                edge_velocity = (
+                                    (left_x - last_left_x) + (right_x - last_right_x)
+                                ) / (2.0 * time_delta)
+                                if edge_velocity != 0:
+                                    raw_bar_velocity = edge_velocity
                             raw_target_velocity = (fish_x - last_fish_x) / time_delta
                             color_check_bar_velocity = (velocity_smoothing * raw_bar_velocity + 
                                                         (1 - velocity_smoothing) * color_check_bar_velocity)
                             color_check_target_velocity = (velocity_smoothing * raw_target_velocity + 
                                                             (1 - velocity_smoothing) * color_check_target_velocity)
-                    # Calculate error and relative velocity FIRST
+                    # Calculate Error And Relative Velocity First
                     try:
                         relative_velocity = float(color_check_bar_velocity - color_check_target_velocity)
                     except:
                         color_check_bar_velocity = 0
                         color_check_target_velocity = 0
                         control_signal = -30
-                    # Nan Guard AFTER variables are defined
+                    # Nan Guard After Variables Are Defined
                     if not np.isfinite(relative_velocity):
                         control_signal = -30
-                    # Calculate stopping distance based on relative velocity
+                    # Calculate Stopping Distance Based On Relative Velocity
                     stopping_distance2 = abs(relative_velocity) * stopping_distance
-                    # On-Bar: Use Stopping-Distance / Counter-Thrust Logic
-                    if error < -stopping_distance2:
-                        # Bar Is Left Of Fish Beyond Stopping Distance → Hold To Move Right
-                        control_signal = 30
-                    elif error > stopping_distance2:
-                        # Bar Is Right Of Fish Beyond Stopping Distance → Release To Move Left
-                        control_signal = -30
-                    else:
-                        # Within Stopping Distance — Counter-Thrust Based On Relative Velocity
-                        if relative_velocity > 0:
-                            # Bar Moving Right Relative To Fish → Release (Apply Left Thrust)
+                    if left_x <= fish_x <= right_x:
+                        # On-bar: Use Stopping-distance / Counter-thrust Logic
+                        if error > stopping_distance2:
+                            # Bar Is Left Of Fish Beyond Stopping Distance → Hold To Move Right
+                            self.status_overlay.set_line(3, "Tracking:", "> (Chase)")
+                            control_signal = 30
+                        elif error < -stopping_distance2:
+                            # Bar Is Right Of Fish Beyond Stopping Distance → Release To Move Left
+                            self.status_overlay.set_line(3, "Tracking:", "< (Chase)")
                             control_signal = -30
                         else:
-                            # Bar Moving Left Relative To Fish → Hold (Apply Right Thrust)
-                            control_signal = 30
+                            # Within Stopping Distance — Counter-thrust Based On Relative Velocity
+                            if relative_velocity > 0:
+                                # Bar Moving Right Relative To Fish → Release (Apply Left Thrust)
+                                self.status_overlay.set_line(3, "Tracking:", "< (Relative)")
+                                control_signal = -30
+                            else:
+                                # Bar Moving Left Relative To Fish → Hold (Apply Right Thrust)
+                                self.status_overlay.set_line(3, "Tracking:", "> (Relative)")
+                                control_signal = 30
+                    else:
+                        control_signal = kp * error + kd * relative_velocity
+                        self.status_overlay.set_line(3, "Tracking:", "> (PD)" if control_signal > 0 else "< (PD)")
+                else:
+                    control_signal = error
             # Mouse state
             interpolation_bar_velocity = (bar_center - last_valid_bar_center) / time_delta
             # print(f"error: {error}")
@@ -5004,7 +5833,16 @@ class Api:
 
     def stop_macro(self, text="Macro Stopped"):
         self.macro_running = False
-        self.fish_overlay.hide()
+        try:
+            self.fish_overlay.hide()
+        except:
+            pass
+
+        try:
+            self.status_overlay.hide()
+        except:
+            pass
+
         if (
             self.macro_thread
             and self.macro_thread.is_alive()
@@ -5017,7 +5855,7 @@ class Api:
             and self.capture_thread is not threading.current_thread()
         ):
             self.capture_thread.join()
-        if text:
+        if not text == "":
             self.set_status(text)
         try:
             window.show()
@@ -5049,7 +5887,7 @@ This uses a different folder to prevent crashes on the stable version"""
             # Parse third line for DEVELOPER
             third_line = lines[2]
             js_developer = third_line.replace("const DEVELOPER = ", "").replace('"', "").replace(";", "")
-        # Compatibility for 4.4 - 4.42 update
+        # Compatibility for 4.4 - 4.41 update
         if js_developer == "let currentConfig = null" or js_developer == "":
             js_developer = DEVELOPER
         # Check release version, beta version and developer
@@ -5097,10 +5935,11 @@ if show_setup_guide == True:
 show_setup_guide, error_message, js_developer, pirated_build = check_setup_guide()
 if show_setup_guide == True:
     sys.exit(0)
+index_html = "https://catman2608.github.io/PyWare-Backend/SolarFishingV4/index.html" if IS_COMPILED else os.path.join(UI_PATH, "index.html")
 api = Api()
 window = webview.create_window(
     f"PyWare Fishing V{APP_VERSION}",
-    os.path.join(UI_PATH, "index.html"),
+    index_html,
     js_api=api,
     width=1000,
     height=700

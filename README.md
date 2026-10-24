@@ -4,11 +4,11 @@ This project is licensed under the GNU GPL v3.
 
 You are free to study, modify, and redistribute this software. If you distribute a project containing code from this repository, the resulting project must also be released under the GPL v3, with its source code made available.
 
-# PyWare Fishing V4.42
+# PyWare Fishing V4.5
 
 Pre-built versions are available for supported platforms on the official releases page:
 
-[Official Downloads / Releases](https://sites.google.com/view/icf-automation-network/downloads?authuser=0)
+[Official Downloads / Releases](https://catman2608.github.io/PyWare-Backend/)
 
 If a pre-built version is not available for your system, follow the source installation guide below.
 
@@ -60,17 +60,17 @@ Expected output: `Python 3.8+`
 Run this command in order to download the required libraries:
 
 ```bash
-pip install webview numpy mss pytesseract pynput requests opencv-python
+pip install pywebview numpy mss pytesseract pynput requests opencv-python
 ```
 If the command above fails, try using pip3 instead:
 ```bash
-pip3 install webview numpy mss pytesseract pynput requests opencv-python
+pip3 install pywebview numpy mss pytesseract pynput requests opencv-python
 ```
 
 ### Complete Package List Reference
 | Module | Command | Purpose |
 |--------|---------|---------|
-| `webview` | `pip install webview` | GUI window creation |
+| `pywebview` | `pip install pywebview` | GUI window creation |
 | `numpy` | `pip install numpy` | Numerical operations, image arrays |
 | `mss` | `pip install mss` | Screenshot capture (multi-screen support) |
 | `pytesseract` | `pip install pytesseract` | OCR engine wrapper for Tesseract |
@@ -126,7 +126,7 @@ sudo apt install python3 python3-venv python3-tk tesseract-ocr
 Create a test script `test_imports.py`:
 
 ```python
-import webview, json, os, re, time, sys
+import pywebview, json, os, re, time, sys
 from tkinter import messagebox
 import pytesseract
 print("Tesseract path:", pytesseract.pytesseract.tesseract_cmd)

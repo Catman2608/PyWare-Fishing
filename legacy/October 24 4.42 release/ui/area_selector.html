@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+        width: 100%; height: 100%;
+        overflow: hidden;
+        user-select: none;
+        background: transparent;
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+    canvas { display: block; width: 100%; height: 100%; cursor: default; }
+
+    #panel {
+        position: fixed;
+        top: 12px; left: 12px;
+        z-index: 100;
+        background: rgba(18, 18, 22, 0.92);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 10px;
+        padding: 10px 12px;
+        min-width: 200px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+        color: #e8e8ec;
+        font-size: 13px;
+        backdrop-filter: blur(8px);
+    }
+    #panel.collapsed .panel-body { display: none; }
+    #panel h3 {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #9a9aa8;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+    }
+    #panel h3 span.toggle-icon { font-size: 10px; opacity: 0.7; }
+    .area-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        cursor: pointer;
+    }
+    .area-row:hover { background: rgba(255,255,255,0.04); border-radius: 4px; }
+    .area-swatch {
+        width: 12px; height: 12px;
+        border-radius: 3px;
+        flex-shrink: 0;
+        border: 1px solid rgba(0,0,0,0.3);
+    }
+    .area-row label { flex: 1; cursor: pointer; color: #ddd; }
+    .area-row input[type="checkbox"] {
+        width: 15px; height: 15px;
+        accent-color: #5b8def;
+        cursor: pointer;
+    }
+    .panel-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .panel-actions button {
+        flex: 1;
+        padding: 5px 8px;
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 6px;
+        background: rgba(255,255,255,0.06);
+        color: #e0e0e8;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+    .panel-actions button:hover { background: rgba(255,255,255,0.12); }
+    .panel-actions button.primary {
+        background: #3a6fd8;
+        border-color: #3a6fd8;
+        color: #fff;
+    }
+    .panel-actions button.primary:hover { background: #4a7fe8; }
+    .panel-actions button.active {
+        background: #2d8a5e;
+        border-color: #2d8a5e;
+        color: #fff;
+    }
+    .panel-actions button.active:hover { background: #349e6c; }
+    #hint {
+        position: fixed;
+        bottom: 14px; left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        background: rgba(18, 18, 22, 0.85);
+        color: #aaa;
+        font-size: 12px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        pointer-events: none;
+        border: 1px solid rgba(255,255,255,0.08);
+        white-space: nowrap;
+    }
+</style>
+</head>
+<body>
+<canvas id="overlay"></canvas>
+
+<div id="panel">
+    <h3 onclick="togglePanel()">
+        Areas
+        <span class="toggle-icon" id="panelIcon">▾</span>
+    </h3>
+    <div class="panel-body" id="panelBody">
+        <div class="panel-actions">
+            <button onclick="setAllVisible(true)">Show All</button>
+            <button onclick="setAllVisible(false)">Hide All</button>
+            <button id="selectPointBtn" onclick="toggleSelectPoint()">Select Point</button>
+        </div>
+    </div>
+</div>
+<div id="hint">Drag boxes · Resize handles · Esc / F6 to save &amp; close · 1-9 toggle areas</div>
+
+<script>
+const canvas = document.getElementById("overlay");
+const ctx = canvas.getContext("2d");
+const HANDLE = 12;
+const MIN_SIZE = 20;
+
+// Filled from Python via get_area_config()
+let AREA_ORDER = [];
+let AREAS = {};       // { name: { color, label } }
+let visible = {};     // { name: bool }
+
+let boxes = {};
+let drag = null;
+let lastIpc = 0;
+let screenshotImg = null;
+let screenshotReady = false;
+let selectPointMode = false;
+
+window.addEventListener("pywebviewready", () => {
+    try {
+        pywebview.api.window_ready(window.screenX, window.screenY);
+    } catch (e) {}
+    // Load frozen screenshot once the API is ready
+    loadScreenshot();
+});
+
+function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+}
+
+function draw() {
+    const w = window.innerWidth || canvas.width;
+    const h = window.innerHeight || canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (screenshotReady && screenshotImg) {
+        ctx.drawImage(screenshotImg, 0, 0, w, h);
+    } else {
+        ctx.fillStyle = "#1a1a1a";
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+    ctx.fillRect(0, 0, w, h);
+
+    for (const name of AREA_ORDER) {
+        if (visible[name] === false) continue;
+        const b = boxes[name];
+        if (!b) continue;
+        const cfg = AREAS[name] || { color: "#888", label: name };
+        const color = cfg.color, label = cfg.label;
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = color;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(b.x + 1.5, b.y + 1.5, Math.max(0, b.w - 3), Math.max(0, b.h - 3));
+        ctx.font = "bold 13px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillStyle = color;
+        ctx.fillText(label, b.x + b.w / 2, b.y - 5);
+        // Hide resize handles in Select Point mode
+        if (!selectPointMode) {
+            const points = [
+                [b.x, b.y], [b.x + b.w / 2, b.y], [b.x + b.w, b.y],
+                [b.x, b.y + b.h / 2], [b.x + b.w, b.y + b.h / 2],
+                [b.x, b.y + b.h], [b.x + b.w / 2, b.y + b.h], [b.x + b.w, b.y + b.h]
+            ];
+            ctx.fillStyle = "white";
+            ctx.strokeStyle = "rgba(0,0,0,.6)";
+            ctx.lineWidth = 1;
+            for (const [x, y] of points) ctx.fillRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE);
+        }
+    }
+}
+
+function handleAt(x, y, b) {
+    if (selectPointMode) return null;
+    const points = {
+        nw: [b.x, b.y], n: [b.x + b.w / 2, b.y], ne: [b.x + b.w, b.y],
+        w: [b.x, b.y + b.h / 2], e: [b.x + b.w, b.y + b.h / 2],
+        sw: [b.x, b.y + b.h], s: [b.x + b.w / 2, b.y + b.h], se: [b.x + b.w, b.y + b.h]
+    };
+    for (const [name, [hx, hy]] of Object.entries(points))
+        if (Math.abs(x - hx) <= HANDLE + 3 && Math.abs(y - hy) <= HANDLE + 3) return name;
+    return null;
+}
+
+function boxAt(x, y) {
+    for (let i = AREA_ORDER.length - 1; i >= 0; i--) {
+        const name = AREA_ORDER[i];
+        if (visible[name] === false) continue;
+        const b = boxes[name];
+        if (b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return name;
+    }
+    return null;
+}
+
+function cursorFor(handle) {
+    return {
+        nw: "nw-resize", n: "n-resize", ne: "ne-resize",
+        w: "w-resize", e: "e-resize",
+        sw: "sw-resize", s: "s-resize", se: "se-resize"
+    }[handle] || "default";
+}
+
+function sendUpdate(x, y) {
+    const now = Date.now();
+    if (now - lastIpc < 250) return;
+    lastIpc = now;
+    if (window.pywebview && pywebview.api && pywebview.api.on_mouse_move)
+        pywebview.api.on_mouse_move(x, y, JSON.parse(JSON.stringify(boxes)));
+}
+
+function reportPoint(name, x, y) {
+    const b = boxes[name];
+    if (!b || !b.w || !b.h) return;
+    const xr = Math.max(0, Math.min(1, (x - b.x) / b.w));
+    const yr = Math.max(0, Math.min(1, (y - b.y) / b.h));
+    if (window.pywebview && pywebview.api && pywebview.api.on_point_select) {
+        try {
+            pywebview.api.on_point_select(name, xr, yr);
+        } catch (e) {}
+    }
+}
+
+function updateHint() {
+    const hint = document.getElementById("hint");
+    if (selectPointMode) {
+        hint.textContent = "Select Point ON · Click an area for ratios & close · Esc / F6 to save & close · 1-9 toggle";
+    } else {
+        hint.textContent = "Drag boxes · Resize handles · Esc / F6 to save & close · 1-9 toggle areas";
+    }
+}
+
+function toggleSelectPoint() {
+    selectPointMode = !selectPointMode;
+    drag = null;
+    const btn = document.getElementById("selectPointBtn");
+    if (selectPointMode) {
+        btn.classList.add("active");
+        btn.textContent = "Select Point ✓";
+        canvas.style.cursor = "crosshair";
+    } else {
+        btn.classList.remove("active");
+        btn.textContent = "Select Point";
+        canvas.style.cursor = "default";
+    }
+    updateHint();
+    draw();
+}
+
+canvas.addEventListener("mousemove", e => {
+    const x = e.clientX, y = e.clientY;
+    if (selectPointMode) {
+        const name = boxAt(x, y);
+        canvas.style.cursor = name ? "crosshair" : "default";
+        // Still stream live hover ratios via existing mouse-move path
+        sendUpdate(x, y);
+        return;
+    }
+    if (drag) {
+        const b = boxes[drag.name], o = drag.original;
+        const dx = x - drag.x, dy = y - drag.y, h = drag.handle;
+        if (h === "move") { b.x = o.x + dx; b.y = o.y + dy; }
+        else {
+            if (h.includes("w")) { b.x = o.x + dx; b.w = o.w - dx; }
+            if (h.includes("e")) b.w = o.w + dx;
+            if (h.includes("n")) { b.y = o.y + dy; b.h = o.h - dy; }
+            if (h.includes("s")) b.h = o.h + dy;
+            if (b.w < MIN_SIZE) { if (h.includes("w")) b.x = o.x + o.w - MIN_SIZE; b.w = MIN_SIZE; }
+            if (b.h < MIN_SIZE) { if (h.includes("n")) b.y = o.y + o.h - MIN_SIZE; b.h = MIN_SIZE; }
+        }
+        draw();
+        sendUpdate(x, y);
+        return;
+    }
+    const name = boxAt(x, y), b = name && boxes[name], h = b && handleAt(x, y, b);
+    canvas.style.cursor = h ? cursorFor(h) : (name ? "move" : "default");
+    sendUpdate(x, y);
+});
+
+canvas.addEventListener("mousedown", e => {
+    if (e.button !== 0) return;
+    if (e.target.closest && e.target.closest("#panel")) return;
+    const name = boxAt(e.clientX, e.clientY);
+    if (!name) return;
+
+    // Select Point mode: report ratios, do not drag
+    if (selectPointMode) {
+        reportPoint(name, e.clientX, e.clientY);
+        return;
+    }
+
+    const b = boxes[name];
+    drag = {
+        name,
+        handle: handleAt(e.clientX, e.clientY, b) || "move",
+        x: e.clientX, y: e.clientY,
+        original: { ...b }
+    };
+});
+window.addEventListener("mouseup", () => { drag = null; });
+window.addEventListener("blur", () => { drag = null; });
+
+// ── Panel ──
+function buildPanel() {
+    const body = document.getElementById("panelBody");
+    body.querySelectorAll(".area-row").forEach(el => el.remove());
+    const actions = body.querySelector(".panel-actions");
+    for (const name of AREA_ORDER) {
+        const cfg = AREAS[name] || { color: "#888", label: name };
+        const row = document.createElement("div");
+        row.className = "area-row";
+        row.innerHTML = `
+            <span class="area-swatch" style="background:${cfg.color}"></span>
+            <label for="vis_${name}">${cfg.label}</label>
+            <input type="checkbox" id="vis_${name}" ${visible[name] !== false ? "checked" : ""}>
+        `;
+        const cb = row.querySelector("input");
+        cb.addEventListener("change", () => {
+            visible[name] = cb.checked;
+            draw();
+            notifyVisibility();
+        });
+        row.addEventListener("click", e => {
+            if (e.target === cb) return;
+            cb.checked = !cb.checked;
+            visible[name] = cb.checked;
+            draw();
+            notifyVisibility();
+        });
+        body.insertBefore(row, actions);
+    }
+}
+
+function togglePanel() {
+    document.getElementById("panel").classList.toggle("collapsed");
+    document.getElementById("panelIcon").textContent =
+        document.getElementById("panel").classList.contains("collapsed") ? "▸" : "▾";
+}
+
+function setAllVisible(val) {
+    for (const name of AREA_ORDER) {
+        visible[name] = val;
+        const cb = document.getElementById("vis_" + name);
+        if (cb) cb.checked = val;
+    }
+    draw();
+    notifyVisibility();
+}
+
+function notifyVisibility() {
+    if (window.pywebview && pywebview.api && pywebview.api.set_visibility) {
+        try { pywebview.api.set_visibility(visible); } catch (e) {}
+    }
+}
+
+function saveAndClose() {
+    const out = {};
+    for (const name of AREA_ORDER) {
+        const b = boxes[name];
+        if (b) out[name] = { x: b.x, y: b.y, width: b.w, height: b.h };
+    }
+    if (window.pywebview && pywebview.api && pywebview.api.save_areas)
+        pywebview.api.save_areas(out);
+}
+
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape" || e.key === "F6") {
+        e.preventDefault();
+        saveAndClose();
+        return;
+    }
+    // P toggles Select Point mode
+    if (e.key === "p" || e.key === "P") {
+        e.preventDefault();
+        toggleSelectPoint();
+        return;
+    }
+    const idx = parseInt(e.key, 10) - 1;
+    if (idx >= 0 && idx < AREA_ORDER.length) {
+        const name = AREA_ORDER[idx];
+        visible[name] = !visible[name];
+        const cb = document.getElementById("vis_" + name);
+        if (cb) cb.checked = visible[name];
+        draw();
+        notifyVisibility();
+    }
+});
+
+window.addEventListener("beforeunload", saveAndClose);
+
+function applyConfig(cfg) {
+    if (!cfg) return;
+    AREA_ORDER = cfg.order || Object.keys(cfg.areas || {});
+    AREAS = cfg.areas || {};
+    visible = cfg.visible || {};
+    for (const name of AREA_ORDER) {
+        if (visible[name] === undefined) visible[name] = true;
+    }
+    buildPanel();
+}
+
+function loadScreenshot() {
+    if (!window.pywebview || !pywebview.api) return;
+    pywebview.api.get_screenshot_data().then(dataUrl => {
+        if (!dataUrl) {
+            screenshotReady = false;
+            screenshotImg = null;
+            draw();
+            return;
+        }
+        const img = new Image();
+        img.onload = () => {
+            screenshotImg = img;
+            screenshotReady = true;
+            draw();
+        };
+        img.onerror = () => {
+            screenshotReady = false;
+            screenshotImg = null;
+            draw();
+        };
+        img.src = dataUrl;
+    }).catch(() => {
+        screenshotReady = false;
+        screenshotImg = null;
+        draw();
+    });
+}
+
+function ready() {
+    if (!(window.pywebview && pywebview.api)) return;
+    if (pywebview.api.window_ready) pywebview.api.window_ready(window.screenX, window.screenY);
+
+    const load = async () => {
+        try {
+            if (pywebview.api.get_area_config) {
+                const cfg = await pywebview.api.get_area_config();
+                applyConfig(cfg);
+            }
+            if (pywebview.api.get_areas) {
+                const data = await pywebview.api.get_areas();
+                boxes = data || {};
+                for (const name of AREA_ORDER) {
+                    if (boxes[name]) {
+                        boxes[name].w = boxes[name].width;
+                        boxes[name].h = boxes[name].height;
+                        delete boxes[name].width;
+                        delete boxes[name].height;
+                    }
+                }
+            }
+            draw();
+        } catch (e) {
+            console.error("Error loading areas:", e);
+            draw();
+        }
+    };
+    load();
+}
+
+// Called from Python after window_ready as a secondary trigger
+window.__applyScreenshot = function () {
+    loadScreenshot();
+};
+
+window.addEventListener("resize", resizeCanvas);
+window.addEventListener("pywebviewready", ready);
+resizeCanvas();
+</script>
+</body>
+</html>

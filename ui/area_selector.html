@@ -5,217 +5,46 @@
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-        width: 100%; height: 100%;
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        inset: 0;
         overflow: hidden;
         user-select: none;
-        background: transparent;
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        background: #000;
     }
-    canvas { display: block; width: 100%; height: 100%; cursor: default; }
-
-    #panel {
-        position: fixed;
-        top: 12px; left: 12px;
-        z-index: 100;
-        background: rgba(18, 18, 22, 0.92);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 10px;
-        padding: 10px 12px;
-        min-width: 200px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.45);
-        color: #e8e8ec;
-        font-size: 13px;
-        backdrop-filter: blur(8px);
-    }
-    #panel.collapsed .panel-body { display: none; }
-    #panel h3 {
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: #9a9aa8;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        cursor: pointer;
-    }
-    #panel h3 span.toggle-icon { font-size: 10px; opacity: 0.7; }
-    .area-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 4px 0;
-        cursor: pointer;
-    }
-    .area-row:hover { background: rgba(255,255,255,0.04); border-radius: 4px; }
-    .area-swatch {
-        width: 12px; height: 12px;
-        border-radius: 3px;
-        flex-shrink: 0;
-        border: 1px solid rgba(0,0,0,0.3);
-    }
-    .area-row label { flex: 1; cursor: pointer; color: #ddd; }
-    .area-row input[type="checkbox"] {
-        width: 15px; height: 15px;
-        accent-color: #5b8def;
-        cursor: pointer;
-    }
-    .panel-actions {
-        display: flex;
-        gap: 6px;
-        margin-top: 10px;
-        padding-top: 8px;
-        border-top: 1px solid rgba(255,255,255,0.08);
-    }
-    .panel-actions button {
-        flex: 1;
-        padding: 5px 8px;
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 6px;
-        background: rgba(255,255,255,0.06);
-        color: #e0e0e8;
-        font-size: 11px;
-        font-weight: 500;
-        cursor: pointer;
-    }
-    .panel-actions button:hover { background: rgba(255,255,255,0.12); }
-    .panel-actions button.primary {
-        background: #3a6fd8;
-        border-color: #3a6fd8;
-        color: #fff;
-    }
-    .panel-actions button.primary:hover { background: #4a7fe8; }
-    .panel-actions button.active {
-        background: #2d8a5e;
-        border-color: #2d8a5e;
-        color: #fff;
-    }
-    .panel-actions button.active:hover { background: #349e6c; }
-    #hint {
-        position: fixed;
-        bottom: 14px; left: 50%;
-        transform: translateX(-50%);
-        z-index: 100;
-        background: rgba(18, 18, 22, 0.85);
-        color: #aaa;
-        font-size: 12px;
-        padding: 6px 14px;
-        border-radius: 20px;
-        pointer-events: none;
-        border: 1px solid rgba(255,255,255,0.08);
-        white-space: nowrap;
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
     }
 </style>
 </head>
 <body>
 <canvas id="overlay"></canvas>
-
-<div id="panel">
-    <h3 onclick="togglePanel()">
-        Areas
-        <span class="toggle-icon" id="panelIcon">▾</span>
-    </h3>
-    <div class="panel-body" id="panelBody">
-        <div class="panel-actions">
-            <button onclick="setAllVisible(true)">Show All</button>
-            <button onclick="setAllVisible(false)">Hide All</button>
-            <button id="selectPointBtn" onclick="toggleSelectPoint()">Select Point</button>
-        </div>
-    </div>
-</div>
-<div id="hint">Drag boxes · Resize handles · Esc / F6 to save &amp; close · 1-9 toggle areas</div>
-
 <script>
 const canvas = document.getElementById("overlay");
 const ctx = canvas.getContext("2d");
-const HANDLE = 12;
-const MIN_SIZE = 20;
-
-// Filled from Python via get_area_config()
-let AREA_ORDER = [];
-let AREAS = {};       // { name: { color, label } }
-let visible = {};     // { name: bool }
-
+let shapes = [];
 let boxes = {};
+let robloxRect = null;
 let drag = null;
 let lastIpc = 0;
+let saveRequested = false;
+const MIN_SIZE = 12;
+const HANDLE = 10;
 let screenshotImg = null;
 let screenshotReady = false;
-let selectPointMode = false;
-
-window.addEventListener("pywebviewready", () => {
-    try {
-        pywebview.api.window_ready(window.screenX, window.screenY);
-    } catch (e) {}
-    // Load frozen screenshot once the API is ready
-    loadScreenshot();
-});
-
-function resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = window.innerWidth * dpr;
-    canvas.height = window.innerHeight * dpr;
-    canvas.style.width = window.innerWidth + "px";
-    canvas.style.height = window.innerHeight + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    draw();
-}
-
-function draw() {
-    const w = window.innerWidth || canvas.width;
-    const h = window.innerHeight || canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    if (screenshotReady && screenshotImg) {
-        ctx.drawImage(screenshotImg, 0, 0, w, h);
-    } else {
-        ctx.fillStyle = "#1a1a1a";
-        ctx.fillRect(0, 0, w, h);
-    }
-
-    ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
-    ctx.fillRect(0, 0, w, h);
-
-    for (const name of AREA_ORDER) {
-        if (visible[name] === false) continue;
-        const b = boxes[name];
-        if (!b) continue;
-        const cfg = AREAS[name] || { color: "#888", label: name };
-        const color = cfg.color, label = cfg.label;
-        ctx.globalAlpha = 0.28;
-        ctx.fillStyle = color;
-        ctx.fillRect(b.x, b.y, b.w, b.h);
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.strokeRect(b.x + 1.5, b.y + 1.5, Math.max(0, b.w - 3), Math.max(0, b.h - 3));
-        ctx.font = "bold 13px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillStyle = color;
-        ctx.fillText(label, b.x + b.w / 2, b.y - 5);
-        // Hide resize handles in Select Point mode
-        if (!selectPointMode) {
-            const points = [
-                [b.x, b.y], [b.x + b.w / 2, b.y], [b.x + b.w, b.y],
-                [b.x, b.y + b.h / 2], [b.x + b.w, b.y + b.h / 2],
-                [b.x, b.y + b.h], [b.x + b.w / 2, b.y + b.h], [b.x + b.w, b.y + b.h]
-            ];
-            ctx.fillStyle = "white";
-            ctx.strokeStyle = "rgba(0,0,0,.6)";
-            ctx.lineWidth = 1;
-            for (const [x, y] of points) ctx.fillRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE);
-        }
-    }
-}
 
 function handleAt(x, y, b) {
-    if (selectPointMode) return null;
+    if (!b) return null;
+    const w = b.width != null ? b.width : (b.w || 0);
+    const h = b.height != null ? b.height : (b.h || 0);
     const points = {
-        nw: [b.x, b.y], n: [b.x + b.w / 2, b.y], ne: [b.x + b.w, b.y],
-        w: [b.x, b.y + b.h / 2], e: [b.x + b.w, b.y + b.h / 2],
-        sw: [b.x, b.y + b.h], s: [b.x + b.w / 2, b.y + b.h], se: [b.x + b.w, b.y + b.h]
+        nw: [b.x, b.y], n: [b.x + w / 2, b.y], ne: [b.x + w, b.y],
+        w: [b.x, b.y + h / 2], e: [b.x + w, b.y + h / 2],
+        sw: [b.x, b.y + h], s: [b.x + w / 2, b.y + h], se: [b.x + w, b.y + h]
     };
     for (const [name, [hx, hy]] of Object.entries(points))
         if (Math.abs(x - hx) <= HANDLE + 3 && Math.abs(y - hy) <= HANDLE + 3) return name;
@@ -223,11 +52,13 @@ function handleAt(x, y, b) {
 }
 
 function boxAt(x, y) {
-    for (let i = AREA_ORDER.length - 1; i >= 0; i--) {
-        const name = AREA_ORDER[i];
-        if (visible[name] === false) continue;
+    const names = Object.keys(boxes).reverse();
+    for (const name of names) {
         const b = boxes[name];
-        if (b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return name;
+        if (!b) continue;
+        const w = b.width != null ? b.width : (b.w || 0);
+        const h = b.height != null ? b.height : (b.h || 0);
+        if (x >= b.x && x <= b.x + w && y >= b.y && y <= b.y + h) return name;
     }
     return null;
 }
@@ -240,210 +71,23 @@ function cursorFor(handle) {
     }[handle] || "default";
 }
 
-function sendUpdate(x, y) {
-    const now = Date.now();
-    if (now - lastIpc < 250) return;
-    lastIpc = now;
-    if (window.pywebview && pywebview.api && pywebview.api.on_mouse_move)
-        pywebview.api.on_mouse_move(x, y, JSON.parse(JSON.stringify(boxes)));
-}
-
-function reportPoint(name, x, y) {
-    const b = boxes[name];
-    if (!b || !b.w || !b.h) return;
-    const xr = Math.max(0, Math.min(1, (x - b.x) / b.w));
-    const yr = Math.max(0, Math.min(1, (y - b.y) / b.h));
-    if (window.pywebview && pywebview.api && pywebview.api.on_point_select) {
-        try {
-            pywebview.api.on_point_select(name, xr, yr);
-        } catch (e) {}
-    }
-}
-
-function updateHint() {
-    const hint = document.getElementById("hint");
-    if (selectPointMode) {
-        hint.textContent = "Select Point ON · Click an area for ratios & close · Esc / F6 to save & close · 1-9 toggle";
-    } else {
-        hint.textContent = "Drag boxes · Resize handles · Esc / F6 to save & close · 1-9 toggle areas";
-    }
-}
-
-function toggleSelectPoint() {
-    selectPointMode = !selectPointMode;
-    drag = null;
-    const btn = document.getElementById("selectPointBtn");
-    if (selectPointMode) {
-        btn.classList.add("active");
-        btn.textContent = "Select Point ✓";
-        canvas.style.cursor = "crosshair";
-    } else {
-        btn.classList.remove("active");
-        btn.textContent = "Select Point";
-        canvas.style.cursor = "default";
-    }
-    updateHint();
-    draw();
-}
-
-canvas.addEventListener("mousemove", e => {
-    const x = e.clientX, y = e.clientY;
-    if (selectPointMode) {
-        const name = boxAt(x, y);
-        canvas.style.cursor = name ? "crosshair" : "default";
-        // Still stream live hover ratios via existing mouse-move path
-        sendUpdate(x, y);
-        return;
-    }
-    if (drag) {
-        const b = boxes[drag.name], o = drag.original;
-        const dx = x - drag.x, dy = y - drag.y, h = drag.handle;
-        if (h === "move") { b.x = o.x + dx; b.y = o.y + dy; }
-        else {
-            if (h.includes("w")) { b.x = o.x + dx; b.w = o.w - dx; }
-            if (h.includes("e")) b.w = o.w + dx;
-            if (h.includes("n")) { b.y = o.y + dy; b.h = o.h - dy; }
-            if (h.includes("s")) b.h = o.h + dy;
-            if (b.w < MIN_SIZE) { if (h.includes("w")) b.x = o.x + o.w - MIN_SIZE; b.w = MIN_SIZE; }
-            if (b.h < MIN_SIZE) { if (h.includes("n")) b.y = o.y + o.h - MIN_SIZE; b.h = MIN_SIZE; }
-        }
-        draw();
-        sendUpdate(x, y);
-        return;
-    }
-    const name = boxAt(x, y), b = name && boxes[name], h = b && handleAt(x, y, b);
-    canvas.style.cursor = h ? cursorFor(h) : (name ? "move" : "default");
-    sendUpdate(x, y);
+window.addEventListener("pywebviewready", () => {
+    try {
+        pywebview.api.window_ready(
+            window.screenX,
+            window.screenY,
+            window.innerWidth,
+            window.innerHeight
+        );
+    } catch (e) {}
+    loadScreenshot();
 });
-
-canvas.addEventListener("mousedown", e => {
-    if (e.button !== 0) return;
-    if (e.target.closest && e.target.closest("#panel")) return;
-    const name = boxAt(e.clientX, e.clientY);
-    if (!name) return;
-
-    // Select Point mode: report ratios, do not drag
-    if (selectPointMode) {
-        reportPoint(name, e.clientX, e.clientY);
-        return;
-    }
-
-    const b = boxes[name];
-    drag = {
-        name,
-        handle: handleAt(e.clientX, e.clientY, b) || "move",
-        x: e.clientX, y: e.clientY,
-        original: { ...b }
-    };
-});
-window.addEventListener("mouseup", () => { drag = null; });
-window.addEventListener("blur", () => { drag = null; });
-
-// ── Panel ──
-function buildPanel() {
-    const body = document.getElementById("panelBody");
-    body.querySelectorAll(".area-row").forEach(el => el.remove());
-    const actions = body.querySelector(".panel-actions");
-    for (const name of AREA_ORDER) {
-        const cfg = AREAS[name] || { color: "#888", label: name };
-        const row = document.createElement("div");
-        row.className = "area-row";
-        row.innerHTML = `
-            <span class="area-swatch" style="background:${cfg.color}"></span>
-            <label for="vis_${name}">${cfg.label}</label>
-            <input type="checkbox" id="vis_${name}" ${visible[name] !== false ? "checked" : ""}>
-        `;
-        const cb = row.querySelector("input");
-        cb.addEventListener("change", () => {
-            visible[name] = cb.checked;
-            draw();
-            notifyVisibility();
-        });
-        row.addEventListener("click", e => {
-            if (e.target === cb) return;
-            cb.checked = !cb.checked;
-            visible[name] = cb.checked;
-            draw();
-            notifyVisibility();
-        });
-        body.insertBefore(row, actions);
-    }
-}
-
-function togglePanel() {
-    document.getElementById("panel").classList.toggle("collapsed");
-    document.getElementById("panelIcon").textContent =
-        document.getElementById("panel").classList.contains("collapsed") ? "▸" : "▾";
-}
-
-function setAllVisible(val) {
-    for (const name of AREA_ORDER) {
-        visible[name] = val;
-        const cb = document.getElementById("vis_" + name);
-        if (cb) cb.checked = val;
-    }
-    draw();
-    notifyVisibility();
-}
-
-function notifyVisibility() {
-    if (window.pywebview && pywebview.api && pywebview.api.set_visibility) {
-        try { pywebview.api.set_visibility(visible); } catch (e) {}
-    }
-}
-
-function saveAndClose() {
-    const out = {};
-    for (const name of AREA_ORDER) {
-        const b = boxes[name];
-        if (b) out[name] = { x: b.x, y: b.y, width: b.w, height: b.h };
-    }
-    if (window.pywebview && pywebview.api && pywebview.api.save_areas)
-        pywebview.api.save_areas(out);
-}
-
-document.addEventListener("keydown", e => {
-    if (e.key === "Escape" || e.key === "F6") {
-        e.preventDefault();
-        saveAndClose();
-        return;
-    }
-    // P toggles Select Point mode
-    if (e.key === "p" || e.key === "P") {
-        e.preventDefault();
-        toggleSelectPoint();
-        return;
-    }
-    const idx = parseInt(e.key, 10) - 1;
-    if (idx >= 0 && idx < AREA_ORDER.length) {
-        const name = AREA_ORDER[idx];
-        visible[name] = !visible[name];
-        const cb = document.getElementById("vis_" + name);
-        if (cb) cb.checked = visible[name];
-        draw();
-        notifyVisibility();
-    }
-});
-
-window.addEventListener("beforeunload", saveAndClose);
-
-function applyConfig(cfg) {
-    if (!cfg) return;
-    AREA_ORDER = cfg.order || Object.keys(cfg.areas || {});
-    AREAS = cfg.areas || {};
-    visible = cfg.visible || {};
-    for (const name of AREA_ORDER) {
-        if (visible[name] === undefined) visible[name] = true;
-    }
-    buildPanel();
-}
 
 function loadScreenshot() {
-    if (!window.pywebview || !pywebview.api) return;
+    if (!window.pywebview || !pywebview.api || !pywebview.api.get_screenshot_data) return;
     pywebview.api.get_screenshot_data().then(dataUrl => {
         if (!dataUrl) {
             screenshotReady = false;
-            screenshotImg = null;
             draw();
             return;
         }
@@ -455,46 +99,13 @@ function loadScreenshot() {
         };
         img.onerror = () => {
             screenshotReady = false;
-            screenshotImg = null;
             draw();
         };
         img.src = dataUrl;
     }).catch(() => {
         screenshotReady = false;
-        screenshotImg = null;
         draw();
     });
-}
-
-function ready() {
-    if (!(window.pywebview && pywebview.api)) return;
-    if (pywebview.api.window_ready) pywebview.api.window_ready(window.screenX, window.screenY);
-
-    const load = async () => {
-        try {
-            if (pywebview.api.get_area_config) {
-                const cfg = await pywebview.api.get_area_config();
-                applyConfig(cfg);
-            }
-            if (pywebview.api.get_areas) {
-                const data = await pywebview.api.get_areas();
-                boxes = data || {};
-                for (const name of AREA_ORDER) {
-                    if (boxes[name]) {
-                        boxes[name].w = boxes[name].width;
-                        boxes[name].h = boxes[name].height;
-                        delete boxes[name].width;
-                        delete boxes[name].height;
-                    }
-                }
-            }
-            draw();
-        } catch (e) {
-            console.error("Error loading areas:", e);
-            draw();
-        }
-    };
-    load();
 }
 
 // Called from Python after window_ready as a secondary trigger
@@ -502,9 +113,237 @@ window.__applyScreenshot = function () {
     loadScreenshot();
 };
 
-window.addEventListener("resize", resizeCanvas);
-window.addEventListener("pywebviewready", ready);
-resizeCanvas();
+function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, window.innerWidth || 1);
+    const h = Math.max(1, window.innerHeight || 1);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+}
+
+function draw() {
+    const w = window.innerWidth || canvas.width || 1;
+    const h = window.innerHeight || canvas.height || 1;
+    ctx.clearRect(0, 0, w, h);
+
+    if (screenshotReady && screenshotImg) {
+        ctx.drawImage(screenshotImg, 0, 0, w, h);
+    } else {
+        ctx.fillStyle = "#1a1a1a";
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    for (const shape of shapes) {
+        const x = Math.min(shape.x1, shape.x2);
+        const y = Math.min(shape.y1, shape.y2);
+        const width = Math.abs(shape.x2 - shape.x1);
+        const height = Math.abs(shape.y2 - shape.y1);
+
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = shape.color;
+        ctx.fillRect(x, y, width, height);
+
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = shape.color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, width, height);
+
+        if (shape.show_bar_center) {
+            const center_x = x + width / 2;
+            ctx.beginPath();
+            ctx.moveTo(center_x, y);
+            ctx.lineTo(center_x, y + height);
+            ctx.strokeStyle = "gray";
+            ctx.lineWidth = 4;
+            ctx.stroke();
+        }
+
+        // Label
+        if (shape.label) {
+            ctx.font = "bold 13px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillStyle = shape.color;
+            ctx.fillText(shape.label, x + width / 2, Math.max(13, y - 5));
+        }
+
+        // Corner / edge handles
+        const points = [
+            [x, y], [x + width / 2, y], [x + width, y],
+            [x, y + height / 2], [x + width, y + height / 2],
+            [x, y + height], [x + width / 2, y + height], [x + width, y + height]
+        ];
+        ctx.fillStyle = "white";
+        ctx.strokeStyle = "white";
+        for (const [px, py] of points) {
+            const hx = px - HANDLE / 2;
+            const hy = py - HANDLE / 2;
+            ctx.fillRect(hx, hy, HANDLE, HANDLE);
+            ctx.strokeRect(hx, hy, HANDLE, HANDLE);
+        }
+    }
+    for (const b of Object.values(boxes)) {
+        if (!b) continue;
+        const bw = b.width != null ? b.width : (b.w || 0);
+        const bh = b.height != null ? b.height : (b.h || 0);
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = b.color || "#00aaff";
+        ctx.fillRect(b.x, b.y, bw, bh);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = b.color || "#00aaff";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(b.x, b.y, bw, bh);
+        if (b.label) {
+            ctx.font = "bold 13px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillStyle = b.color || "#00aaff";
+            ctx.fillText(b.label, b.x + bw / 2, Math.max(13, b.y - 5));
+        }
+        const points = [[b.x, b.y], [b.x + bw / 2, b.y], [b.x + bw, b.y],
+            [b.x, b.y + bh / 2], [b.x + bw, b.y + bh / 2],
+            [b.x, b.y + bh], [b.x + bw / 2, b.y + bh], [b.x + bw, b.y + bh]];
+        ctx.fillStyle = "white";
+        for (const [px, py] of points) ctx.fillRect(px - HANDLE / 2, py - HANDLE / 2, HANDLE, HANDLE);
+    }
+    // Cyan outline for the detected Roblox window (or full-screen fallback)
+    if (robloxRect) {
+        const r = robloxRect;
+        const rw = r.width != null ? r.width : (r.w || 0);
+        const rh = r.height != null ? r.height : (r.h || 0);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = r.color || "#00FFFF";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(r.x, r.y, rw, rh);
+        if (r.label) {
+            ctx.font = "bold 13px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillStyle = r.color || "#00FFFF";
+            ctx.fillText(r.label, r.x + rw / 2, Math.max(13, b.y - 5));
+        }
+    }
+    ctx.globalAlpha = 1;
+}
+
+canvas.addEventListener("mousemove", e => {
+    const x = e.clientX, y = e.clientY;
+    if (drag) {
+        const b = boxes[drag.name], o = drag.original;
+        if (!b || !o) { drag = null; return; }
+        const dx = x - drag.x, dy = y - drag.y, h = drag.handle;
+        const ow = o.width != null ? o.width : (o.w || 0);
+        const oh = o.height != null ? o.height : (o.h || 0);
+        if (h === "move") {
+            b.x = o.x + dx;
+            b.y = o.y + dy;
+        } else {
+            if (h.includes("w")) { b.x = o.x + dx; b.width = ow - dx; }
+            if (h.includes("e")) b.width = ow + dx;
+            if (h.includes("n")) { b.y = o.y + dy; b.height = oh - dy; }
+            if (h.includes("s")) b.height = oh + dy;
+            if ((b.width || 0) < MIN_SIZE) {
+                if (h.includes("w")) b.x = o.x + ow - MIN_SIZE;
+                b.width = MIN_SIZE;
+            }
+            if ((b.height || 0) < MIN_SIZE) {
+                if (h.includes("n")) b.y = o.y + oh - MIN_SIZE;
+                b.height = MIN_SIZE;
+            }
+        }
+        draw();
+        return;
+    }
+    const name = boxAt(x, y), b = name && boxes[name], h = b && handleAt(x, y, b);
+    canvas.style.cursor = h ? cursorFor(h) : (name ? "move" : "default");
+});
+
+canvas.addEventListener("mousedown", e => {
+    if (e.button !== 0) return;
+    if (e.target.closest && e.target.closest("#panel")) return;
+    const name = boxAt(e.clientX, e.clientY);
+    if (!name) return;
+    const b = boxes[name];
+    drag = {
+        name,
+        handle: handleAt(e.clientX, e.clientY, b) || "move",
+        x: e.clientX, y: e.clientY,
+        original: { ...b }
+    };
+});
+
+function finishDrag() {
+    if (!drag) return;
+    drag = null;
+    lastIpc = 0;
+}
+
+function saveAndClose() {
+    if (saveRequested) return;
+    if (!window.pywebview || !pywebview.api || !pywebview.api.save_areas) {
+        console.error("Area selector save API is unavailable.");
+        return;
+    }
+    const out = {};
+    for (const [name, b] of Object.entries(boxes)) {
+        if (!b) continue;
+        out[name] = {
+            x: b.x,
+            y: b.y,
+            width: b.width != null ? b.width : (b.w || 0),
+            height: b.height != null ? b.height : (b.h || 0)
+        };
+    }
+    saveRequested = true;
+    try {
+        const result = pywebview.api.save_areas(out);
+        if (result && typeof result.catch === "function") {
+            result.catch(error => {
+                saveRequested = false;
+                console.error("Failed to save area selector boxes:", error);
+            });
+        }
+    } catch (error) {
+        saveRequested = false;
+        console.error("Failed to save area selector boxes:", error);
+    }
+}
+
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+        e.preventDefault();
+        saveAndClose();
+    }
+});
+
+window.addEventListener("beforeunload", saveAndClose);
+window.addEventListener("mouseup", finishDrag);
+window.addEventListener("blur", () => { drag = null; });
+
+window.fishOverlay = {
+    setBoxes(value) {
+        boxes = value || {};
+        draw();
+    },
+    setRobloxRect(value) {
+        robloxRect = value || null;
+        draw();
+    },
+    draw(shape) {
+        shapes.push(shape);
+        draw();
+    },
+    clear() {
+        shapes = [];
+        draw();
+    },
+    saveAndClose
+};
+
+window.addEventListener("resize", resize);
+resize();
 </script>
 </body>
 </html>
