@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PyWare Fishing V4.5</title>
+    <title>PyWare Fishing V4.51</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -10,7 +10,7 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo">
-                PyWare Fishing V4.5
+                PyWare Fishing V4.51
             </div>
             <button class="tab-button active" onclick="switchTab('basic')">
                 Basic
@@ -24,7 +24,7 @@
             <div class="config-section">
                 <p>Active Configuration</p>
                 <select id="disabled" onchange="switchConfig(this.value)"></select>
-                <p>Utility Selection</p>
+                <p>Automation Mode</p>
                 <div class="dropdown">
                     <select name="automation_mode" id="automation_mode">
                     <option value="fishing">Fishing</option>
@@ -34,15 +34,15 @@
                     <option value="disabled">Disabled</option>
                     </select>
                 </div>
-                <p>Rod Ability</p>
+                <p>Special Rod</p>
                 <div class="dropdown">
-                    <select name="fishing_profile" id="fishing_profile">
-                    <option value="normal">Normal</option>
-                    <option value="notes">Notes (Pinion)</option>
-                    <option value="reverse">Reverse (Dreambreaker)</option>
-                    <option value="dual">Dual (Bellona)</option>
-                    <option value="lanes">4 Lanes (Tranquility)</option>
-                    <option value="metronome">Metronome (Lullaby)</option>
+                    <select name="special_rod" id="special_rod">
+                        <option value="default">None</option>
+                        <option value="pinion">Pinion's Aria</option>
+                        <option value="dreambreaker">Dreambreaker</option>
+                        <option value="bellona">Bellona's Waraxe</option>
+                        <option value="tranquility">Tranquility Rod</option>
+                        <option value="lullaby">Lullaby</option>
                     </select>
                 </div>
                 <button onclick="openConfigManager()"> Manage </button>
@@ -54,10 +54,10 @@
             <!-- Top Bar -->
             <div class="topbar">
                 <div class="topbar-left">
-                    <span class="breadcrumb-current" id="active-tab-title">Overview</span>
+                    <span class="breadcrumb-current" id="active-tab-title">Basic</span>
                     <div class="status-container">
                         <span class="status-dot"></span>
-                        <span id="status-label" class="status-text">Error: Status Label can't load properly</span>
+                        <span id="status-label" class="status-text">Preview Mode</span>
                     </div>
                 </div>
             </div>
@@ -85,23 +85,27 @@
                     <div class="box-grid">
                         <div class="simple-box">
                             <p>Rod Slot</p>
-                            <input id="rod_slot" type="text" placeholder="1">
+                            <input id="fishing_rod_slot" type="text" placeholder="1">
                         </div>
                         <div class="simple-box">
                             <p>Bag Slot</p>
-                            <input id="bag_slot" type="text" placeholder="2">
+                            <input id="equipment_bag_slot" type="text" placeholder="2">
                         </div>
                         <div class="simple-box">
                             <p>Sundial Slot</p>
-                            <input id="sundial_slot" type="text" placeholder="6">
+                            <input id="sundial_totem_slot" type="text" placeholder="6">
                         </div>
                         <div class="simple-box">
                             <p>Totem Slot</p>
-                            <input id="target_slot" type="text" placeholder="7">
+                            <input id="totem_1_slot" type="text" placeholder="7">
+                        </div>
+                        <div class="simple-box">
+                            <p>Totem Slot (2)</p>
+                            <input id="totem_2_slot" type="text" placeholder="5">
                         </div>
                         <div class="simple-box">
                             <p>Mystic Mirror Slot</p>
-                            <input id="mirror_slot" type="text" placeholder="8">
+                            <input id="mystic_mirror_slot" type="text" placeholder="8">
                         </div>
                         <div class="simple-box">
                             <p>Backpack Slot</p>
@@ -136,47 +140,47 @@
                         <div class="simple-box">
                             <p>Left Bar</p>
                             <input id="left_color" type="text" placeholder="#FFFFFF">
-                            <input id="left_tolerance" type="number" placeholder="8">
+                            <input id="left_tolerance" type="text" placeholder="8">
                         </div>
                         <div class="simple-box">
                             <p>Right Bar</p>
                             <input id="right_color" type="text" placeholder="#FFFFFF">
-                            <input id="right_tolerance" type="number" placeholder="8">
+                            <input id="right_tolerance" type="text" placeholder="8">
                         </div>
                         <div class="simple-box">
                             <p>Arrows</p>
                             <input id="arrow_color" type="text" placeholder="#848587">
-                            <input id="arrow_tolerance" type="number" placeholder="8">
+                            <input id="arrow_tolerance" type="text" placeholder="8">
                         </div>
                         <div class="simple-box">
                             <p>Fish</p>
                             <input id="fish_color" type="text" placeholder="#5B4B43">
-                            <input id="fish_tolerance" type="number" placeholder="4">
+                            <input id="fish_tolerance" type="text" placeholder="4">
                         </div>
                         <div class="simple-box">
                             <p>Shake</p>
                             <input id="shake_color" type="text" placeholder="#FFFFFF">
-                            <input id="shake_tolerance" type="number" placeholder="5">
+                            <input id="shake_tolerance" type="text" placeholder="5">
                         </div>
                         <div class="simple-box">
                             <p>Green Cast</p>
                             <input id="green_cast_color" type="text" placeholder="#64a04c">
-                            <input id="green_cast_tolerance" type="number" placeholder="16">
+                            <input id="green_cast_tolerance" type="text" placeholder="16">
                         </div>
                         <div class="simple-box">
                             <p>White Cast</p>
                             <input id="white_cast_color" type="text" placeholder="#d4d3ca">
-                            <input id="white_cast_tolerance" type="number" placeholder="20">
+                            <input id="white_cast_tolerance" type="text" placeholder="20">
                         </div>
                         <div class="simple-box">
                             <p>Pinion Notes</p>
                             <input id="pinion_notes_color" type="text" placeholder="#149604">
-                            <input id="pinion_notes_tolerance" type="number" placeholder="5">
+                            <input id="pinion_notes_tolerance" type="text" placeholder="5">
                         </div>
                         <div class="simple-box">
                             <p>Friends Area</p>
                             <input id="friends_color" type="text" placeholder="#9BFF9B">
-                            <input id="friends_tolerance" type="number" placeholder="5">
+                            <input id="friends_tolerance" type="text" placeholder="5">
                         </div>
                     </div>
                 </div>
@@ -258,6 +262,7 @@
                         <select name="perfect_cast_method" id="perfect_cast_method">
                         <option value="velocity">Velocity-based</option>
                         <option value="simple">Simple</option>
+                        <option value="prediction">Prediction</option>
                         </select>
                     </div>
                     <div class="text">
@@ -354,6 +359,10 @@
                         <label>Shake Failsafe (attempts)</label>
                         <input id=shake_failsafe type="text" placeholder="80">
                     </div>
+                    <div class="text">
+                        <label>Animation Delay (seconds)</label>
+                        <input id=animation_delay_slider type="text" placeholder="0.3">
+                    </div>
                 </div>
                 <div class="card">
                     <h3>Minigame</h3>
@@ -405,20 +414,9 @@
                         <label>Note Tracking Ratio (Pinion)</label>
                         <input id=pinion_note_ratio type="text" placeholder="0.3">
                     </div>
-                    <div class="dropdown">
-                        <label for="tranquility_mode">Tranquility Mode:</label>
-                        <select name="tranquility_mode" id="tranquility_mode">
-                        <option value="rapid">Rapid</option>
-                        <option value="steady">Steady</option>
-                        </select>
-                    </div>
                     <div class="text">
-                        <label>Note Target Ratio (Tranquility)</label>
-                        <input id=tranquility_note_ratio type="text" placeholder="0.8">
-                    </div>
-                    <div class="text">
-                        <label>Note Target Delay (Tranquility)</label>
-                        <input id=target_delay type="text" placeholder="0">
+                        <label>Tranquility Lead (ms)</label>
+                        <input id=tranquility_lead type="text" placeholder="45">
                     </div>
                     <div class="text">
                         <label>Metronome Padding (Lullaby)</label>
@@ -472,57 +470,61 @@
                     <div class="switch2">
                         <p>Auto Totem</p>
                         <label class="switch">
-                            <input id=auto_totem type="checkbox">
+                            <input id="auto_totem" type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch2">
+                        <p>Second Totem</p>
+                        <label class="switch">
+                            <input id="second_totem" type="checkbox">
                             <span class="slider"></span>
                         </label>
                     </div>
                     <div class="dropdown">
                         <label for="target_time">Target Time:</label>
                         <select name="target_time" id="target_time">
-                        <option value="Day">Day</option>
-                        <option value="Night">Night</option>
-                        <option value="Disabled">Disabled</option>
+                            <option value="Day">Day</option>
+                            <option value="Night">Night</option>
+                            <option value="Disabled">Disabled</option>
                         </select>
                     </div>
                     <div class="text">
                         <label>Cycles</label>
-                        <input id=totem_cycles type="text" placeholder="55">
+                        <input id="totem_cycles" type="text" placeholder="55">
                     </div>
                     <div class="text">
                         <label>Sundial Delay (seconds)</label>
-                        <input id=sundial_delay type="text" placeholder="20">
+                        <input id="sundial_delay" type="text" placeholder="20">
                     </div>
                     <div class="text">
                         <label>Totem Delay (seconds)</label>
-                        <input id=totem_delay type="text" placeholder="2.5">
+                        <input id="totem_delay" type="text" placeholder="2.5">
                     </div>
                 </div>
                 <div class="card">
                     <h3>Auto Reconnect</h3>
-                    <div class="switch2">
-                        <p>Auto Reconnect</p>
-                        <label class="switch">
-                            <input id=auto_reconnect type="checkbox">
-                            <span class="slider"></span>
-                        </label>
+                    <div class="dropdown">
+                        <label for="auto_reconnect">Auto Reconnect:</label>
+                        <select name="auto_reconnect" id="auto_reconnect">
+                            <option value="Modern">Modern</option>
+                            <option value="Legacy">Legacy</option>
+                            <option value="Disabled">Disabled</option>
+                        </select>
                     </div>
                     <div class="text">
                         <label>Threshold</label>
-                        <input id=reconnect_threshold type="text" placeholder="30">
+                        <input id="reconnect_threshold" type="text" placeholder="30">
                     </div>
-                    <div class="arrow">&darr;</div> <!-- Arrows -->
+                    <div class="arrow">&darr;</div>
                     <div class="text">
                         <label>Wait Time (Seconds)</label>
-                        <input id=reconnect_wait_time type="text" placeholder="20">
+                        <input id="reconnect_wait_time" type="text" placeholder="20">
                     </div>
-                    <div class="arrow">&darr;</div> <!-- Arrows -->
-                    <div class="text">
-                        <label>Mirror X (Ratio)</label>
-                        <input id=mirror_ratio type="text" placeholder="0.5">
-                    </div>
-                    <div class="text">
-                        <label>Mirror Y (Ratio)</label>
-                        <input id=mirror_ratio2 type="text" placeholder="0.5">
+                    <div class="arrow">&darr;</div>
+                    <div class="text point-select-row">
+                        <label>Mirror Ratio</label>
+                        <input id="mirror_ratio" value="0.5, 0.5">
                     </div>
                 </div>
                 <div class="card">
@@ -648,22 +650,30 @@
                     <div class="switch2">
                         <p>Click After Minigame</p>
                         <label class="switch">
-                            <input id=click_after_minigame type="checkbox">
+                            <input id="click_after_minigame" type="checkbox">
                             <span class="slider"></span>
                         </label>
                     </div>
+                    <div class="text">
+                        <label>Click Position (Screen Ratio seperated by )</label>
+                        <input id="minigame_click_position" type="text" placeholder="0.5, 0.5">
+                    </div>
+                    <div class="text">
+                        <label>Click Amounts</label>
+                        <input id="minigame_click_amounts" type="text" placeholder="2">
+                    </div>
                     <div class="dropdown">
                         <label for="detection_method">Detection Method:</label>
-                        <select name="detection_method" id="detection_method">
-                        <option value="friend_area">Friend Area</option>
-                        <option value="fish">Fish</option>
+                        <select name="detection_method" id="detection_method" onchange="updateFriendAreaVisibility()">
+                            <option value="friend_area">Friend Area</option>
+                            <option value="fish">Fish</option>
                         </select>
                     </div>
                     <div class="dropdown">
                         <label for="restart_method">Restart Method:</label>
-                        <select name="restart_method" id="restart_method">
-                        <option value="friend_area">Friend Area</option>
-                        <option value="fish">Fish</option>
+                        <select name="restart_method" id="restart_method" onchange="updateFriendAreaVisibility()">
+                            <option value="friend_area">Friend Area</option>
+                            <option value="fish">Fish</option>
                         </select>
                     </div>
                 </div>

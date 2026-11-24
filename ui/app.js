@@ -1,4 +1,4 @@
-const APP_VERSION = "4.5";
+const APP_VERSION = "4.51";
 const BETA_VERSION = "0";
 const DEVELOPER = "Catman2608";
 let currentConfig = null;

@@ -1,30 +1,31 @@
 {
     "last_rod": "Basic Rod",
-    "last_config": "Default",
+    "last_config": "Nate Blade",
     "bar_areas": {
         "shake": {
             "x": 0.1041,
-            "y": 0.1925,
-            "width": 0.7917,
-            "height": 0.6324111111111111
+            "y": 0.0935,
+            "width": 0.7916999999999998,
+            "height": 0.7058
         },
         "fish": {
-            "x": 0.2916916666666667,
-            "y": 0.8471740740740741,
-            "width": 0.4172,
-            "height": 0.03241851851851851
+            "x": 0.2844,
+            "y": 0.8377,
+            "width": 0.4297,
+            "height": 0.0376
         },
+        "fish_1_bellona": null,
+        "fish_2_bellona": null,
+        "fish_tranquility": null,
         "friend": {
-            "x": 0.006683333333333334,
-            "y": 0.9045962962962962,
+            "x": 0.0046,
+            "y": 0.9031,
             "width": 0.0355,
-            "height": 0.0817
+            "height": 0.08500000000000002
         },
         "totem": null,
         "lullaby": null,
         "chat": null,
-        "backpack": null,
-        "treasure_appraisal": null,
         "appraisal_hotbar": null,
         "enchantment": null,
         "angler_quest": null
