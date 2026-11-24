@@ -26,13 +26,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 # Capture
-if sys.platform == "win32":
-    try:
-        import dxcam
-    except:
-        dxcam = None
-else:
-    dxcam = None
+dxcam = None
 import mss
 # Keyboard And Mouse Clicks (Platform-specific)
 from pynput.keyboard import Listener as KeyListener, Key
@@ -2590,8 +2584,6 @@ class Api:
                 visible_areas.append("totem")
             if self.vars["hunt_detect"] == True:
                 visible_areas.append("chat")
-            if self.vars["sovereign_recharge"] == True:
-                visible_areas.append("sovereign")
             if special_rod == "noiseform":
                 visible_areas.append("noiseform")
             elif special_rod == "lullaby":
@@ -2631,7 +2623,7 @@ class Api:
 
         self.set_status(f"Took a screenshot of {', '.join(saved)}")
     def _enumerate_windows(self):
-        """Cross-platform window list (similar to SolarAutomateV3.refresh_windows).
+        """Cross-platform window list (similar to PyWareAutomateV3.refresh_windows).
         Returns a list of dicts with keys: title, exe, left, top, width, height.
         """
         windows = []
@@ -2734,7 +2726,7 @@ class Api:
         """Return (left, top, width, height) of the first matching window.
         Matches on title or process/owner name containing window_name (case-insensitive).
         Prefers larger windows when several match. Falls back to full screen if none found.
-        Cross-platform (Windows / macOS / Linux), adapted from SolarAutomateV3 window finding.
+        Cross-platform (Windows / macOS / Linux), adapted from PyWareAutomateV3 window finding.
         """
         name = (window_name or "").strip().lower()
         candidates = []
@@ -3476,7 +3468,7 @@ class Api:
     def pixel_search_all(self, img, color, tolerance, scan_mode=0, optimize_mode=0):
         color2 = self.vars[color]
         tolerance2 = self.vars[tolerance]
-        left, right = self.pixel_search(img, color, tolerance, scan_mode)
+        left, right = self.pixel_search(img, color2, tolerance2, scan_mode)
         return left, right
 
     def find_color_cluster(self, frame, target_color_hex, tolerance=8, min_area=10):
@@ -3827,7 +3819,7 @@ class Api:
         clean_title = (message_prefix or "").replace("**", "").replace("\n", " ").strip()
         if not clean_title:
             clean_title = "Update"
-        title = f"Solar Fishing | {clean_title}"
+        title = f"PyWare Fishing | {clean_title}"
         # Extract a numeric cycle if present (e.g. "Cycle #1440" -> "1440")
         cycle_display = str(loop_count)
         m = re.search(r"#?\s*(\d+)", str(loop_count))
@@ -3852,7 +3844,7 @@ class Api:
                 {"name": "Running time", "value": running, "inline": True},
                 {"name": "Catch Rate", "value": catch_display, "inline": True},
             ],
-            "footer": {"text": f"Solar Fishing V{APP_VERSION}"},
+            "footer": {"text": f"PyWare Fishing V{APP_VERSION}"},
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
         if include_image:
@@ -4347,7 +4339,6 @@ class Api:
             fishing_mode = self.vars["fishing_mode"].lower()
             logging_mode = self.vars["logging_mode"].lower()
             special_rod = self.vars["special_rod"].lower()
-            sovereign_recharge = self.vars["sovereign_recharge"]
             click_after_minigame = self.vars["click_after_minigame"]
             target_time = self.vars["target_time"].lower()
             logging_cycle = int(self.vars["logging_cycle"])
@@ -4355,15 +4346,12 @@ class Api:
             totem_cycles = int(self.vars.get("totem_cycles", 55))
             auto_reconnect = self.vars["auto_reconnect"].lower()
             hunt_detect = int(self._get_var_number("hunt_detect", 20, float))
-            minimum_percentage = float(self.vars["minimum_percentage"].strip("%"))
-            maximum_percentage = float(self.vars["maximum_percentage"].strip("%"))
             # 2. Hotkey & Inventory Slots
             equipment_bag_slot = str(self.vars["equipment_bag_slot"])
             fishing_rod_slot = str(self.vars["fishing_rod_slot"])
             sundial_totem_slot = str(self.vars["sundial_totem_slot"])
             totem_1_slot = str(self.vars["totem_1_slot"])
             totem_2_slot = str(self.vars["totem_2_slot"])
-            relic_slot = str(self.vars["relic_slot"])
             # 3. Delays & Timings
             select_rod_duration = float(self.vars["select_rod_duration"])
             delay_before_casting = float(self._get_var_number("delay_before_casting", 0.5, float))
@@ -4377,7 +4365,6 @@ class Api:
             bellona_fish_left, bellona_fish_top, bellona_fish_right, bellona_fish_bottom, _, _ = self.get_areas("fish_1_bellona")
             friend_left_s, friend_top_s, friend_right_s, friend_bottom_s, _, _ = self.get_areas("friend")
             totem_left, totem_top, totem_right, totem_bottom, _, _ = self.get_areas("totem")
-            sovereign_left, sovereign_top, sovereign_right, sovereign_bottom, sovereign_width, _ = self.get_areas("sovereign")
             shake_x = shake_left + (shake_w // 2)
             shake_y = shake_top + (shake_h // 2)
             detection_method = self.vars["detection_method"].lower()
@@ -4434,7 +4421,7 @@ class Api:
             self.reported_errors = []
             self.reported_errors_list = []
             # Fish Overlay
-            if fish_overlay == True:
+            if fish_overlay == "on":
                 # Position The Overlay Just Above Or Below The Fish Bar So It Does
                 # Not Cover The Actual Minigame.  Show() Expects (Left, Top, Width,
                 # Height) In Physical Pixels — Not Right/Bottom.
@@ -4449,7 +4436,7 @@ class Api:
             else:
                 self.fish_overlay.hide()
             # Status Overlay
-            if status_overlay == True:
+            if status_overlay == "on":
                 # Position The Status Overlay At The Top Left, But Avoiding The macOS Menu Offset.
                 self.status_overlay.show(self.status_left, self.status_top, self.status_right, self.status_bottom)
             else:
@@ -4458,7 +4445,7 @@ class Api:
             full_error = traceback.format_exc()
             error_line = self.get_error_line(full_error)
             if "KeyError" in full_error:
-                error_message = e.replace("_", " ").title()
+                error_message = str(e).replace("_", " ").title()
                 key_error_placeholder = "Missing Setting: "
             else:
                 key_error_placeholder = ""
@@ -4479,7 +4466,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
 
         # Auto Zoom
         auto_zoom = self.vars["auto_zoom"]
-        if auto_zoom == True:
+        if auto_zoom == "on":
             for i in range(30):
                 self.status_overlay.set_line(1, "Zoom Count (In)", f"{i}/30")
                 self._send_key("i", 0.05)
@@ -4490,7 +4477,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
             while self.macro_running:
                 self.status_overlay.set_main_status("Resetting Statistics")
                 self.capture_id = 0
-                if auto_refresh == True:
+                if auto_refresh == "on":
                     time.sleep(delay_before_casting)
                     self._send_key(equipment_bag_slot)
                     self.interruptible_sleep(select_rod_duration)
@@ -4547,25 +4534,6 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                     if self.current_cycle == hunt_cycles:
                         self.hunt_detect(current_hunt)
                         hunt_cycles = hunt_cycles2 + self.current_cycle
-                if sovereign_recharge == True:
-                    self.status_overlay.set_main_status("Sovereign Recharge")
-                    sovereign_img = self.capture_frame[sovereign_top:sovereign_bottom, sovereign_left:sovereign_right]
-                    sovereign_right2, _ = self.pixel_search_all(sovereign_img, "sovereign_recharge_color", "sovereign_recharge_tolerance")
-                    if sovereign_right2 is not None:
-                        distance = round(abs(sovereign_right2 - sovereign_left) / sovereign_width, 2)
-                        while distance < maximum_percentage:
-                            if distance < minimum_percentage:
-                                self._send_key(fishing_rod_slot)
-                                time.sleep(0.1)
-                                self._send_key(relic_slot)
-                                self._click_at(enchantment_click_position_x, enchantment_click_position_y)
-                                time.sleep(enchantment_click_delay)
-                                self._click_at(enchantment_click_position_x2, enchantment_click_position_y2)
-                                time.sleep(enchantment_click_delay2)
-                            elif distance > maximum_percentage:
-                                break
-
-                            time.sleep(0.01)
                 # Update Current Cycle
                 self.current_cycle = self.current_cycle + 1
                 # Cast
@@ -4834,7 +4802,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
         white_abs_top = 0
         green_abs_top = 0
         fish_overlay = self.vars["fish_overlay"]
-        if fish_overlay == True:
+        if fish_overlay == "on":
             self.fish_overlay.resize(shake_right, shake_top, 35, shake_height)
         # Loop
         while self.macro_running:
@@ -4959,7 +4927,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                 current_distance = shake_height
             # Fish Overlay
             self.fish_overlay.clear()
-            if fish_overlay == True:
+            if fish_overlay == "on":
                 self.fish_overlay.draw(5, green_abs_top, 30, green_abs_bottom, "#FF0000")
                 self.fish_overlay.draw(5, white_abs_top, 30, white_abs_bottom, "#00FF00")
             # RELEASE LOGIC (only runs when we have a valid distance)
@@ -5228,7 +5196,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
         # Overlay
         fish_center_y = int((shake_top + shake_bottom) / 2)
         fish_overlay = self.vars["fish_overlay"]
-        if fish_overlay == True:
+        if fish_overlay == "on":
             if fish_center_y > HALF_HEIGHT:
                 overlay_top = shake_top - tranquility_small_gap - tranquility_small_gap
             else:
@@ -5401,7 +5369,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
         fish_center_x = int((fish_left + fish_right) / 2)
         fish_center_y = int((fish_top + fish_bottom) / 2)
         fish_overlay = self.vars["fish_overlay"]
-        if fish_overlay == True:
+        if fish_overlay == "on":
             # Position The Overlay Just Above Or Below The Fish Bar So It Does
             # Not Cover The Actual Minigame.  Show() Expects (Left, Top, Width,
             # Height) In Physical Pixels — Not Right/Bottom.
@@ -5450,12 +5418,12 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
             fish_x, fish_y = self.pixel_search_all(fish_img, "fish_color", "fish_tolerance")
             if fish_x is not None:
                 last_fish_x = fish_x
-            left_x, left_y = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 0, 1)
-            right_x, right_y = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 1, 2)
+            left_x, left_y = self.pixel_search_all(fish_img, "left_color", "left_tolerance", 0, 1)
+            right_x, right_y = self.pixel_search_all(fish_img, "right_color", "right_tolerance", 1, 2)
             if left_x == None:
-                left_x, left_y = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 0, 2)
+                left_x, left_y = self.pixel_search_all(fish_img, "left_color", "left_tolerance", 0, 2)
             if right_x == None:
-                right_x, right_y = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 1, 1)
+                right_x, right_y = self.pixel_search_all(fish_img, "right_color", "right_tolerance", 1, 1)
             if left_x is None or right_x is None:
                 detection_source = 1
                 # Bars Not Found - Scan For Arrows
@@ -5554,10 +5522,10 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                     time.sleep(self.scan_delay)
                     continue
 
-            if lock_cursor == True:
+            if lock_cursor == "on":
                 mouse_controller.position = (int(fish_center_x * scale), int(fish_center_y * scale))
             # Draw
-            if fish_overlay == True:
+            if fish_overlay == "on":
                 if left_x is not None:
                     self.fish_overlay.draw(x1=left_x, y1=overlay_height*0.15, x2=right_x, y2=overlay_height*0.85, color="green")
                 if fish_x is not None:
@@ -5602,7 +5570,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
         shake_x = int((shake_left + shake_right) / 2)
         shake_y = int((shake_top + shake_bottom) / 2)
         fish_overlay = self.vars["fish_overlay"]
-        if fish_overlay == True:
+        if fish_overlay == "on":
             # Position The Overlay Just Above Or Below The Fish Bar So It Does
             # Not Cover The Actual Minigame.  Show() Expects (Left, Top, Width,
             # Height) In Physical Pixels — Not Right/Bottom.
@@ -5670,19 +5638,19 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                 fish_detected2 = False
             # Left and Right bar detection
             # Bar 1
-            left_x1, left_y1 = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 0, 1)
-            right_x1, right_y1 = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 1, 2)
+            left_x1, left_y1 = self.pixel_search_all(fish_img, "left_color", "left_tolerance", 0, 1)
+            right_x1, right_y1 = self.pixel_search_all(fish_img, "right_color", "right_tolerance", 1, 2)
             if left_x1 == None:
-                left_x1, left_y1 = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 0, 2)
+                left_x1, left_y1 = self.pixel_search_all(fish_img, "left_color", "left_tolerance", 0, 2)
             if right_x1 == None:
-                right_x1, right_y1 = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 1, 1)
+                right_x1, right_y1 = self.pixel_search_all(fish_img, "right_color", "right_tolerance", 1, 1)
             # Bar 2
-            left_x2, left_y2 = self.pixel_search_all(fish_img2, "left_color", "bar_tolerance", 0, 1)
-            right_x2, right_y2 = self.pixel_search_all(fish_img2, "left_color", "bar_tolerance", 1, 2)
+            left_x2, left_y2 = self.pixel_search_all(fish_img2, "left_color", "left_tolerance", 0, 1)
+            right_x2, right_y2 = self.pixel_search_all(fish_img2, "right_color", "right_tolerance", 1, 2)
             if left_x2 == None:
-                left_x2, left_y2 = self.pixel_search_all(fish_img2, "left_color", "bar_tolerance", 0, 2)
+                left_x2, left_y2 = self.pixel_search_all(fish_img2, "left_color", "left_tolerance", 0, 2)
             if right_x2 == None:
-                right_x2, right_y2 = self.pixel_search_all(fish_img2, "left_color", "bar_tolerance", 1, 1)
+                right_x2, right_y2 = self.pixel_search_all(fish_img2, "right_color", "right_tolerance", 1, 1)
             bar_detected = True
             bar_detected2 = True
             # Bar 1 — fill missing edge from last known size, then compute center from its own edges
@@ -5792,9 +5760,9 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                 bag_spam_cycle = 0
             if bag_spam_cycle == 5:
                 bag_spam_cycle = 0
-                if bag_spam == True:
+                if bag_spam == "on":
                     self._send_key(equipment_bag_slot)
-                if lock_cursor == True:
+                if lock_cursor == "on":
                     mouse_controller.position = (int(shake_x / scale), int(shake_y / scale))
             # Restore From Cache
             self.fish_overlay.clear()
@@ -5821,7 +5789,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
             right_boundary1 = fish_width - boundary1
             left_boundary2 = boundary2
             right_boundary2 = fish_width2 - boundary2
-            if fish_overlay == True:
+            if fish_overlay == "on":
                 # Bar 1 (relative coords already match overlay origin)
                 self.fish_overlay.draw(x1=left_x1, y1=overlay_height*0.15, x2=right_x1, y2=overlay_height*0.85, color="green", show_bar_center=True)
                 if left_boundary1 is not None:
@@ -5913,7 +5881,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
         self.ever_note_out_high = False
         # Area Calculations
         fish_overlay = self.vars["fish_overlay"]
-        if fish_overlay == True:
+        if fish_overlay == "on":
             fish_center = int((lullaby_top + lullaby_bottom) / 2)
             if fish_center > HALF_HEIGHT:
                 fish_top_overlay = lullaby_top - fish_height - fish_height
@@ -5926,7 +5894,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
         left_colors = []
         for i in range(1, 16):
             key = "left_color" if i == 1 else f"left_color_{i}"
-            tol_key = "bar_tolerance" if i == 1 else f"bar_tolerance_{i}"
+            tol_key = "left_tolerance" if i == 1 else f"left_tolerance_{i}"
             c = self.vars.get(key)
             if not c:
                 break
@@ -5938,7 +5906,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
             left_colors.append((np.array(self._hex_to_bgr(c), dtype=np.int16), t))
         if not left_colors:
             left_colors = [(np.array([241, 241, 241], dtype=np.int16), 8)]
-        left_bgr, bar_tolerance = left_colors[0]
+        left_bgr, left_tolerance = left_colors[0]
         right_bgr, right_tolerance = left_colors[-1] if len(left_colors) > 1 else left_colors[0]
         # Minigame Variables
         lullaby_metronome_padding = int(self.vars["lullaby_metronome_padding"])
@@ -5984,7 +5952,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                 # Create Initial Masks (Colors Already Converted To Bgr Above)
                 left_diff = np.abs(lullaby_pixels - left_bgr)
                 right_diff = np.abs(lullaby_pixels - right_bgr)
-                initial_left_mask = np.all(left_diff <= bar_tolerance, axis=2)
+                initial_left_mask = np.all(left_diff <= left_tolerance, axis=2)
                 initial_right_mask = np.all(right_diff <= right_tolerance, axis=2)
                 # Get Coordinates Of The Initial Masks
                 left_y, left_x = np.where(initial_left_mask)
@@ -6021,7 +5989,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                 ]
                 # Create Current Color Masks Only Inside The Small Area
                 current_pixels = lullaby_img2.astype(np.int16)
-                current_left_mask = np.all(np.abs(current_pixels - left_bgr) <= bar_tolerance, axis=2)
+                current_left_mask = np.all(np.abs(current_pixels - left_bgr) <= left_tolerance, axis=2)
                 current_right_mask = np.all(np.abs(current_pixels - right_bgr) <= right_tolerance, axis=2)
                 # Compare Current Masks Against The Initial Masks.
                 # The Initial Masks Are In Full Lullaby Coordinates,
@@ -6130,7 +6098,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
         fish_center_x_relative = fish_width / 2
         fish_center_y = int((fish_top + fish_bottom) / 2)
         fish_overlay = self.vars["fish_overlay"]
-        if fish_overlay == True:
+        if fish_overlay == "on":
             # Position The Overlay Just Above Or Below The Fish Bar So It Does
             # Not Cover The Actual Minigame.  Show() Expects (Left, Top, Width,
             # Height) In Physical Pixels — Not Right/Bottom.
@@ -6239,12 +6207,12 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                 fish_detected = False
             # Bar Detection (Color, Line or Both)
             if fishing_mode == "color":
-                left_x, left_y = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 0, 1)
-                right_x, right_y = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 1, 2)
+                left_x, left_y = self.pixel_search_all(fish_img, "left_color", "left_tolerance", 0, 1)
+                right_x, right_y = self.pixel_search_all(fish_img, "right_color", "right_tolerance", 1, 2)
                 if left_x == None:
-                    left_x, left_y = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 0, 2)
+                    left_x, left_y = self.pixel_search_all(fish_img, "left_color", "left_tolerance", 0, 2)
                 if right_x == None:
-                    right_x, right_y = self.pixel_search_all(fish_img, "left_color", "bar_tolerance", 1, 1)
+                    right_x, right_y = self.pixel_search_all(fish_img, "right_color", "right_tolerance", 1, 1)
                 # print(f"Raw coordinates: {left_x}, {right_x}, {fish_x}")
                 # Check If We Should Scan For Arrows
                 if left_x is not None and right_x is not None:
@@ -6568,9 +6536,9 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
             bag_spam_cycle += 1
             if bag_spam_cycle == 5:
                 bag_spam_cycle = 0
-                if bag_spam == True:
+                if bag_spam == "on":
                     self._send_key(equipment_bag_slot, float(self.scan_delay / 3))
-                if lock_cursor == True:
+                if lock_cursor == "on":
                     mouse_controller.position = (int(shake_x / scale), int(shake_y / scale))
             # Restore From Cache
             self.fish_overlay.clear()
@@ -6654,7 +6622,7 @@ Please copy the error and report the bug:\\n{key_error_placeholder}{error_messag
                 bar_size = right_x - left_x
                 bar_center = (left_x + right_x) / 2.0
             # Fish Overlay
-            if fish_overlay == True:
+            if fish_overlay == "on":
                 if fishing_mode == "color":
                     self.fish_overlay.draw(
                         x1=left_x, y1=overlay_height*0.15, x2=right_x, y2=overlay_height*0.85, color="green",
@@ -6947,7 +6915,7 @@ if show_setup_guide == True:
 show_setup_guide, error_message, js_developer, pirated_build = check_setup_guide()
 if show_setup_guide == True:
     sys.exit(0)
-index_html = "https://catman2608.github.io/PyWare-Backend/SolarFishingV4/index.html" if IS_COMPILED else os.path.join(UI_PATH, "index.html")
+index_html = "https://catman2608.github.io/PyWare-Backend/PyWareFishingV4/index.html" if IS_COMPILED else os.path.join(UI_PATH, "index.html")
 api = Api()
 window = webview.create_window(
     f"PyWare Fishing V{APP_VERSION}",
